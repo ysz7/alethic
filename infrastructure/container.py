@@ -86,7 +86,7 @@ class Container:
     def logger(self):
         # structlog's bound logger type is not stable enough to annotate.
         self.configure()
-        return get_logger("kai")
+        return get_logger("alethic")
 
     @cached_property
     def progress(self) -> InMemoryProgressBroadcaster:
@@ -295,7 +295,7 @@ class Container:
         user's.
         """
         # The reader is passed as a way to get one, not as one: listing the
-        # registry must not route a model, and `kai tools` does nothing else.
+        # registry must not route a model, and `alethic tools` does nothing else.
         def reader() -> ScreenReader:
             return self.screen_reader
 

@@ -248,9 +248,9 @@ class ApprovalRow(Base):
 
 
 class ObjectiveRow(Base):
-    """What the user asked KAI for, and what became of it.
+    """What the user asked Alethic for, and what became of it.
 
-    The user's own sentence is `text` and is never rewritten. What KAI read out
+    The user's own sentence is `text` and is never rewritten. What Alethic read out
     of it - the constraints, what would count as done - is stored beside it, so
     a misreading stays visible next to the thing it misread.
     """
@@ -276,7 +276,7 @@ class ObjectiveRow(Base):
 
 
 class PlanRow(Base):
-    """One revision of KAI's decomposition of an objective.
+    """One revision of Alethic's decomposition of an objective.
 
     Superseded plans are kept. What the manager thought on the first attempt is
     the only evidence of why a second was needed.
@@ -310,7 +310,7 @@ class PlanTaskDependencyRow(Base):
     checked. Edges can be checked for a cycle, and they say which tasks could
     run at the same time - which is what Phase 12 needs and what a list loses.
 
-    The task columns carry no foreign key. A plan is recorded when KAI proposes
+    The task columns carry no foreign key. A plan is recorded when Alethic proposes
     it, and a task becomes a row when somebody is given it, so the edges legally
     precede both ends they point at. See migration 006.
     """

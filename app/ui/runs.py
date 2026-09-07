@@ -14,7 +14,7 @@ for a task the database has never heard of would be lying, and a process killed
 one second later would have nothing to resume.
 
 **An objective is carried the same way, one level up.** Since Phase 7 the page
-asks KAI for an outcome rather than handing a task to an employee, and KAI's own
+asks Alethic for an outcome rather than handing a task to an employee, and Alethic's own
 work - reading the request, planning, delegating, checking - takes as long as
 the tasks it starts. So it too goes on the loop and the request returns an
 objective id, which is what the page then watches.
@@ -34,7 +34,7 @@ from uuid import UUID
 
 import structlog
 
-from application.kai.manager import KaiManager
+from application.alethic.manager import AlethicManager
 from application.task_runner import TaskRunner
 from domain.tasks.cancellation import Cancellations
 from domain.tasks.repository import TaskRepository
@@ -57,7 +57,7 @@ class Runs:
         self,
         *,
         runner: TaskRunner,
-        manager: KaiManager,
+        manager: AlethicManager,
         tasks: TaskRepository,
         cancellations: Cancellations,
         approvals: WaitingConfirmer,
@@ -76,17 +76,17 @@ class Runs:
         """Record the task, schedule the work, and hand the task straight back."""
         task, assignment = await self._runner.submit(goal, employee_name)
         run = asyncio.create_task(
-            self._runner.run(task, assignment), name=f"kai-task-{task.id}"
+            self._runner.run(task, assignment), name=f"alethic-task-{task.id}"
         )
         self._running[task.id] = run
         run.add_done_callback(lambda _: self._finished(task.id))
         return task
 
     async def ask(self, request: str) -> Objective:
-        """Record the objective, schedule KAI, and hand the objective back."""
+        """Record the objective, schedule Alethic, and hand the objective back."""
         objective = await self._manager.receive(request)
         work = asyncio.create_task(
-            self._manager.handle_objective(objective), name=f"kai-objective-{objective.id}"
+            self._manager.handle_objective(objective), name=f"alethic-objective-{objective.id}"
         )
         self._objectives[objective.id] = work
         work.add_done_callback(lambda _: self._objectives.pop(objective.id, None))
@@ -140,7 +140,7 @@ class Runs:
         return cancelled
 
     async def cancel_objective(self, objective_id: UUID) -> bool:
-        """Stop KAI working on one objective, and every task it has running.
+        """Stop Alethic working on one objective, and every task it has running.
 
         The objective's own coroutine is cancelled outright - it holds no
         outside state, only the decision about what to do next - while its tasks

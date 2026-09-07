@@ -4,7 +4,7 @@ Declared in Phase 1 so everything below it is written against a fixed shape;
 implemented in Phase 7, once there is a dependable executor to manage.
 
 The values here are the manager's vocabulary and nothing more. There is no
-employee named anywhere in this file, and no way to name one: KAI reaches the
+employee named anywhere in this file, and no way to name one: Alethic reaches the
 workforce through `EmployeeRegistry` and reaches the work through
 `TaskExecution`, both of which it is handed.
 """
@@ -34,7 +34,7 @@ class ObjectiveStatus(StrEnum):
 
 
 #: Statuses an objective cannot move out of. An objective that has been
-#: escalated is finished as far as KAI is concerned: it is now the user's.
+#: escalated is finished as far as Alethic is concerned: it is now the user's.
 TERMINAL_OBJECTIVE_STATUSES: frozenset[ObjectiveStatus] = frozenset(
     {ObjectiveStatus.DONE, ObjectiveStatus.FAILED, ObjectiveStatus.ESCALATED}
 )
@@ -98,7 +98,7 @@ class Plan:
     """A decomposition of one objective into tasks, plus their dependencies.
 
     Replanning produces a *new* plan at the next revision and supersedes this
-    one rather than editing it. What KAI thought at the first attempt is the
+    one rather than editing it. What Alethic thought at the first attempt is the
     only evidence of why the second was needed, and an edited plan destroys it.
     """
 
@@ -193,7 +193,7 @@ class ObjectiveResult:
 
 
 class WorkforceManager(Protocol):
-    """KAI's contract: the user's single entry point into the workforce."""
+    """Alethic's contract: the user's single entry point into the workforce."""
 
     async def handle_objective(self, objective: Objective) -> ObjectiveResult: ...
 
@@ -215,9 +215,9 @@ class Delegator(Protocol):
 class TaskExecution(Protocol):
     """How the manager gets a task actually done.
 
-    KAI does not run tasks; it decides which ones exist, who should do each and
+    Alethic does not run tasks; it decides which ones exist, who should do each and
     whether what came back is good enough. Stating that as a contract rather
-    than an import is what keeps `application/kai/` free of the runtime - and
+    than an import is what keeps `application/alethic/` free of the runtime - and
     what lets the whole manager be tested against a stand-in that never calls a
     model (Phase 7 DoD).
 

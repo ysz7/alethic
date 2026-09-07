@@ -7,7 +7,7 @@ worse than configuring:
 * **deny** - nobody is there (a scheduled run, a test, a piped process). The
   action is refused and recorded as refused. Silence is not consent.
 * **allow** - the user has explicitly said they do not want to be asked on this
-  machine. Still recorded, so `kai approvals` shows what was done under it.
+  machine. Still recorded, so `alethic approvals` shows what was done under it.
 
 Who gets asked is a separate question from whether to ask, and that is why the
 confirmer is injected. On a terminal it reads stdin; under the local interface

@@ -10,21 +10,21 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.config.feature_flags import FeatureFlags
 
 
 def _default_data_dir() -> Path:
-    return Path.home() / ".kai-workforce"
+    return Path.home() / ".alethic"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        env_prefix="KAI_",
+        env_prefix="ALETHIC_",
         env_nested_delimiter="__",
         extra="ignore",
     )
@@ -106,6 +106,18 @@ class Settings(BaseSettings):
 
     flags: FeatureFlags = Field(default_factory=FeatureFlags)
 
+    @field_validator("data_dir", "workspace_dir", mode="after")
+    @classmethod
+    def _expand_home(cls, value: Path | None) -> Path | None:
+        """`~/.alethic` in the environment means the home directory, not a directory called `~`.
+
+        A shell expands the tilde before the process sees it, but an `.env` file
+        is read by this process, so `ALETHIC_DATA_DIR=~/.alethic` arrives
+        literally - and without this the platform quietly writes its database
+        into a directory named `~` beside whatever the working directory was.
+        """
+        return value if value is None else Path(value).expanduser()
+
     @property
     def resolved_workspace_dir(self) -> Path:
         """Where the employees' files live, separate from the platform's own."""
@@ -145,7 +157,7 @@ class Settings(BaseSettings):
 
     @property
     def stop_file_path(self) -> Path:
-        """The brake. `kai stop` writes it; every screen action reads it."""
+        """The brake. `alethic stop` writes it; every screen action reads it."""
         return self.data_dir / "STOP"
 
     def ensure_workspace_dir(self) -> Path:
@@ -155,7 +167,7 @@ class Settings(BaseSettings):
 
     @property
     def db_path(self) -> Path:
-        return self.data_dir / "kai.db"
+        return self.data_dir / "alethic.db"
 
     @property
     def resolved_database_url(self) -> str:

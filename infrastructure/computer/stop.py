@@ -5,7 +5,7 @@ user, from outside, at a moment nobody scheduled. The process is busy; it may
 have the screen; the terminal that started it may be gone. What is left that
 still works is the filesystem.
 
-So: a sentinel path. `kai stop` creates it, `kai stop --clear` removes it, and
+So: a sentinel path. `alethic stop` creates it, `alethic stop --clear` removes it, and
 every action on a screen reads it first. Its contents are the reason, shown back
 to the model and written to the log, which is why the word matters - "stop,
 wrong window" tells the employee something that a bare halt does not.

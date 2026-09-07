@@ -6,7 +6,7 @@ tool is constructed puts it in the container, in every repr of that container
 and in whatever a debugger or a crash report prints. Resolving it inside the
 call keeps its lifetime to the call.
 
-`KAI_SECRET_<NAME>` is checked first so a credential can be scoped to this
+`ALETHIC_SECRET_<NAME>` is checked first so a credential can be scoped to this
 platform, with the plain name as a fallback for the variables a user already has
 set for other tools.
 """
@@ -18,7 +18,7 @@ import os
 from domain.errors import SecretNotFoundError
 from domain.secrets.models import Secret
 
-PREFIX = "KAI_SECRET_"
+PREFIX = "ALETHIC_SECRET_"
 
 
 class EnvSecretResolver:

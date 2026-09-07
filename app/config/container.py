@@ -9,19 +9,19 @@ is for. See docs/adr/0001.
 from __future__ import annotations
 
 from app.config.settings import Settings, get_settings
+from application.alethic.delegation import CapabilityDelegator
+from application.alethic.intent import IntentReader
+from application.alethic.manager import AlethicManager
+from application.alethic.planner import ObjectivePlanner
+from application.alethic.supervisor import Supervisor
+from application.alethic.synthesis import Synthesizer
+from application.alethic.verification import ObjectiveVerifier
 from application.computer.screen_reader import LLMScreenReader
 from application.employee_runtime.approvals import ApprovalGate
 from application.employee_runtime.executor import Executor
 from application.employee_runtime.planner import Planner
 from application.employee_runtime.runtime import EmployeeRuntime, RuntimeDependencies
 from application.employee_runtime.verifier import Verifier
-from application.kai.delegation import CapabilityDelegator
-from application.kai.intent import IntentReader
-from application.kai.manager import KaiManager
-from application.kai.planner import ObjectivePlanner
-from application.kai.supervisor import Supervisor
-from application.kai.synthesis import Synthesizer
-from application.kai.verification import ObjectiveVerifier
 from application.memory.assembler import ContextAssembler
 from application.memory.consolidation import Consolidator
 from application.memory.distiller import OutcomeDistiller
@@ -106,8 +106,8 @@ async def build_runtime(container: Container, definition: EmployeeDefinition) ->
     )
 
 
-def build_manager(container: Container) -> KaiManager:
-    """Assemble KAI.
+def build_manager(container: Container) -> AlethicManager:
+    """Assemble Alethic.
 
     Five model-facing components, each routed for what it is: comprehension and
     decomposition get a good model, choosing from a short list gets a cheap one,
@@ -117,7 +117,7 @@ def build_manager(container: Container) -> KaiManager:
     """
     registry = container.employee_registry
     _, recorder = build_memory(container)
-    return KaiManager(
+    return AlethicManager(
         intent=IntentReader(container.llm_for(*IntentReader.routing())),
         planner=ObjectivePlanner(container.llm_for(*ObjectivePlanner.routing())),
         supervisor=Supervisor(

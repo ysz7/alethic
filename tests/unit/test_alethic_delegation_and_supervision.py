@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from application.kai.delegation import CapabilityDelegator
-from application.kai.supervisor import Recovery, Supervisor, classify
+from application.alethic.delegation import CapabilityDelegator
+from application.alethic.supervisor import Recovery, Supervisor, classify
 from domain.employees.limits import LimitKind
 from domain.tasks.task import Task, TaskError, TaskResult, TaskStatus
 from domain.workforce.assignment import SharedContext
@@ -289,6 +289,6 @@ async def test_the_manager_is_recorded_as_the_one_who_assigned_it() -> None:
     await supervisor.run(plan_of("Do it"), context=SharedContext(constraints=("be brief",)))
 
     _, assignment = execution.started[0]
-    assert assignment.assigned_by is ActorKind.KAI
+    assert assignment.assigned_by is ActorKind.ALETHIC
     assert assignment.employee_id == READER.id
     assert "be brief" in assignment.context.constraints

@@ -1,7 +1,7 @@
 """The manager's record survives a restart, on both implementations.
 
 An objective interrupted halfway is not resumable yet - that is Phase 12's
-concern - but it must still be *readable*: what was asked, what KAI made of it,
+concern - but it must still be *readable*: what was asked, what Alethic made of it,
 which plans it tried and which tasks each one held.
 """
 
@@ -64,7 +64,7 @@ def plans(store):
 # --- Objectives ---------------------------------------------------------------
 
 
-async def test_an_objective_round_trips_with_what_kai_read_into_it(objectives) -> None:
+async def test_an_objective_round_trips_with_what_alethic_read_into_it(objectives) -> None:
     objective = Objective.create(
         "Find twenty things",
         constraints={"count": 20},
@@ -230,7 +230,7 @@ def _planned(goal: str, objective: Objective, plan_id, *, priority: int = 5) -> 
         Task.create(
             goal,
             workspace_id=objective.workspace_id,
-            created_by=TaskCreatedBy.KAI,
+            created_by=TaskCreatedBy.ALETHIC,
             priority=priority,
         ),
         plan_id=plan_id,
@@ -240,10 +240,10 @@ def _planned(goal: str, objective: Objective, plan_id, *, priority: int = 5) -> 
 async def test_a_plan_holds_its_edges_before_any_of_its_tasks_have_started(
     plans, objectives
 ) -> None:
-    """A plan is recorded when KAI proposes it, and tasks become rows when given.
+    """A plan is recorded when Alethic proposes it, and tasks become rows when given.
 
     So the edges legally precede both ends they point at, and a plan read back
-    at that moment has its shape and no tasks. What KAI intends is on the
+    at that moment has its shape and no tasks. What Alethic intends is on the
     progress stream by then; what it did is here afterwards.
     """
     plan_repository, _ = plans

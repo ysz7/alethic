@@ -1,11 +1,11 @@
 """The local interface: one page, on loopback, with no account behind it.
 
-Phase 6's Definition of Done is that a developer uses KAI without reading logs
+Phase 6's Definition of Done is that a developer uses Alethic without reading logs
 in a terminal. That is a statement about what the page shows, so the endpoints
 here exist to answer four questions and no more: what can I ask for, what is it
 doing right now, what does it need from me, and what happened last time.
 
-Since Phase 7 the first of those has a different answer. The page asks *KAI* for
+Since Phase 7 the first of those has a different answer. The page asks *Alethic* for
 an outcome; the manager decides what tasks that means and who does each. The
 task endpoints stay, because a task is still the unit that runs and the trace is
 still drawn from one - but starting work now means stating a goal, not choosing
@@ -53,7 +53,7 @@ from app.config.settings import Settings, get_settings
 from app.ui import views
 from app.ui.runs import Runs
 from domain.approvals.models import ApprovalState
-from domain.errors import KaiError, StorageNotInitializedError
+from domain.errors import AlethicError, StorageNotInitializedError
 from domain.tasks.progress import ProgressKind
 from infrastructure.approvals.waiting import WaitingConfirmer
 from infrastructure.container import Container
@@ -129,7 +129,7 @@ def create_app(
             await app.state.runs.aclose()
             await container.aclose()
 
-    app = FastAPI(title="KAI Workforce", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="Alethic", lifespan=lifespan, docs_url=None, redoc_url=None)
     _routes(app)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     return app
@@ -163,7 +163,7 @@ def _routes(app: FastAPI) -> None:
     async def start(request: Request, body: NewTask) -> dict[str, Any]:
         try:
             task = await _runs(request).start(body.goal.strip(), body.employee)
-        except KaiError as error:
+        except AlethicError as error:
             # An unknown employee is the user asking for something that does not
             # exist, not a server fault: 400, with the reason said plainly.
             raise HTTPException(status_code=400, detail=str(error)) from error
@@ -195,7 +195,7 @@ def _routes(app: FastAPI) -> None:
 
     @app.post("/api/objectives", status_code=201)
     async def ask(request: Request, body: NewObjective) -> dict[str, Any]:
-        """State a goal. KAI decides what it means and who does it."""
+        """State a goal. Alethic decides what it means and who does it."""
         objective = await _runs(request).ask(body.request.strip())
         return views.objective_summary(objective, thinking=True)
 
@@ -269,7 +269,7 @@ def _routes(app: FastAPI) -> None:
                 )
             try:
                 await service.resolve(approval_id, state, comment=body.comment)
-            except KaiError as error:
+            except AlethicError as error:
                 raise HTTPException(status_code=404, detail=str(error)) from error
         return {"id": str(approval_id), "state": state.value, "live": answered}
 
@@ -350,10 +350,10 @@ async def _event_stream(request: Request, task_id: UUID | None) -> AsyncIterator
 async def _objective_stream(request: Request, objective_id: UUID) -> AsyncIterator[str]:
     """One objective's progress, and that of every task it starts.
 
-    KAI stamps its own events with the objective. Its employees do not - they
+    Alethic stamps its own events with the objective. Its employees do not - they
     are running tasks and know nothing about a manager - so the task ids belong
     to the objective's plan, and this follows them: seeded from whatever plan
-    revisions already exist, and extended whenever KAI announces a task it has
+    revisions already exist, and extended whenever Alethic announces a task it has
     just handed out. That is what makes the trace read as one piece of work
     rather than as a manager talking to itself.
 

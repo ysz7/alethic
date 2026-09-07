@@ -1,4 +1,4 @@
-"""KAI checks the work before the user sees it.
+"""Alethic checks the work before the user sees it.
 
 The employee runtime already verifies each task against its own goal. This is a
 second, different check, and §7.8 is right to ask for it: a task can be
@@ -58,10 +58,10 @@ class ObjectiveVerifier:
             # would make this stage a no-op precisely when comprehension was
             # weakest - so the request itself becomes the standard, exactly as
             # the employee verifier falls back to the task when there is no plan.
-            log.info("kai.verifying_against_the_request", objective_id=str(objective.id))
+            log.info("alethic.verifying_against_the_request", objective_id=str(objective.id))
 
         prompt = render(
-            "kai_verifier",
+            "alethic_verifier",
             objective=objective.text,
             criteria=_criteria(objective),
             results=results,
@@ -76,7 +76,7 @@ class ObjectiveVerifier:
 
         parsed = extract_object(response.content)
         if parsed is None:
-            log.warning("kai.verdict_unreadable", objective_id=str(objective.id))
+            log.warning("alethic.verdict_unreadable", objective_id=str(objective.id))
             return Verdict.rejected(
                 "The check on the objective did not return a readable verdict",
                 "a second opinion on whether this is done",
@@ -88,7 +88,7 @@ class ObjectiveVerifier:
             # It said yes and then listed what is absent. The list is the more
             # specific claim, and the one a second attempt could act on.
             log.info(
-                "kai.verdict_contradicted",
+                "alethic.verdict_contradicted",
                 objective_id=str(objective.id),
                 missing=list(missing),
             )
@@ -100,7 +100,7 @@ class ObjectiveVerifier:
             missing=missing,
         )
         log.info(
-            "kai.objective_verified",
+            "alethic.objective_verified",
             objective_id=str(objective.id),
             passed=verdict.passed,
             missing=len(verdict.missing),

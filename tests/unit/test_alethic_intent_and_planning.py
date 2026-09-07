@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import json
 
-from application.kai.intent import IntentReader
-from application.kai.planner import ObjectivePlanner
-from application.kai.workforce import describe
+from application.alethic.intent import IntentReader
+from application.alethic.planner import ObjectivePlanner
+from application.alethic.workforce import describe
 from domain.tasks.task import TaskCreatedBy
 from domain.workforce.protocols import Objective
 from tests.fakes.employees import definition
@@ -117,7 +117,7 @@ async def test_a_plan_carries_tasks_dependencies_and_its_plan_id() -> None:
 
     assert [task.goal for task in plan.tasks] == ["Collect the listings", "Write the file"]
     assert all(task.plan_id == plan.id for task in plan.tasks), "a task knows its plan"
-    assert all(task.created_by is TaskCreatedBy.KAI for task in plan.tasks)
+    assert all(task.created_by is TaskCreatedBy.ALETHIC for task in plan.tasks)
     first, second = plan.tasks
     assert plan.dependencies == ((second.id, first.id),)
     assert plan.depends_on(second.id) == frozenset({first.id})

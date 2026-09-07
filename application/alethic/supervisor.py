@@ -31,7 +31,7 @@ from uuid import UUID
 
 import structlog
 
-from application.kai.delegation import CapabilityDelegator
+from application.alethic.delegation import CapabilityDelegator
 from domain.capabilities.models import CapabilityRequirement
 from domain.policies.models import ActorKind
 from domain.tasks.progress import NullProgress, ProgressEvent, ProgressKind, ProgressSink
@@ -190,7 +190,7 @@ class Supervisor:
                     f"{planned.goal} - {outcome.reason or 'did not complete'}"
                 )
                 log.info(
-                    "kai.task_failed",
+                    "alethic.task_failed",
                     task_id=str(planned.id),
                     employee=outcome.employee,
                     status=outcome.task.status.value,
@@ -238,7 +238,7 @@ class Supervisor:
                 break
             attempt += 1
             log.info(
-                "kai.task_reattempt",
+                "alethic.task_reattempt",
                 task_id=str(planned.id),
                 attempt=attempt,
                 recovery=recovery.value,
@@ -278,8 +278,8 @@ class Supervisor:
         assignment = TaskAssignment.create(
             task_id=planned.id,
             employee_id=chosen.id,
-            assigned_by=ActorKind.KAI,
-            assigned_by_id="kai",
+            assigned_by=ActorKind.ALETHIC,
+            assigned_by_id="alethic",
             context=passed,
             workspace_id=planned.workspace_id,
         )

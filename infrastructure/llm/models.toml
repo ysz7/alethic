@@ -2,7 +2,7 @@
 #
 # `capabilities` uses the vocabulary in `domain/capabilities/models.py`.
 # Costs are per 1000 tokens in USD and are used to price every call, so keep
-# them current: a wrong number here shows up as a wrong bill in `kai spend`.
+# them current: a wrong number here shows up as a wrong bill in `alethic spend`.
 
 [models.balanced]
 provider = "openrouter"

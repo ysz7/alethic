@@ -1,6 +1,6 @@
 """The manager's half of memory: what this workspace knows, in general.
 
-KAI reads and writes at a different grain from an employee. An employee
+Alethic reads and writes at a different grain from an employee. An employee
 remembers how a task went; the manager remembers how the user wants things done
 here, and hands what it knows down to the tasks it delegates - which is why what
 it recalls goes into `SharedContext.facts` rather than into a prompt of its own.

@@ -26,7 +26,7 @@ FORBIDDEN_IN_DOMAIN = {
     "pydantic_settings",
 }
 
-FORBIDDEN_IN_KAI = {"infrastructure", "app", "employees"}
+FORBIDDEN_IN_ALETHIC = {"infrastructure", "app", "employees"}
 
 
 def imported_roots(path: Path) -> set[str]:
@@ -64,14 +64,14 @@ def test_application_does_not_import_infrastructure() -> None:
     assert not offenders, f"application talks to domain contracts only: {offenders}"
 
 
-def test_kai_never_imports_a_concrete_employee_or_adapter() -> None:
-    kai_dir = REPO_ROOT / "application" / "kai"
+def test_alethic_never_imports_a_concrete_employee_or_adapter() -> None:
+    alethic_dir = REPO_ROOT / "application" / "alethic"
     offenders = {
-        str(path.relative_to(REPO_ROOT)): sorted(imported_roots(path) & FORBIDDEN_IN_KAI)
-        for path in sorted(kai_dir.rglob("*.py"))
+        str(path.relative_to(REPO_ROOT)): sorted(imported_roots(path) & FORBIDDEN_IN_ALETHIC)
+        for path in sorted(alethic_dir.rglob("*.py"))
     }
     offenders = {path: roots for path, roots in offenders.items() if roots}
-    assert not offenders, f"KAI knows employees only through the registry: {offenders}"
+    assert not offenders, f"Alethic knows employees only through the registry: {offenders}"
 
 
 def test_sql_does_not_leave_the_persistence_package() -> None:

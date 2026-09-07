@@ -1,7 +1,7 @@
-# A catalog of locally served models. Point KAI_MODEL_CATALOG_PATH at this file
+# A catalog of locally served models. Point ALETHIC_MODEL_CATALOG_PATH at this file
 # to run the whole platform without a provider key and without spending anything:
 #
-#   KAI_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml uv run kai ask "..."
+#   ALETHIC_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml uv run alethic ask "..."
 #
 # It expects a local server on http://127.0.0.1:11434/v1 (Ollama's default) with
 # these models pulled. Costs are zero because they are: the price of a local call

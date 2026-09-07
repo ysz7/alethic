@@ -59,7 +59,7 @@ def _completion(model: str) -> httpx.Response:
 
 
 async def test_a_question_is_routed_answered_priced_and_recorded(tmp_path: Path) -> None:
-    engine = create_engine(f"sqlite+aiosqlite:///{tmp_path / 'kai.db'}")
+    engine = create_engine(f"sqlite+aiosqlite:///{tmp_path / 'alethic.db'}")
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     call_log = SqliteLLMCallLog(create_session_factory(engine))
@@ -127,5 +127,5 @@ async def test_a_missing_key_fails_before_any_request_is_made() -> None:
         catalog=catalog, api_key=None, base_url="https://example.invalid/v1"
     )
 
-    with pytest.raises(ConfigurationError, match="KAI_LLM_API_KEY"):
+    with pytest.raises(ConfigurationError, match="ALETHIC_LLM_API_KEY"):
         factory.for_choice(catalog.get("balanced").choice)

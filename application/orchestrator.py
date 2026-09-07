@@ -14,9 +14,9 @@ from enum import StrEnum
 import structlog
 
 from domain.errors import (
+    AlethicError,
     ConfigurationError,
     ExecutionError,
-    KaiError,
     PermissionDeniedError,
     ProviderError,
     StorageError,
@@ -71,7 +71,7 @@ def classify(error: BaseException) -> Failure:
         kind = FailureKind.CONFIGURATION
     elif isinstance(error, ExecutionError):
         kind = FailureKind.EXECUTION
-    elif isinstance(error, KaiError):
+    elif isinstance(error, AlethicError):
         # Every deliberate error of ours that is not one of the above: a broken
         # rule, a missing entity, a bad request. None of them improve on a retry.
         kind = FailureKind.PERMANENT

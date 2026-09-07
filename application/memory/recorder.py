@@ -18,7 +18,7 @@ answering a question a later run actually asks.
   employee works, and telling another employee would be advice from someone
   else's machine.
 * **How the user wants things done** (SEMANTIC, workspace) - the standing
-  preferences KAI read out of a request, and *only* those. These are the
+  preferences Alethic read out of a request, and *only* those. These are the
   memories with no expiry, because a preference does not stop being true on a
   timer - which is exactly why what goes in here has to be a preference. A
   request's own parameters ("the sales folder", "call it summary.md") look
@@ -188,7 +188,7 @@ class MemoryRecorder:
         them is six things that can never be forgotten one at a time.
 
         Whether something *is* a standing preference is decided when the request
-        is read, not here - see `prompts/kai_intent/v1.md`. This writes what it
+        is read, not here - see `prompts/alethic_intent/v1.md`. This writes what it
         is given, which is why what it is given matters so much.
         """
         for preference in preferences:

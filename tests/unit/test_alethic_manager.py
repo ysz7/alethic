@@ -2,7 +2,7 @@
 
 The Definition of Done for Phase 7 is a user stating a goal in one sentence and
 getting a verified result without ever addressing an employee. These are that
-sentence, taken apart: what KAI does with a request that needs no work, with one
+sentence, taken apart: what Alethic does with a request that needs no work, with one
 that needs several people, with a result that does not meet what was asked, and
 with a machine that has nobody to give work to.
 """
@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import json
 
-from application.kai.delegation import CapabilityDelegator
-from application.kai.intent import IntentReader
-from application.kai.manager import KaiManager
-from application.kai.planner import ObjectivePlanner
-from application.kai.supervisor import Supervisor
-from application.kai.synthesis import Synthesizer
-from application.kai.verification import ObjectiveVerifier
+from application.alethic.delegation import CapabilityDelegator
+from application.alethic.intent import IntentReader
+from application.alethic.manager import AlethicManager
+from application.alethic.planner import ObjectivePlanner
+from application.alethic.supervisor import Supervisor
+from application.alethic.synthesis import Synthesizer
+from application.alethic.verification import ObjectiveVerifier
 from domain.workforce.protocols import ObjectiveStatus
 from infrastructure.persistence.objective_repository import InMemoryObjectiveRepository
 from infrastructure.persistence.plan_repository import InMemoryPlanRepository
@@ -73,7 +73,7 @@ def build(
     memory=None,
     #: Supply one to read back what each stage was actually told.
     llm: FakeLLM | None = None,
-) -> tuple[KaiManager, RecordingExecution, InMemoryObjectiveRepository, InMemoryPlanRepository]:
+) -> tuple[AlethicManager, RecordingExecution, InMemoryObjectiveRepository, InMemoryPlanRepository]:
     """One model for every stage, answering from a single script in order.
 
     Sharing the client is what makes the script readable as a story: read it,
@@ -88,7 +88,7 @@ def build(
     runs = execution or RecordingExecution()
     objective_store = objectives or InMemoryObjectiveRepository()
     plan_store = plans or InMemoryPlanRepository()
-    manager = KaiManager(
+    manager = AlethicManager(
         intent=IntentReader(llm),
         planner=ObjectivePlanner(llm),
         supervisor=Supervisor(
@@ -321,7 +321,7 @@ async def test_a_verdict_saying_nothing_is_missing_is_not_a_contradiction() -> N
 async def test_with_no_criteria_the_request_itself_becomes_the_standard() -> None:
     """Also from the validation run: a weak reading must not switch the check off.
 
-    Passing by default when no criteria were written down would make KAI's own
+    Passing by default when no criteria were written down would make Alethic's own
     verification a no-op exactly when comprehension had been weakest.
     """
     manager, _, _, _ = build(

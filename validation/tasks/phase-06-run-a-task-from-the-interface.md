@@ -2,7 +2,7 @@
 
 **Capability under test:** the surface the platform is actually used through.
 Phase 6's Definition of Done is a sentence about a person, not about a test
-suite: *a developer uses KAI without reading logs in a terminal.* So the
+suite: *a developer uses Alethic without reading logs in a terminal.* So the
 validation is four things done from the interface and nowhere else - start a
 task, watch it work, answer the question it stops on, and stop one that should
 not finish.
@@ -13,9 +13,9 @@ Against `gpt-oss:20b` on this machine, so the phase could be validated without a
 provider key. One command, one process:
 
 ```bash
-export KAI_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
+export ALETHIC_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
 uv run alembic upgrade head
-uv run kai serve            # http://127.0.0.1:8765
+uv run alethic serve            # http://127.0.0.1:8765
 ```
 
 The workspace held one file, `notes.md`, with three lines of meeting notes.

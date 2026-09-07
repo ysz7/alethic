@@ -25,7 +25,7 @@ case is already reported - as the missing tool - and reporting it twice, once as
 a fault of the declaration, would be wrong the first time.
 
 Kept in `domain/` and given the tools as data, so it can be run anywhere the two
-are known - the container at start-up, `kai employees`, a test - without any of
+are known - the container at start-up, `alethic employees`, a test - without any of
 them needing to agree on where a tool comes from.
 """
 
@@ -121,7 +121,7 @@ def _unbacked_capabilities(
 ) -> list[Issue]:
     """A capability it claims that nothing it holds could provide.
 
-    An error, because it is false on every machine: KAI searches by these, so an
+    An error, because it is false on every machine: Alethic searches by these, so an
     employee claiming CODE with no tool that runs any will be handed work it
     cannot begin.
 
@@ -155,7 +155,7 @@ def _undeclared_capabilities(
 ) -> list[Issue]:
     """A capability its tools give it that it does not claim.
 
-    The quiet one. The employee can do the work and KAI will never send it any,
+    The quiet one. The employee can do the work and Alethic will never send it any,
     because discovery reads the declaration and not the tool list. Left as a
     warning because keeping a capability out of the declaration is a legitimate
     thing to want - a tool held for one narrow purpose need not advertise the

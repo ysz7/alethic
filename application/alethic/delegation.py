@@ -1,10 +1,10 @@
 """Choosing who does a task, and handing it down without handing down more.
 
 §7.6 is the load-bearing sentence of this phase: *zero mentions of a concrete
-employee in KAI's code.* Candidates come from `EmployeeRegistry` and nowhere
+employee in Alethic's code.* Candidates come from `EmployeeRegistry` and nowhere
 else, so the workforce is a directory of declarations rather than a list in this
 file. Delete a declaration and nothing here changes; add one and it is offered
-on the next run. `tests/unit/test_kai_governance.py` enforces that by reading
+on the next run. `tests/unit/test_alethic_governance.py` enforces that by reading
 `employees/` and failing if any of those names appears in this package - prose
 included, because a name in a comment is a name that will be in a branch later.
 
@@ -26,7 +26,7 @@ against the registry; an invented one falls back to the ranking below. The model
 ranks, it does not authorise.
 
 **Delegation never escalates privileges.** The employee's own declaration is the
-only source of what it may use, so KAI cannot widen it by asking. It can
+only source of what it may use, so Alethic cannot widen it by asking. It can
 deliberately *narrow* - `SharedContext.granted_tools` records what the manager
 meant to allow - and the runtime intersects that with the declaration, so the
 narrowing is real and the widening is impossible. `effective_tools` in
@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import structlog
 
-from application.kai.workforce import describe
+from application.alethic.workforce import describe
 from application.prompts import render
 from domain.capabilities.models import CapabilityRequirement
 from domain.employees.definition import EmployeeDefinition
@@ -55,16 +55,16 @@ log = structlog.get_logger(__name__)
 
 
 def manager_actor(workforce: list[EmployeeDefinition]) -> Actor:
-    """KAI as an actor, whose reach is the union of what its people may do.
+    """Alethic as an actor, whose reach is the union of what its people may do.
 
     Not a wildcard. A manager that could grant anything would make
     `effective_tools` an identity function and the intersection meaningless;
-    this way KAI can hand down exactly what somebody was already trusted with,
+    this way Alethic can hand down exactly what somebody was already trusted with,
     and nothing that nobody was.
     """
     return SimpleActor(
-        actor_id="kai",
-        actor_kind=ActorKind.KAI,
+        actor_id="alethic",
+        actor_kind=ActorKind.ALETHIC,
         allowed_tools=frozenset().union(*(d.allowed_tools for d in workforce)) if workforce
         else frozenset(),
     )
@@ -121,12 +121,12 @@ class CapabilityDelegator:
             facts=passed.facts,
             constraints=passed.constraints,
             artifacts=passed.artifacts,
-            # Recorded on the assignment, applied by the runtime. What KAI meant
+            # Recorded on the assignment, applied by the runtime. What Alethic meant
             # to allow is then answerable from the row, not from a log line.
             data={**passed.data, "granted_tools": sorted(granted)},
         )
         log.info(
-            "kai.delegated",
+            "alethic.delegated",
             task_id=str(task.id),
             employee=chosen.name,
             reason=reason,
@@ -150,8 +150,8 @@ class CapabilityDelegator:
         return TaskAssignment.create(
             task_id=task.id,
             employee_id=chosen.id,
-            assigned_by=ActorKind.KAI,
-            assigned_by_id="kai",
+            assigned_by=ActorKind.ALETHIC,
+            assigned_by_id="alethic",
             context=context,
             workspace_id=task.workspace_id,
         )
@@ -173,7 +173,7 @@ class CapabilityDelegator:
             # declaration rather than a missing employee - but not worth
             # refusing over, so the whole workforce is considered instead.
             log.info(
-                "kai.no_one_declares",
+                "alethic.no_one_declares",
                 task_id=str(task.id),
                 needed=sorted(c.value for c in wanted.required),
             )
@@ -183,7 +183,7 @@ class CapabilityDelegator:
     async def _ask(
         self, task: Task, candidates: list[EmployeeDefinition]
     ) -> tuple[EmployeeDefinition, str, SharedContext]:
-        prompt = render("kai_delegation", goal=task.goal, candidates=describe(candidates))
+        prompt = render("alethic_delegation", goal=task.goal, candidates=describe(candidates))
         response = await self._llm.generate(
             LLMRequest(
                 messages=(Message.user(prompt),),
@@ -200,7 +200,7 @@ class CapabilityDelegator:
             # to choose, and the work still has to go somewhere sensible.
             chosen = _best_by_tools(task, candidates)
             log.info(
-                "kai.delegation_fallback",
+                "alethic.delegation_fallback",
                 task_id=str(task.id),
                 offered=str(parsed.get("employee", ""))[:64],
                 employee=chosen.name,
@@ -264,7 +264,7 @@ def _merge(base: SharedContext | None, extra: SharedContext) -> SharedContext:
 
 
 def _lines(raw: object) -> tuple[str, ...]:
-    """What KAI passes down, with anything credential-shaped dropped on the way.
+    """What Alethic passes down, with anything credential-shaped dropped on the way.
 
     `redact` masks by argument *name*, which is right for a tool call and no use
     at all here: these are sentences. So a line that mentions a credential is
@@ -285,7 +285,7 @@ def _lines(raw: object) -> tuple[str, ...]:
         if not text:
             continue
         if is_sensitive(text):
-            log.warning("kai.context_line_withheld", reason="looks like a credential")
+            log.warning("alethic.context_line_withheld", reason="looks like a credential")
             continue
         kept.append(text)
     return tuple(kept)

@@ -2,11 +2,11 @@
 
 Two questions, answered from one reading, because they come apart badly. §7.3
 asks for free text to become an `Objective` with constraints and acceptance
-criteria; §7.5 asks KAI to do simple things directly rather than decompose them
+criteria; §7.5 asks Alethic to do simple things directly rather than decompose them
 on principle. Both are the same act of comprehension, and splitting them into
 two model calls means the second one re-reads what the first already understood.
 
-The user's sentence is never replaced. What KAI understood is recorded *beside*
+The user's sentence is never replaced. What Alethic understood is recorded *beside*
 it, so a misreading stays visible next to the thing it misread instead of
 quietly becoming the objective.
 
@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import structlog
 
-from application.kai.workforce import describe
+from application.alethic.workforce import describe
 from application.prompts import render
 from domain.capabilities.models import CapabilityRequirement
 from domain.employees.definition import EmployeeDefinition
@@ -46,7 +46,7 @@ class IntentReader:
         remembered: tuple[str, ...] = (),
     ) -> Intent:
         prompt = render(
-            "kai_intent",
+            "alethic_intent",
             request=request,
             workforce=describe(workforce),
             # A sentence like "do the same again" is not readable on its own.
@@ -64,7 +64,7 @@ class IntentReader:
 
         parsed = extract_object(response.content)
         if parsed is None:
-            log.warning("kai.intent_unreadable", reply=response.content[:200])
+            log.warning("alethic.intent_unreadable", reply=response.content[:200])
             return Intent(restatement=request, needs_work=True)
 
         needs_work = bool(parsed.get("needs_work", True))
@@ -72,7 +72,7 @@ class IntentReader:
         # A model that says "no work needed" and then supplies no answer has
         # told us nothing. The safe reading of that is that there is work.
         if not needs_work and not answer:
-            log.info("kai.intent_answerless", restatement=parsed.get("restatement", ""))
+            log.info("alethic.intent_answerless", restatement=parsed.get("restatement", ""))
             needs_work = True
 
         intent = Intent(
@@ -84,7 +84,7 @@ class IntentReader:
             answer="" if needs_work else answer,
         )
         log.info(
-            "kai.intent_read",
+            "alethic.intent_read",
             needs_work=intent.needs_work,
             criteria=len(intent.acceptance_criteria),
             constraints=sorted(intent.constraints),

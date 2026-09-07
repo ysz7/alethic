@@ -1,4 +1,4 @@
-"""The rules KAI is not allowed to break (Phase 7, §7.13).
+"""The rules Alethic is not allowed to break (Phase 7, §7.13).
 
 These are the tests the phase exists to make possible. A manager that can hand
 out a tool nobody was trusted with, or approve its own work, is not a manager -
@@ -11,9 +11,9 @@ import ast
 from pathlib import Path
 from uuid import uuid4
 
+from application.alethic.delegation import CapabilityDelegator, manager_actor
 from application.employee_runtime.executor import Executor
 from application.employee_runtime.runtime import EmployeeRuntime, RuntimeDependencies
-from application.kai.delegation import CapabilityDelegator, manager_actor
 from domain.policies.models import ActorKind, effective_tools
 from domain.tasks.plan import TaskPlan
 from domain.tasks.task import Task
@@ -26,18 +26,18 @@ from tests.fakes.tools import FakeTool
 from tests.fakes.workforce import FakeRegistry
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-KAI_DIR = REPO_ROOT / "application" / "kai"
+ALETHIC_DIR = REPO_ROOT / "application" / "alethic"
 
 
-# --- No employee is named in KAI's code (§7.6, and the phase's DoD) ------------
+# --- No employee is named in Alethic's code (§7.6, and the phase's DoD) ------------
 
 
-def test_kai_never_names_a_declared_employee() -> None:
+def test_alethic_never_names_a_declared_employee() -> None:
     """The DoD in one assertion.
 
     Every employee under `employees/` is found by reading the directory, so this
     keeps working as employees are added - which is the point: adding one must
-    never mean editing KAI.
+    never mean editing Alethic.
     """
     declared = sorted(
         path.parent.name for path in (REPO_ROOT / "employees").glob("*/employee.yaml")
@@ -45,24 +45,24 @@ def test_kai_never_names_a_declared_employee() -> None:
     assert declared, "the check is worthless if it finds no employees to look for"
 
     offenders: dict[str, list[str]] = {}
-    for path in sorted(KAI_DIR.rglob("*.py")):
+    for path in sorted(ALETHIC_DIR.rglob("*.py")):
         text = path.read_text(encoding="utf-8").lower()
         found = [name for name in declared if name in text]
         if found:
             offenders[str(path.relative_to(REPO_ROOT))] = found
-    assert not offenders, f"KAI names a concrete employee: {offenders}"
+    assert not offenders, f"Alethic names a concrete employee: {offenders}"
 
 
-def test_kai_reaches_the_workforce_only_through_the_registry() -> None:
+def test_alethic_reaches_the_workforce_only_through_the_registry() -> None:
     """No file access, no YAML, no directory walk, and no runtime.
 
-    The runtime one matters as much as the rest: KAI holds `TaskExecution`, a
+    The runtime one matters as much as the rest: Alethic holds `TaskExecution`, a
     contract, so the whole manager can be exercised against a stand-in that
     never calls a model - which is what every test in this directory does.
     """
     forbidden = {"yaml", "pathlib", "os", "glob", "sqlalchemy", "httpx"}
     offenders: dict[str, list[str]] = {}
-    for path in sorted(KAI_DIR.rglob("*.py")):
+    for path in sorted(ALETHIC_DIR.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         roots: set[str] = set()
         for node in ast.walk(tree):
@@ -71,7 +71,7 @@ def test_kai_reaches_the_workforce_only_through_the_registry() -> None:
             elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
                 roots.add(node.module.split(".")[0])
         found = sorted(roots & forbidden)
-        # `application.task_runner` is in KAI's own layer, so the layering
+        # `application.task_runner` is in Alethic's own layer, so the layering
         # contract would allow it. Depending on it would still put the runtime
         # inside the manager, which is exactly what the protocol exists to keep
         # out - so it is named here rather than left to import-linter.
@@ -80,13 +80,13 @@ def test_kai_reaches_the_workforce_only_through_the_registry() -> None:
             found.append("the employee runtime")
         if found:
             offenders[str(path.relative_to(REPO_ROOT))] = found
-    assert not offenders, f"KAI reached around its contracts: {offenders}"
+    assert not offenders, f"Alethic reached around its contracts: {offenders}"
 
 
 # --- Delegation never escalates privileges (§7.13) ----------------------------
 
 
-async def test_kai_cannot_grant_a_tool_the_employee_does_not_have() -> None:
+async def test_alethic_cannot_grant_a_tool_the_employee_does_not_have() -> None:
     narrow = definition("narrow", tools=frozenset({"fs.read"}))
     wide = definition("wide", tools=frozenset({"fs.read", "fs.write", "web.search"}))
     delegator = CapabilityDelegator(
@@ -106,14 +106,14 @@ def test_the_manager_actor_can_never_exceed_the_union_of_the_workforce() -> None
     first = definition("first", tools=frozenset({"fs.read"}))
     second = definition("second", tools=frozenset({"web.search"}))
 
-    kai = manager_actor([first, second])
+    alethic = manager_actor([first, second])
 
-    assert kai.actor_kind is ActorKind.KAI
-    assert kai.allowed_tools == frozenset({"fs.read", "web.search"})
-    assert "*" not in kai.allowed_tools, "a wildcard would make the intersection meaningless"
+    assert alethic.actor_kind is ActorKind.ALETHIC
+    assert alethic.allowed_tools == frozenset({"fs.read", "web.search"})
+    assert "*" not in alethic.allowed_tools, "a wildcard would make the intersection meaningless"
     # And the intersection with any one employee is that employee's own rights.
-    assert effective_tools(kai, first) == first.allowed_tools
-    assert effective_tools(kai, second) == second.allowed_tools
+    assert effective_tools(alethic, first) == first.allowed_tools
+    assert effective_tools(alethic, second) == second.allowed_tools
 
 
 def test_an_empty_workforce_grants_nothing() -> None:
@@ -164,7 +164,7 @@ async def test_an_assignment_can_narrow_what_an_employee_may_use() -> None:
         TaskAssignment.create(
             task_id=task.id,
             employee_id=employee.id,
-            assigned_by=ActorKind.KAI,
+            assigned_by=ActorKind.ALETHIC,
             context=SharedContext(data={"granted_tools": ["fs.read"]}),
         ),
     )
@@ -188,7 +188,7 @@ async def test_an_assignment_cannot_widen_what_an_employee_may_use() -> None:
         TaskAssignment.create(
             task_id=uuid4(),
             employee_id=employee.id,
-            assigned_by=ActorKind.KAI,
+            assigned_by=ActorKind.ALETHIC,
             context=SharedContext(data={"granted_tools": ["fs.read", "fs.write", "code.run"]}),
         )
     )
@@ -196,18 +196,18 @@ async def test_an_assignment_cannot_widen_what_an_employee_may_use() -> None:
     assert effective.allowed_tools == frozenset({"fs.read"})
 
 
-# --- KAI never approves its own work (§7.10) ----------------------------------
+# --- Alethic never approves its own work (§7.10) ----------------------------------
 
 
-def test_kai_never_resolves_an_approval() -> None:
+def test_alethic_never_resolves_an_approval() -> None:
     """Asking is the manager's; answering is a person's.
 
-    Checked as a property of the source rather than of one run: an approval KAI
+    Checked as a property of the source rather than of one run: an approval Alethic
     could resolve is an approval that has stopped meaning anything, and it would
     not show up as a failing assertion anywhere else.
     """
     offenders: dict[str, list[str]] = {}
-    for path in sorted(KAI_DIR.rglob("*.py")):
+    for path in sorted(ALETHIC_DIR.rglob("*.py")):
         text = path.read_text(encoding="utf-8")
         found = [
             token
@@ -216,13 +216,13 @@ def test_kai_never_resolves_an_approval() -> None:
         ]
         if found:
             offenders[str(path.relative_to(REPO_ROOT))] = found
-    assert not offenders, f"KAI touched the approval machinery: {offenders}"
+    assert not offenders, f"Alethic touched the approval machinery: {offenders}"
 
 
 async def test_a_delegated_task_still_stops_at_the_gate() -> None:
     """Delegation changes who asked, not whether the gate applies.
 
-    An irreversible action inside a task KAI handed out is refused exactly as it
+    An irreversible action inside a task Alethic handed out is refused exactly as it
     would have been had the user given the task to that employee directly.
     """
     from application.employee_runtime.approvals import ApprovalGate

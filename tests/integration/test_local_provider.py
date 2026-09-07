@@ -29,7 +29,7 @@ from infrastructure.persistence.llm_call_repository import InMemoryLLMCallLog
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOCAL_CATALOG = ModelCatalog.load(REPO_ROOT / "infrastructure/llm/models.local.toml")
-MODEL = os.environ.get("KAI_TEST_LOCAL_MODEL", "gpt-oss:20b")
+MODEL = os.environ.get("ALETHIC_TEST_LOCAL_MODEL", "gpt-oss:20b")
 
 
 def _served_models() -> set[str]:

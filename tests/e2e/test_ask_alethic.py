@@ -33,7 +33,7 @@ DEADLINE_SECONDS = 10.0
 def settings_for(tmp_path: Path) -> Settings:
     return Settings(
         data_dir=tmp_path,
-        database_url=f"sqlite+aiosqlite:///{tmp_path / 'kai.db'}",
+        database_url=f"sqlite+aiosqlite:///{tmp_path / 'alethic.db'}",
         workspace_dir=tmp_path / "workspace",
         employees_dir=REPO_ROOT / "employees",
         log_format="console",
@@ -134,14 +134,14 @@ def test_a_goal_stated_in_one_sentence_is_carried_to_a_result(tmp_path: Path) ->
     (workspace / "notes.txt").write_text("the answer is 41", encoding="utf-8")
 
     llm = script(
-        intent(),                       # KAI reads the request
+        intent(),                       # Alethic reads the request
         plan("Read notes.txt and say what it contains"),
-        chooses("researcher"),          # KAI picks, from the registry's own names
+        chooses("researcher"),          # Alethic picks, from the registry's own names
         steps("Read the file"),         # the employee plans its own steps
         "The notes say the answer is 41.",
         verdict(True),                  # the employee's own verifier
         REMEMBERED,                     # what the run leaves in memory
-        verdict(True),                  # KAI's check against the objective
+        verdict(True),                  # Alethic's check against the objective
         "The notes say the answer is 41.",  # the answer the user reads
     )
 
@@ -187,7 +187,7 @@ def test_a_question_needing_no_work_is_answered_without_a_plan(tmp_path: Path) -
 
 
 def test_the_trace_shows_the_manager_and_its_employee_as_one_story(tmp_path: Path) -> None:
-    """6.3 at the objective level: KAI's own progress, and its tasks', merged."""
+    """6.3 at the objective level: Alethic's own progress, and its tasks', merged."""
     settings = settings_for(tmp_path)
     create_schema(settings)
     (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
@@ -281,14 +281,14 @@ def test_an_unmet_objective_is_escalated_with_what_is_missing(tmp_path: Path) ->
 # --- The command line ---------------------------------------------------------
 
 
-def test_ask_kai_reports_the_answer_and_who_produced_it(tmp_path, monkeypatch) -> None:
+def test_ask_alethic_reports_the_answer_and_who_produced_it(tmp_path, monkeypatch) -> None:
     from app.config.settings import get_settings
 
     get_settings.cache_clear()
-    monkeypatch.setenv("KAI_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("KAI_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path / 'kai.db'}")
-    monkeypatch.setenv("KAI_WORKSPACE_DIR", str(tmp_path / "workspace"))
-    monkeypatch.setenv("KAI_EMPLOYEES_DIR", str(REPO_ROOT / "employees"))
+    monkeypatch.setenv("ALETHIC_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("ALETHIC_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path / 'alethic.db'}")
+    monkeypatch.setenv("ALETHIC_WORKSPACE_DIR", str(tmp_path / "workspace"))
+    monkeypatch.setenv("ALETHIC_EMPLOYEES_DIR", str(REPO_ROOT / "employees"))
     try:
         create_schema(get_settings())
         llm = script(
@@ -312,7 +312,7 @@ def test_ask_kai_reports_the_answer_and_who_produced_it(tmp_path, monkeypatch) -
             lambda *args, **kwargs: _scripted(original(*args, **kwargs), llm),
         )
 
-        result = CliRunner().invoke(cli.app, ["ask-kai", "Say something for me"])
+        result = CliRunner().invoke(cli.app, ["ask-alethic", "Say something for me"])
         assert result.exit_code == 0, result.output
         assert "Said, and here it is." in result.output
         assert "researcher" in result.output, "who did it is on screen, not looked up"

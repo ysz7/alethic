@@ -67,7 +67,7 @@ def test_the_shipped_workforce_is_consistent_with_the_tools_it_ships_with() -> N
 
 
 def test_claiming_a_capability_nothing_backs_is_an_error() -> None:
-    """Wrong on every machine: KAI will hand it work it cannot begin."""
+    """Wrong on every machine: Alethic will hand it work it cannot begin."""
     liar = employee(tools=frozenset({"fs.read"}), capabilities=frozenset({Capability.CODE}))
 
     issues = check(liar, OFFERED)

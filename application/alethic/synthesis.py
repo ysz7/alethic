@@ -1,6 +1,6 @@
 """One answer, from however many reports it took.
 
-The user asked KAI, not the team, and has not seen the plan. Handing back a list
+The user asked Alethic, not the team, and has not seen the plan. Handing back a list
 of task summaries would make them do the manager's job - reading four reports to
 find the one sentence they wanted.
 
@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import structlog
 
-from application.kai.supervisor import TaskOutcome
+from application.alethic.supervisor import TaskOutcome
 from application.prompts import render
 from domain.capabilities.models import CapabilityRequirement
 from domain.llm.models import LLMRequest, Message, RoutingHints, TaskKind
@@ -52,7 +52,7 @@ class Synthesizer:
                 messages=(
                     Message.user(
                         render(
-                            "kai_synthesis",
+                            "alethic_synthesis",
                             objective=objective.text,
                             criteria=_criteria(objective),
                             results=results,
@@ -67,7 +67,7 @@ class Synthesizer:
         if not answer:
             # Better the raw reports than a blank page: the work happened, and
             # the user is entitled to it even when the last call said nothing.
-            log.warning("kai.synthesis_empty", objective_id=str(objective.id))
+            log.warning("alethic.synthesis_empty", objective_id=str(objective.id))
             return results
         return answer
 

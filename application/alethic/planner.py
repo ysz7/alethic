@@ -9,7 +9,7 @@ default assumption is one.
 Three decisions are worth stating.
 
 **A plan is a value, and replanning makes a new one.** Revisions supersede
-rather than overwrite: what KAI thought the first time is the only evidence of
+rather than overwrite: what Alethic thought the first time is the only evidence of
 why a second attempt was needed, and an edited plan destroys it.
 
 **Dependencies are declared, not implied by order.** A list of tasks in an order
@@ -45,7 +45,7 @@ from uuid import UUID, uuid4
 
 import structlog
 
-from application.kai.workforce import describe
+from application.alethic.workforce import describe
 from application.prompts import render
 from domain.capabilities.models import Capability, CapabilityRequirement
 from domain.employees.definition import EmployeeDefinition
@@ -80,7 +80,7 @@ class ObjectivePlanner:
         remembered: tuple[str, ...] = (),
     ) -> Plan:
         prompt = render(
-            "kai_planner",
+            "alethic_planner",
             objective=objective.text,
             restatement=restatement or objective.text,
             constraints=_constraints(objective),
@@ -105,7 +105,7 @@ class ObjectivePlanner:
         plan_id = uuid4()
         tasks, dependencies, requirements = self._read(parsed, objective, plan_id)
         if not tasks:
-            log.warning("kai.plan_unreadable", objective_id=str(objective.id))
+            log.warning("alethic.plan_unreadable", objective_id=str(objective.id))
             tasks, dependencies, requirements = (
                 (self._task(objective, objective.text, plan_id),),
                 (),
@@ -124,7 +124,7 @@ class ObjectivePlanner:
             workspace_id=objective.workspace_id,
         )
         log.info(
-            "kai.planned",
+            "alethic.planned",
             objective_id=str(objective.id),
             plan_id=str(plan.id),
             revision=revision,
@@ -185,7 +185,7 @@ class ObjectivePlanner:
             Task.create(
                 goal,
                 workspace_id=objective.workspace_id,
-                created_by=TaskCreatedBy.KAI,
+                created_by=TaskCreatedBy.ALETHIC,
                 priority=priority,
             ),
             plan_id=plan_id,
@@ -215,7 +215,7 @@ def _capabilities(raw: object) -> frozenset[Capability]:
         try:
             known.add(Capability(str(item).strip().upper()))
         except ValueError:
-            log.info("kai.unknown_capability", name=str(item)[:32])
+            log.info("alethic.unknown_capability", name=str(item)[:32])
     return frozenset(known)
 
 

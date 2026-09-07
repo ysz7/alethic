@@ -1,6 +1,6 @@
 """The command line, and the command that opens the local interface.
 
-Since Phase 6 the CLI is no longer the only surface: `kai serve` starts the
+Since Phase 6 the CLI is no longer the only surface: `alethic serve` starts the
 local interface, which is where a task is normally run and watched. Everything
 here still works on its own, because a machine with no browser, or a run started
 from a script, must not need one.
@@ -18,13 +18,13 @@ import typer
 from app.config.container import build_container, build_manager, build_task_runner
 from app.config.settings import get_settings
 from domain.approvals.models import ApprovalState
-from domain.errors import KaiError, StorageNotInitializedError
+from domain.errors import AlethicError, StorageNotInitializedError
 from domain.llm.models import LLMRequest, Message, RoutingHints, TaskKind
 from domain.policies.models import ActorKind, SimpleActor
 
 app = typer.Typer(
-    name="kai",
-    help="KAI Workforce - run digital employees on your own machine.",
+    name="alethic",
+    help="Alethic - run digital employees on your own machine.",
     no_args_is_help=True,
     add_completion=False,
 )
@@ -32,14 +32,14 @@ app = typer.Typer(
 
 def _version() -> str:
     try:
-        return package_version("kai-workforce")
+        return package_version("alethic")
     except PackageNotFoundError:
         return "0.1.0"
 
 
 def _version_callback(value: bool) -> None:
     if value:
-        typer.echo(f"kai {_version()}")
+        typer.echo(f"alethic {_version()}")
         raise typer.Exit
 
 
@@ -54,7 +54,7 @@ def main(
         is_eager=True,
     ),
 ) -> None:
-    """KAI Workforce command line."""
+    """Alethic command line."""
 
 
 @app.command()
@@ -65,7 +65,7 @@ def config() -> None:
     typer.echo(f"database:      {settings.resolved_database_url}")
     typer.echo(f"workspace:     {settings.resolved_workspace_dir}")
     typer.echo(f"approvals:     {settings.approval_mode}")
-    typer.echo(f"interface:     http://{settings.ui_host}:{settings.ui_port}  (kai serve)")
+    typer.echo(f"interface:     http://{settings.ui_host}:{settings.ui_port}  (alethic serve)")
     typer.echo(
         f"computer use:  {'on' if settings.computer_use_enabled else 'off'} "
         f"(desktop; the browser surface follows the browser tools)"
@@ -146,7 +146,7 @@ def ask(
                 f" - ${usage.cost_usd:.6f} - {usage.latency_ms} ms",
                 fg="cyan",
             )
-        except KaiError as error:
+        except AlethicError as error:
             typer.secho(f"{type(error).__name__}: {error}", fg="red", err=True)
             raise typer.Exit(code=1) from error
         finally:
@@ -198,11 +198,11 @@ def models() -> None:
         typer.echo("No defaults configured.")
 
 
-@app.command(name="ask-kai")
-def ask_kai(
+@app.command(name="ask-alethic")
+def ask_alethic(
     objective: str = typer.Argument(..., help="What you want, in your own words."),
 ) -> None:
-    """Give KAI a goal. It decides what has to happen and who does it.
+    """Give Alethic a goal. It decides what has to happen and who does it.
 
     This is the normal way in from Phase 7 on: `run-task` still exists and still
     hands work to a named employee, but choosing the employee is the manager's
@@ -217,7 +217,7 @@ def ask_kai(
             received = await manager.receive(objective)
             result = await manager.handle_objective(received)
             _report_objective(result)
-        except KaiError as error:
+        except AlethicError as error:
             typer.secho(f"{type(error).__name__}: {error}", fg="red", err=True)
             raise typer.Exit(code=1) from error
         finally:
@@ -228,7 +228,7 @@ def ask_kai(
 
 @app.command()
 def objectives() -> None:
-    """What has been asked of KAI here, newest first."""
+    """What has been asked of Alethic here, newest first."""
 
     async def _run() -> None:
         container = build_container()
@@ -274,7 +274,7 @@ def memory(
         try:
             store = container.memory
             if store is None:
-                typer.echo("Memory is switched off (KAI_FLAGS__MEMORY=false).")
+                typer.echo("Memory is switched off (ALETHIC_FLAGS__MEMORY=false).")
                 return
             if prune:
                 maintenance = container.memory_maintenance
@@ -319,7 +319,7 @@ def run_task(
             runner = build_task_runner(container)
             task = await runner.submit_and_run(goal, employee)
             _report(task)
-        except KaiError as error:
+        except AlethicError as error:
             typer.secho(f"{type(error).__name__}: {error}", fg="red", err=True)
             raise typer.Exit(code=1) from error
         finally:
@@ -345,7 +345,7 @@ def resume() -> None:
             for task in pending:
                 typer.secho(f"\n-> {task.goal}", fg="cyan")
                 _report(await runner.resume(task))
-        except KaiError as error:
+        except AlethicError as error:
             typer.secho(f"{type(error).__name__}: {error}", fg="red", err=True)
             raise typer.Exit(code=1) from error
         finally:
@@ -442,7 +442,7 @@ def stop(
         return
     path = signal.engage(reason)
     typer.secho(f"Computer use stopped: {signal.reason}", fg="yellow")
-    typer.echo(f"Release it with: kai stop --clear   ({path})")
+    typer.echo(f"Release it with: alethic stop --clear   ({path})")
 
 
 @app.command()
@@ -462,7 +462,7 @@ def serve(
     settings = get_settings()
     bind = host or settings.ui_host
     on = port or settings.ui_port
-    typer.secho(f"KAI Workforce on http://{bind}:{on}", fg="cyan")
+    typer.secho(f"Alethic on http://{bind}:{on}", fg="cyan")
     if bind not in ("127.0.0.1", "localhost", "::1"):
         # Said once, plainly. The interface starts tasks and approves
         # irreversible actions, and it has no authentication because nothing
@@ -513,7 +513,7 @@ def approvals() -> None:
 
 @app.command()
 def approve(
-    approval_id: str = typer.Argument(..., help="The id shown by `kai approvals`."),
+    approval_id: str = typer.Argument(..., help="The id shown by `alethic approvals`."),
     comment: str = typer.Option("", "--comment", "-c", help="Why."),
 ) -> None:
     """Approve a pending action."""
@@ -522,7 +522,7 @@ def approve(
 
 @app.command()
 def reject(
-    approval_id: str = typer.Argument(..., help="The id shown by `kai approvals`."),
+    approval_id: str = typer.Argument(..., help="The id shown by `alethic approvals`."),
     comment: str = typer.Option("", "--comment", "-c", help="Why."),
 ) -> None:
     """Reject a pending action."""
@@ -542,7 +542,7 @@ def _resolve(approval_id: str, decision: ApprovalState, comment: str) -> None:
         except ValueError as error:
             typer.secho(f"'{approval_id}' is not an approval id.", fg="red", err=True)
             raise typer.Exit(code=1) from error
-        except KaiError as error:
+        except AlethicError as error:
             typer.secho(f"{type(error).__name__}: {error}", fg="red", err=True)
             raise typer.Exit(code=1) from error
         finally:

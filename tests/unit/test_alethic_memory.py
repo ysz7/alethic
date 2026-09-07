@@ -1,6 +1,6 @@
 """What the manager remembers, and what it hands down (§9.4).
 
-KAI's half of memory is a different grain from an employee's: what it reads out
+Alethic's half of memory is a different grain from an employee's: what it reads out
 of a request - how the user wants work done here - outlives the request, and
 what the workspace already knows travels to the tasks it delegates rather than
 staying in the manager's own head.
@@ -14,7 +14,7 @@ from domain.memory.models import MemoryItem, MemoryKind, MemoryQuery, MemoryScop
 from domain.workforce.protocols import ObjectiveStatus
 from infrastructure.memory.in_memory import InMemoryMemory
 from tests.fakes.llm import FakeLLM, reply
-from tests.unit.test_kai_manager import build, intent, plan, verdict
+from tests.unit.test_alethic_manager import build, intent, plan, verdict
 
 
 def workspace_memory(memory: InMemoryMemory) -> WorkspaceMemory:

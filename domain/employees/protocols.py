@@ -24,9 +24,9 @@ class Employee(Protocol):
 
 
 class EmployeeRegistry(Protocol):
-    """The only way KAI learns who exists.
+    """The only way Alethic learns who exists.
 
-    Adding an employee is a new declaration and zero edits to KAI.
+    Adding an employee is a new declaration and zero edits to Alethic.
     """
 
     def list(self, workspace: WorkspaceId = DEFAULT_WORKSPACE_ID) -> list[EmployeeDefinition]: ...

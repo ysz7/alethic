@@ -258,8 +258,8 @@ class YamlEmployeeRegistry:
         it was granted. Ranked so the closest fit comes first - among candidates
         that all qualify, the one that also offers what was preferred.
 
-        This is how KAI finds a newly declared employee without anyone editing
-        KAI, which is the whole of Phase 8's Definition of Done.
+        This is how Alethic finds a newly declared employee without anyone editing
+        Alethic, which is the whole of Phase 8's Definition of Done.
         """
         matching = [
             definition for definition in self.list() if definition.offers(requirement)

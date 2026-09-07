@@ -16,7 +16,7 @@ from infrastructure.persistence.task_repository import SqliteTaskRepository
 
 
 async def test_work_in_progress_is_recovered_from_a_new_process(tmp_path: Path) -> None:
-    database_url = f"sqlite+aiosqlite:///{tmp_path / 'kai.db'}"
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'alethic.db'}"
 
     # --- First run: start a task, get two steps in, then "crash". -------------
     engine = create_engine(database_url)

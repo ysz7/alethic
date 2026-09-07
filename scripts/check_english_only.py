@@ -8,7 +8,7 @@ introduce halfway.
 
 Runtime *data* - task goals, memory contents, report text - may be in any
 language. That is why only source and schema files are scanned, and why
-`dev-assets/` (the internal planning notes) is excluded.
+`development/` (the internal planning notes) is excluded.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #: The local interface is source like any other: an identifier, a comment or a
 #: label in the page is as ungreppable in Cyrillic as one in a module. Its text
 #: shown to the user is still English-only for the same reason the CLI's is -
-#: the language agents *answer* in is `KAI_RESPONSE_LANGUAGE`, which is data.
+#: the language agents *answer* in is `ALETHIC_RESPONSE_LANGUAGE`, which is data.
 SCANNED_SUFFIXES = {
     ".py",
     ".sql",
@@ -45,7 +45,7 @@ EXCLUDED_DIRS = {
     "__pycache__",
     ".pytest_cache",
     ".ruff_cache",
-    "dev-assets",  # internal planning notes, explicitly allowed to be in Russian
+    "development",  # internal planning notes, explicitly allowed to be in Russian
     "node_modules",
     "dist",
     "build",

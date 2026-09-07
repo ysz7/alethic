@@ -51,5 +51,5 @@ through prompts.
   deliberately the smallest thing that makes an irreversible action impossible
   without a human.
 - A rejected action is refused immediately rather than parked as a question to
-  answer later. The PENDING row and `kai approve <id>` exist; nothing yet
+  answer later. The PENDING row and `alethic approve <id>` exist; nothing yet
   suspends a task on one. That waits for the interface in Phase 6.

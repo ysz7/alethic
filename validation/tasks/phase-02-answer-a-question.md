@@ -9,10 +9,10 @@ Against a local model, so the phase could be validated with no provider key and
 no spend. The bundled local catalog does this:
 
 ```bash
-export KAI_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
+export ALETHIC_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
 uv run alembic upgrade head
-uv run kai ask "Which city is the capital of Germany? Answer in one short sentence."
-uv run kai spend
+uv run alethic ask "Which city is the capital of Germany? Answer in one short sentence."
+uv run alethic spend
 ```
 
 ## Result - passed, 2026-09-05
@@ -28,7 +28,7 @@ Berlin is the capital of Germany.
 [gpt-oss:20b] 81 in / 51 out - $0.000000 - 7420 ms
 ```
 
-`kai spend` then reported `calls: 1`, `prompt tokens: 81`, `output tokens: 51`,
+`alethic spend` then reported `calls: 1`, `prompt tokens: 81`, `output tokens: 51`,
 confirming the call was recorded rather than only displayed.
 
 Tool calling was verified against the same model in

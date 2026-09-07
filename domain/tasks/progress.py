@@ -61,7 +61,7 @@ class ProgressEvent:
     payload: dict[str, Any] = field(default_factory=dict)
     #: The objective this belongs to, when a manager is driving. An employee
     #: run started directly has none, and an interface watching one objective
-    #: needs to tell KAI's own progress apart from every other run's.
+    #: needs to tell Alethic's own progress apart from every other run's.
     objective_id: UUID | None = None
     workspace_id: WorkspaceId = DEFAULT_WORKSPACE_ID
     at: datetime = field(default_factory=lambda: datetime.now(UTC))

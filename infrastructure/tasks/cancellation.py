@@ -1,6 +1,6 @@
 """Which tasks have been asked to stop, for as long as this process lives.
 
-Deliberately not a file, and deliberately not a column. `kai stop` is a file
+Deliberately not a file, and deliberately not a column. `alethic stop` is a file
 because it has to work from a second terminal while the first one holds the
 screen. Cancelling a task is the opposite situation: the person asking is
 already talking to the process that is running it, through the interface that

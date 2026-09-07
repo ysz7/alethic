@@ -1,4 +1,4 @@
-"""Phase 7: objectives and plans - what the user asked KAI for, and its decomposition.
+"""Phase 7: objectives and plans - what the user asked Alethic for, and its decomposition.
 
 Revision ID: 006
 Revises: 005
@@ -14,7 +14,7 @@ run. That is not worth doing for a column that has existed, indexed, since
 migration 001.
 
 `plan_task_dependencies` gets one key, to `plans`, and none to `tasks`. This is
-not a workaround; it is what a plan is. KAI decomposes an objective into tasks
+not a workaround; it is what a plan is. Alethic decomposes an objective into tasks
 and records which of them wait for which *before* any of them runs, and a task
 becomes a row when somebody is given it. Keying the edges to `tasks` would mean
 a plan could only be recorded after it had already been carried out, which is

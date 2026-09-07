@@ -1,6 +1,6 @@
 """Stopping a task that is already running.
 
-There is already a brake in the platform - `kai stop`, the STOP file - and it
+There is already a brake in the platform - `alethic stop`, the STOP file - and it
 deliberately stops one thing: anything acting on a screen. It is a blunt,
 machine-wide switch, read immediately before an irreversible physical action,
 and it is right for that job precisely because it is blunt.

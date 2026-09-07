@@ -2,7 +2,7 @@
 
 A caller says what the work needs - reasoning, tools, a long context, a budget -
 and gets back a model. It never says which one, which is what makes swapping
-models a change to `models.toml` rather than to any employee or to KAI.
+models a change to `models.toml` rather than to any employee or to Alethic.
 
 The precedence is deliberate and worth stating plainly:
 

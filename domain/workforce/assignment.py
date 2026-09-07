@@ -1,4 +1,4 @@
-"""What KAI hands down, and what comes back."""
+"""What Alethic hands down, and what comes back."""
 
 from __future__ import annotations
 

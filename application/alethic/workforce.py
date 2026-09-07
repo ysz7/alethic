@@ -1,10 +1,10 @@
-"""How KAI describes the people it can call on.
+"""How Alethic describes the people it can call on.
 
 One function, used by three prompts, for a reason worth stating: the *only*
-thing KAI knows about its workforce is what the registry hands it. There is no
+thing Alethic knows about its workforce is what the registry hands it. There is no
 list of employees in this package, no name in a prompt, and no branch on one.
 Add a declaration under `employees/` and it appears here on the next run; delete
-one and it stops being offered, with no edit anywhere in `application/kai/`.
+one and it stops being offered, with no edit anywhere in `application/alethic/`.
 
 What goes into the card is what a manager would need to choose: the role, what
 the person is for, and - decisively - the tools they are allowed to use, because

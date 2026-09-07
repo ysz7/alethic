@@ -1,7 +1,7 @@
 [project]
-name = "kai-workforce"
+name = "alethic"
 version = "0.1.0"
-description = "KAI Workforce - a local-first platform where an AI manager runs digital employees on your machine."
+description = "Alethic - a local-first platform where an AI manager runs digital employees on your machine."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -33,7 +33,7 @@ browser = ["playwright>=1.48"]
 desktop = ["pyautogui>=0.9.54"]
 
 [project.scripts]
-kai = "app.cli.main:app"
+alethic = "app.cli.main:app"
 
 [dependency-groups]
 dev = [
@@ -90,9 +90,9 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "KAI knows the workforce contracts only, never infrastructure or a concrete employee"
+name = "Alethic knows the workforce contracts only, never infrastructure or a concrete employee"
 type = "forbidden"
-source_modules = ["application.kai"]
+source_modules = ["application.alethic"]
 forbidden_modules = ["infrastructure", "app", "employees"]
 
 # §9.10. The layering contract above already forbids this; it is named on its own

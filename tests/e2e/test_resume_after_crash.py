@@ -51,7 +51,7 @@ def build_runtime(llm: FakeLLM, tasks: SqliteTaskRepository) -> EmployeeRuntime:
 
 
 async def test_a_task_killed_mid_run_continues_from_its_last_step(tmp_path: Path) -> None:
-    database_url = f"sqlite+aiosqlite:///{tmp_path / 'kai.db'}"
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'alethic.db'}"
 
     # --- First process: plan, take one step, then die. ------------------------
     engine = create_engine(database_url)
@@ -112,7 +112,7 @@ async def test_resuming_does_not_pay_for_the_work_again(tmp_path: Path) -> None:
 
     from domain.llm.models import Usage
 
-    database_url = f"sqlite+aiosqlite:///{tmp_path / 'kai.db'}"
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'alethic.db'}"
     engine = create_engine(database_url)
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)

@@ -8,14 +8,14 @@ to know which provider failed.
 from __future__ import annotations
 
 
-class KaiError(Exception):
+class AlethicError(Exception):
     """Base class for every error the platform raises on purpose."""
 
 
 # --- Configuration and wiring -------------------------------------------------
 
 
-class ConfigurationError(KaiError):
+class ConfigurationError(AlethicError):
     """The platform is misconfigured and cannot start or serve a request."""
 
 
@@ -26,7 +26,7 @@ class DependencyNotConfiguredError(ConfigurationError):
 # --- Domain rules -------------------------------------------------------------
 
 
-class DomainError(KaiError):
+class DomainError(AlethicError):
     """A domain rule was violated."""
 
 
@@ -92,7 +92,7 @@ class ApprovalDeniedError(DomainError):
 # --- Execution ----------------------------------------------------------------
 
 
-class ExecutionError(KaiError):
+class ExecutionError(AlethicError):
     """A task could not be carried out."""
 
 
@@ -137,7 +137,7 @@ class VerificationFailedError(ExecutionError):
 # --- Storage ------------------------------------------------------------------
 
 
-class StorageError(KaiError):
+class StorageError(AlethicError):
     """The local store could not be read or written."""
 
 
@@ -148,7 +148,7 @@ class StorageNotInitializedError(StorageError):
 # --- External providers -------------------------------------------------------
 
 
-class ProviderError(KaiError):
+class ProviderError(AlethicError):
     """An external provider failed. Base class for adapter-level failures."""
 
     transient: bool = False

@@ -5,7 +5,7 @@ them, and a diff on a `.md` file is readable in a way that a diff on an embedded
 triple-quoted string is not.
 
 It sits at the top of `application/` rather than inside the employee runtime
-because the manager writes prompts too, and KAI reaching into the runtime's
+because the manager writes prompts too, and Alethic reaching into the runtime's
 package for a file loader would suggest a dependency that does not exist.
 """
 

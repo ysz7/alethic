@@ -22,9 +22,9 @@ from typing import Any
 
 @dataclass(frozen=True, slots=True)
 class Intent:
-    """KAI's reading of one request."""
+    """Alethic's reading of one request."""
 
-    #: What KAI understood, in its own words. Shown to the user, never worked
+    #: What Alethic understood, in its own words. Shown to the user, never worked
     #: from in place of the original.
     restatement: str = ""
     #: Limits the user stated for *this* request: a count, a format, a place, a

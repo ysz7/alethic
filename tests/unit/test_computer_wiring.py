@@ -40,7 +40,7 @@ class Stub:
 
     @property
     def resolved_database_url(self) -> str:
-        return f"sqlite+aiosqlite:///{self.data_dir / 'kai.db'}"
+        return f"sqlite+aiosqlite:///{self.data_dir / 'alethic.db'}"
 
     @property
     def resolved_workspace_dir(self) -> Path:
@@ -108,7 +108,7 @@ def test_with_the_browser_off_there_is_no_page_to_drive(tmp_path: Path) -> None:
 
 
 def test_nothing_about_a_screen_is_built_by_listing_the_registry(tmp_path: Path) -> None:
-    """`kai tools` must not route a model, or it fails without a provider key."""
+    """`alethic tools` must not route a model, or it fails without a provider key."""
     built = Container(Stub(tmp_path, computer=True), in_memory=True)
     built.use_screen_reader(FakeScreenReader)
     built.__dict__["search_engine"] = FakeSearchEngine()

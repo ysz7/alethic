@@ -1,6 +1,6 @@
 """The plan for one task: the steps an employee intends to take.
 
-Not to be confused with `domain.workforce.protocols.Plan`, which is KAI's
+Not to be confused with `domain.workforce.protocols.Plan`, which is Alethic's
 decomposition of an objective into *tasks*. This one lives inside a single task
 and belongs to the employee executing it.
 """

@@ -152,7 +152,7 @@ def objective_summary(item: Objective, *, thinking: bool = False) -> dict[str, A
 def objective_detail(
     item: Objective, *, thinking: bool = False, plans: list[Plan] | None = None
 ) -> dict[str, Any]:
-    """One request, opened: what KAI made of it, and what it did about it.
+    """One request, opened: what Alethic made of it, and what it did about it.
 
     Every revision is shown, not only the last. A superseded plan is the only
     evidence of why a second attempt was needed, and hiding it would leave the

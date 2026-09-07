@@ -1,4 +1,4 @@
-"""KAI: the user states a goal, and this decides what happens to it.
+"""Alethic: the user states a goal, and this decides what happens to it.
 
 `WorkforceManager` in one class. The order is fixed and each step is a component
 of its own, because each is a different kind of judgement and they fail in
@@ -19,7 +19,7 @@ rejection usually means the criteria cannot be met by this workforce, and a
 third plan spends another budget finding that out again. What is left is
 escalated to the user, with what was tried (§7.11).
 
-**Remembering.** What KAI reads out of a request - how the user wants things
+**Remembering.** What Alethic reads out of a request - how the user wants things
 done here - outlives the request, and what a workspace has already learned is
 passed down to the tasks it delegates rather than kept for itself. Memory is
 optional and reached through a contract, so a manager without one plans exactly
@@ -28,10 +28,10 @@ as it did before (§9.4).
 What this class does *not* do is as deliberate:
 
 * it never names an employee - candidates come from `EmployeeRegistry`;
-* it never runs a task - `TaskExecution` does, and KAI holds only the contract;
+* it never runs a task - `TaskExecution` does, and Alethic holds only the contract;
 * it never resolves an approval (§7.10). An irreversible action inside a
   delegated task stops at the same gate it would have stopped at if the user had
-  asked the employee directly, and the person who answers it is a person. KAI
+  asked the employee directly, and the person who answers it is a person. Alethic
   can explain what it is for; it cannot say yes to its own work.
 """
 
@@ -41,11 +41,11 @@ from dataclasses import replace
 
 import structlog
 
-from application.kai.intent import IntentReader
-from application.kai.planner import ObjectivePlanner
-from application.kai.supervisor import Recovery, Supervision, Supervisor
-from application.kai.synthesis import Synthesizer, describe
-from application.kai.verification import ObjectiveVerifier
+from application.alethic.intent import IntentReader
+from application.alethic.planner import ObjectivePlanner
+from application.alethic.supervisor import Recovery, Supervision, Supervisor
+from application.alethic.synthesis import Synthesizer, describe
+from application.alethic.verification import ObjectiveVerifier
 from application.memory.workspace import WorkspaceMemory
 from domain.employees.protocols import EmployeeRegistry
 from domain.errors import DelegationError
@@ -68,7 +68,7 @@ log = structlog.get_logger(__name__)
 MAX_PLAN_REVISIONS = 2
 
 
-class KaiManager:
+class AlethicManager:
     """Implements `domain.workforce.protocols.WorkforceManager`."""
 
     def __init__(
@@ -105,14 +105,14 @@ class KaiManager:
 
         Written down first, like a task is: a process killed one second later
         still leaves a record of what was asked, and the user's own words are
-        kept beside whatever KAI made of them.
+        kept beside whatever Alethic made of them.
         """
         objective = Objective.create(
             request.strip(),
             **({"workspace_id": workspace_id} if workspace_id is not None else {}),
         )
         await self._objectives.save(objective)
-        log.info("kai.objective_received", objective_id=str(objective.id))
+        log.info("alethic.objective_received", objective_id=str(objective.id))
         return objective
 
     async def handle_objective(self, objective: Objective) -> ObjectiveResult:
@@ -165,7 +165,7 @@ class KaiManager:
         self, objective: Objective, intent: Intent
     ) -> ObjectiveResult:
         """No plan, no employee, no tools (§7.5)."""
-        log.info("kai.answered_directly", objective_id=str(objective.id))
+        log.info("alethic.answered_directly", objective_id=str(objective.id))
         if self._memory is not None:
             # Nothing else records this: no task ran, so without it the only
             # trace that the question was asked is the objective row.
@@ -240,7 +240,7 @@ class KaiManager:
 
             feedback = verdict.missing or (verdict.reason,)
             log.info(
-                "kai.objective_rejected",
+                "alethic.objective_rejected",
                 objective_id=str(objective.id),
                 revision=revision,
                 missing=list(feedback),
@@ -293,7 +293,7 @@ class KaiManager:
             else "Nothing could be produced for this objective."
         )
         log.info(
-            "kai.escalated",
+            "alethic.escalated",
             objective_id=str(objective.id),
             attempts=len(outcomes),
             missing=list(missing),
@@ -333,7 +333,7 @@ class KaiManager:
             payload={"status": status.value, "missing": list(missing), "cost_usd": cost_usd},
         )
         log.info(
-            "kai.objective_finished",
+            "alethic.objective_finished",
             objective_id=str(objective.id),
             status=status.value,
             cost_usd=round(cost_usd, 6),
@@ -358,7 +358,7 @@ class KaiManager:
 
     @staticmethod
     def _understood(objective: Objective, intent: Intent) -> Objective:
-        """What KAI read, recorded next to what was said - never instead of it."""
+        """What Alethic read, recorded next to what was said - never instead of it."""
         return replace(
             objective,
             constraints={**objective.constraints, **intent.constraints},

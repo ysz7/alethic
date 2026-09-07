@@ -1,7 +1,7 @@
 """Starts tasks, resumes them, and retries the failures worth retrying.
 
 This is the entry point every interface uses - the CLI today, the local UI in
-Phase 6, KAI in Phase 7 - so that "run a task" means the same thing regardless
+Phase 6, Alethic in Phase 7 - so that "run a task" means the same thing regardless
 of who asked.
 """
 

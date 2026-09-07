@@ -4,7 +4,7 @@
    that it needs nothing installed.
 
    Since Phase 7 what the page submits is an objective, not a task: the user
-   states an outcome and KAI decides what that takes and who does it. The trace
+   states an outcome and Alethic decides what that takes and who does it. The trace
    below it is the manager's own progress interleaved with that of every task it
    started, which the server merges - the page does not have to know that the
    two come from different places.
@@ -147,7 +147,7 @@ function drawPlans(objective) {
   holder.innerHTML = "";
   holder.hidden = !objective.plans.length;
   // Newest revision first, and the superseded ones are kept on screen: what
-  // KAI tried the first time is why there was a second time.
+  // Alethic tried the first time is why there was a second time.
   for (const plan of objective.plans) {
     const node = document.createElement("div");
     node.className = `plan${plan.status === "SUPERSEDED" ? " superseded" : ""}`;

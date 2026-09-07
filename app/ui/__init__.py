@@ -1,4 +1,4 @@
-"""The local interface: `kai serve`.
+"""The local interface: `alethic serve`.
 
 One page on loopback, served from the same process that runs the tasks it shows.
 See `app/ui/server.py` for why that is one decision rather than an accident, and

@@ -11,7 +11,7 @@ class LLM(Protocol):
 
 
 class ModelRouter(Protocol):
-    """Employees and KAI both route through this. The manager is not a special case."""
+    """Employees and Alethic both route through this. The manager is not a special case."""
 
     def select(
         self,

@@ -99,7 +99,7 @@ class ProviderFactory:
     def _require_key(self, provider: str) -> str:
         if not self._api_key:
             raise ConfigurationError(
-                f"No API key configured for '{provider}'. Set KAI_LLM_API_KEY in .env."
+                f"No API key configured for '{provider}'. Set ALETHIC_LLM_API_KEY in .env."
             )
         return self._api_key
 

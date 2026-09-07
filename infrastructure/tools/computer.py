@@ -101,7 +101,7 @@ class ComputerTool(BaseTool):
         """Resolved on first use, never at construction.
 
         The registry is built to be *listed* far more often than it is called -
-        `kai tools` does exactly that - and building the reader routes a model,
+        `alethic tools` does exactly that - and building the reader routes a model,
         which on a machine with no key configured is a failure. Declaring a tool
         must not need a provider.
         """

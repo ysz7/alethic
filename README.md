@@ -1,14 +1,14 @@
-# KAI Workforce
+# Alethic
 
 A **local-first** platform where an AI manager runs digital employees that do
 real work on your own machine.
 
 ```
-User -> KAI (AI Manager) -> Workforce -> Digital Employees -> Capabilities -> External World
+User -> Alethic (AI Manager) -> Workforce -> Digital Employees -> Capabilities -> External World
 ```
 
 No server, no cluster, no account. You clone the repository, add a provider key,
-and give KAI a task.
+and give Alethic a task.
 
 ## Status
 
@@ -17,13 +17,12 @@ thirty:
 `researcher` finds out what is true, `organizer` puts a folder in order,
 `operator` works interfaces that have no API, and `analyst` computes answers
 from data on this machine. Each is a directory under `employees/` with no Python
-behind it, and KAI routes work to them by what they declare they can do.
+behind it, and Alethic routes work to them by what they declare they can do.
 
-You state what you want. KAI works
-out what that means, decides whether it needs doing at all or can just be
-answered, breaks it into tasks if it has to, gives each one to whoever is
-declared for it, and checks the result against criteria it wrote down before the
-work started.
+You state what you want. Alethic works out what that means, decides whether it
+needs doing at all or can just be answered, breaks it into tasks if it has to,
+gives each one to whoever is declared for it, and checks the result against
+criteria it wrote down before the work started.
 
 The employees do the work: read and sort files inside one working directory,
 search the web, open a page and read it, run a short program under limits - and,
@@ -33,54 +32,54 @@ touching your desktop - waits for you to say yes, in the page or at the prompt.
 And the second time you ask for something like the first, the work starts from
 what the first one found out.
 
-See `dev-assets/implementation-plan.md` for the full roadmap.
+See `development/implementation-plan.md` for the full roadmap.
 
 ## Getting started
 
 ```bash
 uv sync
-uv run kai --version
-uv run alembic upgrade head    # creates ~/.kai-workforce/kai.db
-uv run kai config
-uv run kai models              # the model catalog and its defaults
+uv run alethic --version
+uv run alembic upgrade head    # creates ~/.alethic/alethic.db
+uv run alethic config
+uv run alethic models              # the model catalog and its defaults
 ```
 
-Copy `.env.example` to `.env` and set `KAI_LLM_API_KEY`, then:
+Copy `.env.example` to `.env` and set `ALETHIC_LLM_API_KEY`, then:
 
 ```bash
-uv run kai ask "Which city is the capital of Germany?"
-uv run kai spend               # what the calls have cost so far
+uv run alethic ask "Which city is the capital of Germany?"
+uv run alethic spend               # what the calls have cost so far
 ```
 
 ## Asking for something
 
 ```bash
-uv run kai ask-kai "Read my meeting notes and write decisions.md, one line per person."
-uv run kai objectives          # what has been asked here, and how it went
+uv run alethic ask-alethic "Read my meeting notes and write decisions.md, one line per person."
+uv run alethic objectives          # what has been asked here, and how it went
 ```
 
-You say what you want; you do not say who does it. KAI reads the request into
+You say what you want; you do not say who does it. Alethic reads the request into
 acceptance criteria, decomposes it only if it has to - a question it can answer
 outright gets an answer, not a plan - picks an employee from what is declared,
 and judges the result against those criteria before you see it. If it falls
 short twice, you get the work that did succeed plus a plain list of what is
 missing, rather than a confident summary of eleven things you asked twenty of.
 
-Nothing in KAI names an employee. Add a directory under `employees/` and it is
+Nothing in Alethic names an employee. Add a directory under `employees/` and it is
 offered on the next run; that is enforced by a test that reads the directory.
 See [ADR 0007](docs/adr/0007-the-manager-decides-and-never-executes.md).
 
 ## The interface
 
 ```bash
-uv run kai serve               # http://127.0.0.1:8765
+uv run alethic serve               # http://127.0.0.1:8765
 ```
 
 One command and one process: the page, the employee runtime and the database are
 the same thing. That is what lets a tool call stop on a question and carry on the
 moment you answer it in the browser, with nothing queued and nothing polled.
 
-Type a goal into the page and the same thing happens: KAI reads it, plans it and
+Type a goal into the page and the same thing happens: Alethic reads it, plans it and
 hands it out. The trace shows the manager and its employees as one story - the
 step, who is doing it, the tool, its arguments and what came back - as it
 happens rather than after it. Approvals appear there, cost and result are on
@@ -101,10 +100,10 @@ Still supported, and still the right thing for a script or a machine with no
 browser - but choosing the employee is the manager's job, not yours:
 
 ```bash
-uv run kai employees           # who is declared
-uv run kai tools               # what this machine can do, and who may do it
-uv run kai run-task --employee researcher "Explain what SQLite WAL mode changes about concurrency, with sources."
-uv run kai resume              # pick up anything that was interrupted
+uv run alethic employees           # who is declared
+uv run alethic tools               # what this machine can do, and who may do it
+uv run alethic run-task --employee researcher "Explain what SQLite WAL mode changes about concurrency, with sources."
+uv run alethic resume              # pick up anything that was interrupted
 ```
 
 Every task goes through three stages. **Plan** turns the goal into steps.
@@ -115,7 +114,7 @@ result against the goal, and a task cannot complete without passing; a rejected
 result goes back through planning once, told what was missing.
 
 State is written to the task after every step, so `kill -9` mid-run loses
-nothing: `kai resume` continues from the last saved step instead of starting
+nothing: `alethic resume` continues from the last saved step instead of starting
 over.
 
 ## What it remembers
@@ -132,9 +131,9 @@ employee said about finding it - each finished task is distilled into a couple o
 sentences of fact before it is stored.
 
 ```bash
-uv run kai memory                     # what this workspace remembers
-uv run kai memory --search invoices   # and what it knows about one thing
-uv run kai memory --prune             # drop what has passed its time to live
+uv run alethic memory                     # what this workspace remembers
+uv run alethic memory --search invoices   # and what it knows about one thing
+uv run alethic memory --prune             # drop what has passed its time to live
 ```
 
 Four kinds of thing are kept, and they are kept differently. A working note
@@ -150,29 +149,29 @@ and every search in the platform goes through one method, so replacing the local
 full-text index with something else later is replacing one file. See
 [ADR 0009](docs/adr/0009-memory-is-reached-only-through-recall.md).
 
-Memory can be switched off entirely (`KAI_FLAGS__MEMORY=false`), and then the
+Memory can be switched off entirely (`ALETHIC_FLAGS__MEMORY=false`), and then the
 platform behaves exactly as it did before it had one.
 
 ## Tools, and the brake on them
 
-An employee gets the tools its declaration lists and nothing else - `kai tools`
+An employee gets the tools its declaration lists and nothing else - `alethic tools`
 prints the grants, so least privilege is something you can read rather than
-trust. The filesystem tools see one directory (`KAI_WORKSPACE_DIR`, by default
-`~/.kai-workforce/workspace`) and refuse any path that resolves outside it,
+trust. The filesystem tools see one directory (`ALETHIC_WORKSPACE_DIR`, by default
+`~/.alethic/workspace`) and refuse any path that resolves outside it,
 symlinks followed.
 
 An action at HIGH or CRITICAL risk waits for a person. Overwriting a file that
 exists is HIGH; creating a new one is not. Running generated code always is.
 With nobody at the terminal the answer is no, so an unattended run cannot
-consent by being silent - set `KAI_APPROVAL_MODE=allow` if that is what you
+consent by being silent - set `ALETHIC_APPROVAL_MODE=allow` if that is what you
 want on your own machine. See [ADR 0004](docs/adr/0004-approval-is-a-risk-level-not-a-list-of-actions.md).
 
 ```bash
-uv run kai approvals           # what is waiting on a decision
-uv run kai approve <id>        # or: kai reject <id> --comment "not that file"
+uv run alethic approvals           # what is waiting on a decision
+uv run alethic approve <id>        # or: alethic reject <id> --comment "not that file"
 ```
 
-Under `kai serve` the same question appears in the page and the run really is
+Under `alethic serve` the same question appears in the page and the run really is
 parked on it: nothing is written until you answer, and a question nobody answers
 times out to a no.
 
@@ -194,7 +193,7 @@ API  ->  integration  ->  browser  ->  Computer Use  ->  desktop
 ```
 
 That order is not advice in a prompt. Every tool declares which rung it is on,
-`kai tools` prints it, the choice is logged before the first step, and each call
+`alethic tools` prints it, the choice is logged before the first step, and each call
 is stored with the level it went through - so a run that clicked on a picture of
 a button can be asked why afterwards. See
 [ADR 0005](docs/adr/0005-the-interface-hierarchy-is-a-property-of-the-tool.md).
@@ -206,12 +205,12 @@ it by looking again, so the result reports what the screen showed rather than
 that the click was issued.
 
 ```bash
-uv run kai run-task --employee operator "Open file:///.../keypad.html and enter the code 4 7 2, then press OK."
-uv run kai stop --reason "wrong window"   # from any terminal, at any moment
-uv run kai stop --clear
+uv run alethic run-task --employee operator "Open file:///.../keypad.html and enter the code 4 7 2, then press OK."
+uv run alethic stop --reason "wrong window"   # from any terminal, at any moment
+uv run alethic stop --clear
 ```
 
-`kai stop` writes a file that every action on a screen reads before it happens,
+`alethic stop` writes a file that every action on a screen reads before it happens,
 so it works from a second terminal while the run has the screen, and a stop set
 while nothing is running still holds when the next one starts.
 
@@ -222,9 +221,9 @@ machine* is separate, off by default, and confined:
 
 ```bash
 uv sync --extra desktop
-export KAI_FLAGS__COMPUTER_USE=true
-export KAI_COMPUTER_ALLOWED_APPLICATIONS='["Preview"]'
-export KAI_COMPUTER_ALLOWED_REGION=1440x820+0+80
+export ALETHIC_FLAGS__COMPUTER_USE=true
+export ALETHIC_COMPUTER_ALLOWED_APPLICATIONS='["Preview"]'
+export ALETHIC_COMPUTER_ALLOWED_REGION=1440x820+0+80
 ```
 
 An empty application list means the desktop is off limits entirely - acting on
@@ -251,8 +250,8 @@ validated against:
 
 ```bash
 ollama serve && ollama pull gpt-oss:20b
-export KAI_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
-uv run kai ask "Which city is the capital of Germany?"
+export ALETHIC_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
+uv run alethic ask "Which city is the capital of Germany?"
 ```
 
 That is the same code path - router, adapter, metering, spend log - pointed at a
@@ -269,7 +268,7 @@ role: Translator
 goals:
   - text: Say what the original says, not what it would have said.
 allowed_tools: [fs.read, fs.write]   # may it?  least privilege
-capabilities: [FILE_ACCESS]          # can it?  what KAI searches by
+capabilities: [FILE_ACCESS]          # can it?  what Alethic searches by
 model_profile:
   capabilities: [TEXT_REASONING, LONG_CONTEXT]
 limits:
@@ -283,8 +282,8 @@ work it can be given. Leave a capability out and that work never arrives; claim
 one with no tool behind it and the work arrives and cannot be started.
 
 ```bash
-uv run kai employees            # both lists, plus what disagrees with this machine
-uv run kai employees --strict   # and exit non-zero if anything does
+uv run alethic employees            # both lists, plus what disagrees with this machine
+uv run alethic employees --strict   # and exit non-zero if anything does
 ```
 
 A declaration is checked when it loads - an unknown field, a temperature of 20,
@@ -293,7 +292,7 @@ that quietly has no tools.
 
 An optional `prompts/system.md` next to it gives the employee its own voice.
 All employees share one runtime; a second runtime would mean the difference
-between two employees had stopped being declarative. KAI finds it on the next
+between two employees had stopped being declarative. Alethic finds it on the next
 run - nothing in the manager names an employee, and a test proves it by reading
 this directory.
 
@@ -306,8 +305,8 @@ Two catalogs ship. The default reaches models through OpenRouter - one key for
 many vendors. `models.anthropic.toml` talks to Anthropic directly:
 
 ```bash
-export KAI_MODEL_CATALOG_PATH=infrastructure/llm/models.anthropic.toml
-# KAI_LLM_API_KEY=sk-ant-... in .env
+export ALETHIC_MODEL_CATALOG_PATH=infrastructure/llm/models.anthropic.toml
+# ALETHIC_LLM_API_KEY=sk-ant-... in .env
 ```
 
 A caller asks for what the work *needs* - reasoning, tool calling, a long
@@ -345,4 +344,4 @@ one is not. Nothing in the suite ever needs a key or a paid call.
 
 The codebase is English-only - identifiers, comments, logs, schema and docs. Task
 goals, memory contents and report text are runtime data and may be in any
-language; the language agents answer in is the `KAI_RESPONSE_LANGUAGE` setting.
+language; the language agents answer in is the `ALETHIC_RESPONSE_LANGUAGE` setting.
