@@ -35,7 +35,15 @@ def test_migration_creates_the_declared_tables(tmp_path: Path) -> None:
     command.upgrade(_alembic_config(f"sqlite+aiosqlite:///{database}"), "head")
 
     inspector = inspect(create_engine(f"sqlite:///{database}"))
-    tables = set(inspector.get_table_names()) - {"alembic_version"}
+    # The FTS5 index over `memory_items` and the shadow tables SQLite creates
+    # for it are declared as DDL rather than as metadata - a virtual table has
+    # no columns to compare - so they are excluded here and checked by
+    # exercising a search instead (tests/integration/test_memory_repository.py).
+    tables = {
+        name
+        for name in inspector.get_table_names()
+        if name != "alembic_version" and not name.startswith("memory_items_fts")
+    }
     assert tables == set(Base.metadata.tables)
 
     for name, table in Base.metadata.tables.items():

@@ -94,3 +94,14 @@ name = "KAI knows the workforce contracts only, never infrastructure or a concre
 type = "forbidden"
 source_modules = ["application.kai"]
 forbidden_modules = ["infrastructure", "app", "employees"]
+
+# §9.10. The layering contract above already forbids this; it is named on its own
+# because the rule it protects is specific: FTS5 is the one SQLite-specific thing
+# in the schema, and a search written into `application/` would make replacing it
+# a change to half the codebase rather than to one adapter. The companion test is
+# tests/unit/test_memory_access_rule.py, which checks the strings as well.
+[[tool.importlinter.contracts]]
+name = "Memory is reached through its contract, never through the adapter"
+type = "forbidden"
+source_modules = ["application", "domain"]
+forbidden_modules = ["infrastructure.memory", "infrastructure.persistence"]

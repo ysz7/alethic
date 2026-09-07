@@ -34,6 +34,10 @@ class RuntimeSettings(Protocol):
     computer_allowed_region: str | None
     computer_max_actions: int
 
+    # --- Memory ---------------------------------------------------------------
+    memory_recall_limit: int
+    memory_consolidation_threshold: int
+
     @property
     def resolved_database_url(self) -> str: ...
 
@@ -51,6 +55,9 @@ class RuntimeSettings(Protocol):
 
     @property
     def computer_use_enabled(self) -> bool: ...
+
+    @property
+    def memory_enabled(self) -> bool: ...
 
     @property
     def stop_file_path(self) -> Path: ...

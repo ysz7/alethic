@@ -19,6 +19,12 @@ rejection usually means the criteria cannot be met by this workforce, and a
 third plan spends another budget finding that out again. What is left is
 escalated to the user, with what was tried (§7.11).
 
+**Remembering.** What KAI reads out of a request - how the user wants things
+done here - outlives the request, and what a workspace has already learned is
+passed down to the tasks it delegates rather than kept for itself. Memory is
+optional and reached through a contract, so a manager without one plans exactly
+as it did before (§9.4).
+
 What this class does *not* do is as deliberate:
 
 * it never names an employee - candidates come from `EmployeeRegistry`;
@@ -40,6 +46,7 @@ from application.kai.planner import ObjectivePlanner
 from application.kai.supervisor import Recovery, Supervision, Supervisor
 from application.kai.synthesis import Synthesizer, describe
 from application.kai.verification import ObjectiveVerifier
+from application.memory.workspace import WorkspaceMemory
 from domain.employees.protocols import EmployeeRegistry
 from domain.errors import DelegationError
 from domain.tasks.progress import NullProgress, ProgressEvent, ProgressKind, ProgressSink
@@ -77,6 +84,7 @@ class KaiManager:
         plans: PlanRepository,
         progress: ProgressSink | None = None,
         max_revisions: int = MAX_PLAN_REVISIONS,
+        memory: WorkspaceMemory | None = None,
     ) -> None:
         self._intent = intent
         self._planner = planner
@@ -88,6 +96,7 @@ class KaiManager:
         self._plans = plans
         self._progress = progress or NullProgress()
         self._max_revisions = max_revisions
+        self._memory = memory
 
     # --- The whole of it ------------------------------------------------------
 
@@ -111,15 +120,35 @@ class KaiManager:
         workforce = self._registry.list(objective.workspace_id)
         await self._announce(objective, "Working out what you are asking for.")
 
-        intent = await self._intent.read(objective.text, workforce)
+        # Recalled before the request is read, not after it is planned. A
+        # request written against the last one - "do the same for the returns
+        # folder" - cannot be understood without what the last one was, and
+        # every stage below reads better for having it.
+        remembered = await self._remembered(objective)
+
+        intent = await self._intent.read(objective.text, workforce, remembered=remembered)
         objective = self._understood(objective, intent)
         await self._objectives.save(objective)
+        if self._memory is not None and intent.preferences:
+            # A preference stated in passing - "always in Markdown", "never
+            # touch the originals" - is stated once and expected to hold. It is
+            # kept here, where it was read, rather than at the end, where a
+            # failed objective would take it down with it.
+            #
+            # `intent.constraints` is deliberately not kept: those describe this
+            # request, and remembering them as standing preferences is what sent
+            # the second validation run back to the first one's folder.
+            await self._memory.remember_preferences(
+                intent.preferences,
+                source=objective.text,
+                workspace_id=objective.workspace_id,
+            )
 
         if intent.is_answerable_directly:
             return await self._answer_directly(objective, intent)
 
         try:
-            return await self._work(objective, intent)
+            return await self._work(objective, intent, remembered)
         except DelegationError as error:
             # Nothing to delegate to is the user's to fix, not something to
             # replan around: every plan would end in the same place.
@@ -137,6 +166,12 @@ class KaiManager:
     ) -> ObjectiveResult:
         """No plan, no employee, no tools (§7.5)."""
         log.info("kai.answered_directly", objective_id=str(objective.id))
+        if self._memory is not None:
+            # Nothing else records this: no task ran, so without it the only
+            # trace that the question was asked is the objective row.
+            await self._memory.remember_answer(
+                objective.text, intent.answer, workspace_id=objective.workspace_id
+            )
         return await self._finish(
             objective,
             ObjectiveStatus.DONE,
@@ -144,7 +179,9 @@ class KaiManager:
             output={"delegated": False, "restatement": intent.restatement},
         )
 
-    async def _work(self, objective: Objective, intent: Intent) -> ObjectiveResult:
+    async def _work(
+        self, objective: Objective, intent: Intent, remembered: tuple[str, ...] = ()
+    ) -> ObjectiveResult:
         workforce = self._registry.list(objective.workspace_id)
         objective = objective.to(ObjectiveStatus.PLANNING)
         await self._objectives.save(objective)
@@ -161,6 +198,7 @@ class KaiManager:
                 restatement=intent.restatement,
                 revision=revision,
                 feedback=feedback,
+                remembered=remembered,
             )
             await self._plans.save(plan)
             await self._announce(
@@ -183,7 +221,9 @@ class KaiManager:
 
             supervision = await self._supervisor.run(
                 plan,
-                context=SharedContext(constraints=tuple(intent.acceptance_criteria)),
+                context=SharedContext(
+                    facts=remembered, constraints=tuple(intent.acceptance_criteria)
+                ),
                 objective_id=objective.id,
             )
             cost += supervision.cost_usd
@@ -301,6 +341,20 @@ class KaiManager:
         return result
 
     # --- Internals ------------------------------------------------------------
+
+    async def _remembered(self, objective: Objective) -> tuple[str, ...]:
+        """What this workspace knows that bears on this request.
+
+        Read once per objective and used everywhere: by the reading of the
+        request, by the decomposition, and by every task in the plan. Recalling
+        it per stage would cost the same query three times and could answer it
+        three different ways.
+        """
+        if self._memory is None:
+            return ()
+        return await self._memory.context_for(
+            objective.text, workspace_id=objective.workspace_id
+        )
 
     @staticmethod
     def _understood(objective: Objective, intent: Intent) -> Objective:

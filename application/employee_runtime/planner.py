@@ -42,6 +42,7 @@ class Planner:
         definition: EmployeeDefinition,
         tools: list[ToolSpec] | None = None,
         context: SharedContext | None = None,
+        recalled: tuple[str, ...] = (),
     ) -> TaskPlan:
         prompt = render(
             "planner",
@@ -49,7 +50,7 @@ class Planner:
             role_description=definition.role.description,
             goals="\n".join(f"- {goal.text}" for goal in definition.goals) or "- none stated",
             goal=task.goal,
-            context=_context_block(context),
+            context=_context_block(context, recalled),
             max_steps=self._max_steps,
             tools=", ".join(spec.name for spec in tools or ()) or "none",
         )
@@ -94,12 +95,17 @@ class Planner:
         )
 
 
-def _context_block(context: SharedContext | None) -> str:
-    if context is None:
-        return ""
+def _context_block(context: SharedContext | None, recalled: tuple[str, ...] = ()) -> str:
     parts: list[str] = []
-    if context.facts:
+    if context is not None and context.facts:
         parts.append("# What you were told\n" + "\n".join(f"- {f}" for f in context.facts))
-    if context.constraints:
+    if context is not None and context.constraints:
         parts.append("# Constraints\n" + "\n".join(f"- {c}" for c in context.constraints))
+    # Last, and labelled as recollection rather than as fact: what was passed
+    # down was written for this task, and what is remembered was not.
+    if recalled:
+        parts.append(
+            "# What you remember from before (may be out of date)\n"
+            + "\n".join(f"- {line}" for line in recalled)
+        )
     return "\n\n".join(parts)

@@ -17,5 +17,6 @@ class FeatureFlags(BaseModel):
     approvals: bool = True  # Phase 4
     computer_use: bool = False  # Phase 5
     kai_manager: bool = False  # Phase 7
+    memory: bool = True  # Phase 9
     workflows: bool = False  # Phase 7
     scheduler: bool = False  # Phase 12

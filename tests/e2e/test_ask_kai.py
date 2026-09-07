@@ -117,6 +117,12 @@ def verdict(passed: bool, *missing: str) -> str:
     return json.dumps({"passed": passed, "reason": "checked", "missing": list(missing)})
 
 
+#: What the distiller is told to write when a task reaches a terminal state.
+#: It is part of the story rather than an interception, because it is a real
+#: model call in a real run: what an employee said is not what gets remembered.
+REMEMBERED = "notes.txt holds the answer 41."
+
+
 # --- The interface ------------------------------------------------------------
 
 
@@ -134,6 +140,7 @@ def test_a_goal_stated_in_one_sentence_is_carried_to_a_result(tmp_path: Path) ->
         steps("Read the file"),         # the employee plans its own steps
         "The notes say the answer is 41.",
         verdict(True),                  # the employee's own verifier
+        REMEMBERED,                     # what the run leaves in memory
         verdict(True),                  # KAI's check against the objective
         "The notes say the answer is 41.",  # the answer the user reads
     )
@@ -196,6 +203,7 @@ def test_the_trace_shows_the_manager_and_its_employee_as_one_story(tmp_path: Pat
         tool_reply(ToolCallRequest(id="c1", name="fs.read", arguments={"path": "notes.txt"})),
         "The notes say 41.",
         verdict(True),
+        REMEMBERED,
         verdict(True),
         "The notes say 41.",
     )
@@ -237,7 +245,13 @@ def test_an_unmet_objective_is_escalated_with_what_is_missing(tmp_path: Path) ->
     (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
 
     # Both attempts produce work; neither satisfies the objective.
-    attempt = [chooses("researcher"), steps("Look"), "I found eleven.", verdict(True)]
+    attempt = [
+        chooses("researcher"),
+        steps("Look"),
+        "I found eleven.",
+        verdict(True),
+        REMEMBERED,
+    ]
     llm = script(
         intent(),
         plan("Find twenty things"),
@@ -284,6 +298,7 @@ def test_ask_kai_reports_the_answer_and_who_produced_it(tmp_path, monkeypatch) -
             steps("Say it"),
             "Said.",
             verdict(True),
+            REMEMBERED,
             verdict(True),
             "Said, and here it is.",
         )

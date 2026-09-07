@@ -371,6 +371,7 @@ class Executor:
         system_prompt: str,
         feedback: tuple[str, ...] = (),
         interfaces: tuple[InterfaceLevel, ...] = (),
+        recalled: tuple[str, ...] = (),
     ) -> tuple[Message, ...]:
         """The transcript a fresh run starts from."""
         system = system_prompt or f"You are a {definition.role.title}."
@@ -391,6 +392,16 @@ class Executor:
                 f"{step.index + 1}. {step.description}"
                 + (f" (expected: {step.expected_outcome})" if step.expected_outcome else "")
                 for step in plan.steps
+            )
+        if recalled:
+            # Stated as recollection, not as fact. A model told "the report is
+            # in reports/q3.md" acts on it; told that it noted this last time,
+            # it checks - and memory, unlike an assignment, can be stale.
+            instruction += (
+                "\n\n# What you remember from earlier work\n\n"
+                "These may be out of date. Use them as leads, and confirm "
+                "anything you rely on:\n"
+                + "\n".join(f"- {line}" for line in recalled)
             )
         if feedback:
             instruction += (

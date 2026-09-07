@@ -22,6 +22,11 @@ from application.kai.planner import ObjectivePlanner
 from application.kai.supervisor import Supervisor
 from application.kai.synthesis import Synthesizer
 from application.kai.verification import ObjectiveVerifier
+from application.memory.assembler import ContextAssembler
+from application.memory.consolidation import Consolidator
+from application.memory.distiller import OutcomeDistiller
+from application.memory.recorder import MemoryRecorder
+from application.memory.workspace import WorkspaceMemory
 from application.task_runner import TaskRunner
 from domain.employees.definition import EmployeeDefinition
 from infrastructure.container import Container
@@ -42,12 +47,40 @@ def build_container(settings: Settings | None = None, *, in_memory: bool = False
     return container
 
 
+def build_memory(
+    container: Container,
+) -> tuple[ContextAssembler | None, MemoryRecorder | None]:
+    """The two halves of memory, or neither.
+
+    Neither when memory is switched off, and that is the whole of the difference
+    it makes: the runtime takes both as optional, so a machine with memory off
+    runs the Phase 8 loop rather than a degraded Phase 9 one.
+    """
+    memory = container.memory
+    maintenance = container.memory_maintenance
+    if memory is None or maintenance is None:
+        return None, None
+    settings = container.settings
+    recorder = MemoryRecorder(
+        memory,
+        distiller=OutcomeDistiller(container.llm_for(*OutcomeDistiller.routing())),
+        consolidator=Consolidator(
+            container.llm_for(*Consolidator.routing()),
+            memory,
+            maintenance,
+            threshold=settings.memory_consolidation_threshold,
+        ),
+    )
+    return ContextAssembler(memory, limit=settings.memory_recall_limit), recorder
+
+
 async def build_runtime(container: Container, definition: EmployeeDefinition) -> EmployeeRuntime:
     """Assemble the one runtime for a given employee declaration.
 
     Every employee gets the same three stages and the same loop. What differs is
     the declaration passed in: role, goals, tools, model profile, limits.
     """
+    context, recorder = build_memory(container)
     return EmployeeRuntime(
         definition,
         RuntimeDependencies(
@@ -67,6 +100,8 @@ async def build_runtime(container: Container, definition: EmployeeDefinition) ->
             limits=definition.limits,
             system_prompt=definition.system_prompt,
             progress=container.progress,
+            context=context,
+            recorder=recorder,
         ),
     )
 
@@ -81,6 +116,7 @@ def build_manager(container: Container) -> KaiManager:
     and the work is done through `TaskExecution`, which is the task runner.
     """
     registry = container.employee_registry
+    _, recorder = build_memory(container)
     return KaiManager(
         intent=IntentReader(container.llm_for(*IntentReader.routing())),
         planner=ObjectivePlanner(container.llm_for(*ObjectivePlanner.routing())),
@@ -97,6 +133,11 @@ def build_manager(container: Container) -> KaiManager:
         objectives=container.objective_repository,
         plans=container.plan_repository,
         progress=container.progress,
+        memory=(
+            WorkspaceMemory(container.memory, recorder)
+            if container.memory is not None and recorder is not None
+            else None
+        ),
     )
 
 

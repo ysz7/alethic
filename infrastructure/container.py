@@ -26,6 +26,7 @@ from domain.employees.validation import Issue, check_all
 from domain.llm.models import RoutingHints, TaskKind
 from domain.llm.protocols import LLM, ModelRouter
 from domain.llm.telemetry import LLMCallLog
+from domain.memory.protocols import Memory, MemoryMaintenance
 from domain.search.protocols import SearchEngine
 from domain.secrets.protocols import SecretResolver
 from domain.tasks.cancellation import Cancellations
@@ -338,6 +339,32 @@ class Container:
         from infrastructure.persistence.tool_call_repository import SqliteToolCallLog
 
         return SqliteToolCallLog(self.session_factory)
+
+    # --- Memory -----------------------------------------------------------------
+
+    @cached_property
+    def memory(self) -> Memory | None:
+        """Where what was learned is kept. None means nothing is remembered.
+
+        One object serves both memory contracts. They are separate so that a
+        caller of `recall` is not thereby handed the ability to delete; they are
+        the same adapter because reading and forgetting happen over the same
+        rows, and a second connection to the same file buys nothing.
+        """
+        if not self.settings.memory_enabled:
+            return None
+        if self._in_memory:
+            from infrastructure.memory.in_memory import InMemoryMemory
+
+            return InMemoryMemory()
+        from infrastructure.memory.sqlite import SqliteMemory
+
+        return SqliteMemory(self.session_factory)
+
+    @property
+    def memory_maintenance(self) -> MemoryMaintenance | None:
+        """The same store, seen through the contract that may forget."""
+        return self.memory  # type: ignore[return-value]
 
     # --- Approvals --------------------------------------------------------------
 

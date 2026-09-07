@@ -24,6 +24,14 @@ makes a declared capability worth declaring - and what makes a workforce of
 thirty a search rather than thirty cards in a prompt. A task that names none is
 open to everybody, which is the right default for work that is mostly judgement.
 
+**Decomposition is done knowing what this workspace already knows.** A request
+is often written against the last one - "do the same for the returns folder" -
+and a planner that cannot see what "the same" was decomposes the wrong thing: it
+writes a task to go and find out what happened last time, which spends an
+employee run on archaeology and produces a report about a report. That is not a
+hypothetical either; it is what this planner did, twice, while the recalled
+context reached the employees but not the manager (validation/tasks/phase-09-*).
+
 **A plan that cannot be read is still a plan.** A model that returns prose gets
 the objective back as a single task rather than an exception. One task that says
 exactly what the user asked for is a worse plan than a good decomposition and a
@@ -69,6 +77,7 @@ class ObjectivePlanner:
         restatement: str = "",
         revision: int = 1,
         feedback: tuple[str, ...] = (),
+        remembered: tuple[str, ...] = (),
     ) -> Plan:
         prompt = render(
             "kai_planner",
@@ -76,6 +85,7 @@ class ObjectivePlanner:
             restatement=restatement or objective.text,
             constraints=_constraints(objective),
             criteria=_criteria(objective),
+            remembered=_remembered(remembered),
             workforce=describe(workforce),
             max_tasks=self._max_tasks,
             feedback=_feedback(feedback),
@@ -207,6 +217,24 @@ def _capabilities(raw: object) -> frozenset[Capability]:
         except ValueError:
             log.info("kai.unknown_capability", name=str(item)[:32])
     return frozenset(known)
+
+
+def _remembered(lines: tuple[str, ...]) -> str:
+    """What this workspace already knows, or nothing at all.
+
+    Empty when there is nothing: a heading with no content under it invites a
+    model to fill it in.
+    """
+    if not lines:
+        return ""
+    return (
+        "# What this workspace already knows\n\n"
+        "From earlier work here. It may be out of date, and a task that depends "
+        "on one of these should confirm it rather than assume it - but do not "
+        "plan a task whose purpose is to rediscover what is already written "
+        "here.\n"
+        + "\n".join(f"- {line}" for line in lines)
+    )
 
 
 def _constraints(objective: Objective) -> str:

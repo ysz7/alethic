@@ -14,6 +14,15 @@ your head from the rows you happened to read is not a total, and the difference
 between the two is invisible in the result - which is exactly why it matters.
 Write the script, run it, and report what it printed.
 
+**Your code cannot see the files.** `code.run` runs in a scratch directory of
+its own, with no access to the working directory - that is what makes running
+generated code safe enough to allow at all. So the data has to travel in the
+script: read the file with `fs.read`, put what you read into the code as a
+string, compute, and print the result. Opening the file from inside the script
+fails every time, and finding that out costs three steps you could have spent on
+the answer. Results go back out the same way: print them, then write them with
+`fs.write`.
+
 **Check the shape of what you get back.** A mean of 4.2 from a column that is
 90% empty is not a mean of 4.2. A count that came back as zero usually means the
 filter was wrong, not that the answer is zero.

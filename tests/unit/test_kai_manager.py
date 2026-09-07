@@ -35,6 +35,7 @@ def intent(**overrides) -> str:
         {
             "restatement": "do the thing",
             "constraints": {},
+            "preferences": [],
             "acceptance_criteria": ["the thing is done"],
             "needs_work": True,
             "answer": "",
@@ -69,13 +70,16 @@ def build(
     objectives: InMemoryObjectiveRepository | None = None,
     plans: InMemoryPlanRepository | None = None,
     max_revisions: int = 2,
+    memory=None,
+    #: Supply one to read back what each stage was actually told.
+    llm: FakeLLM | None = None,
 ) -> tuple[KaiManager, RecordingExecution, InMemoryObjectiveRepository, InMemoryPlanRepository]:
     """One model for every stage, answering from a single script in order.
 
     Sharing the client is what makes the script readable as a story: read it,
     plan it, choose who, check it, write the answer.
     """
-    llm = FakeLLM([reply(item) if isinstance(item, str) else item for item in script])
+    llm = llm or FakeLLM([reply(item) if isinstance(item, str) else item for item in script])
     # Delegation gets its own client when more than one employee is declared, so
     # that "who should do this" does not have to be interleaved into the story
     # above at whatever point the supervisor happens to ask.
@@ -99,6 +103,7 @@ def build(
         plans=plan_store,
         progress=progress or InMemoryProgressBroadcaster(),
         max_revisions=max_revisions,
+        memory=memory,
     )
     return manager, runs, objective_store, plan_store
 

@@ -7,8 +7,11 @@ __pycache__/
 *.db-shm
 .pytest_cache/
 .ruff_cache/
+.import_linter_cache/
 dist/
 build/
 *.egg-info/
 dev-assets/
 CLAUDE.md
+~
+development/

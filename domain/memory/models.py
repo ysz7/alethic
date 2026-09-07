@@ -1,4 +1,4 @@
-"""Memory values. The backend lands in Phase 9; the vocabulary is fixed now."""
+"""Memory values: what is kept, whose it is, and what may be asked for."""
 
 from __future__ import annotations
 
@@ -78,3 +78,7 @@ class MemoryQuery:
     plan_id: UUID | None = None
     task_id: UUID | None = None
     limit: int = 20
+    #: The moment the query is asked as of. Decay and expiry are read from it,
+    #: so a test can age memory without waiting for it and a long run reads its
+    #: own memory consistently rather than against a clock that moved mid-run.
+    as_of: datetime | None = None

@@ -27,8 +27,16 @@ class Intent:
     #: What KAI understood, in its own words. Shown to the user, never worked
     #: from in place of the original.
     restatement: str = ""
-    #: Limits the user stated: a count, a format, a place, a deadline.
+    #: Limits the user stated for *this* request: a count, a format, a place, a
+    #: deadline. They describe the work in hand and expire with it.
     constraints: dict[str, Any] = field(default_factory=dict)
+    #: Standing preferences: how the user wants work done here from now on, in
+    #: their own words. Kept apart from `constraints` because the two look alike
+    #: and behave nothing alike - "in the sales folder" is where this job is,
+    #: "always in Markdown" is how every job should end. Remembering the first
+    #: as though it were the second points the next request at the wrong folder,
+    #: which is exactly what it did the first time they were one field.
+    preferences: tuple[str, ...] = ()
     #: What would have to be true for the user to call this done.
     acceptance_criteria: tuple[str, ...] = ()
     #: Whether this needs work doing, as opposed to an answer giving.

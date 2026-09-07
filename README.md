@@ -12,7 +12,8 @@ and give KAI a task.
 
 ## Status
 
-**Phase 8 - First Specialized Employees.** Four of them, not thirty:
+**Phase 9 - Memory.** The platform now keeps what it learns. Four employees, not
+thirty:
 `researcher` finds out what is true, `organizer` puts a folder in order,
 `operator` works interfaces that have no API, and `analyst` computes answers
 from data on this machine. Each is a directory under `employees/` with no Python
@@ -29,7 +30,8 @@ search the web, open a page and read it, run a short program under limits - and,
 when none of that reaches the thing that has to be done, operate it on the
 screen. Anything irreversible - overwriting a file, running generated code,
 touching your desktop - waits for you to say yes, in the page or at the prompt.
-Phase 8 adds specialised employees.
+And the second time you ask for something like the first, the work starts from
+what the first one found out.
 
 See `dev-assets/implementation-plan.md` for the full roadmap.
 
@@ -115,6 +117,41 @@ result goes back through planning once, told what was missing.
 State is written to the task after every step, so `kill -9` mid-run loses
 nothing: `kai resume` continues from the last saved step instead of starting
 over.
+
+## What it remembers
+
+Ask for something twice and the second run does not start from nothing. What a
+task learned, what a plan produced and what you said you wanted are recalled into
+the context the next run plans from - as recollection, not as fact, so a memory
+that has gone stale is checked rather than acted on.
+
+That is what makes a request like *"do the same for the returns folder"* a
+request at all: there is no conversation to look back at, and nothing but memory
+records what "the same" was. What is kept is what was found out, not what the
+employee said about finding it - each finished task is distilled into a couple of
+sentences of fact before it is stored.
+
+```bash
+uv run kai memory                     # what this workspace remembers
+uv run kai memory --search invoices   # and what it knows about one thing
+uv run kai memory --prune             # drop what has passed its time to live
+```
+
+Four kinds of thing are kept, and they are kept differently. A working note
+about a running task expires in hours. What became of a task is kept for months
+and fades in the ranking as it ages. What you said you want - "always Markdown",
+"never touch the originals" - does not expire at all, because a preference is
+superseded by another preference, not by time.
+
+Who may read what is not a filter a caller remembers to pass. An employee sees
+this workspace's memory, the memory of the plan it is working inside, and its own
+private notes - never another employee's. That is enforced where the rows are,
+and every search in the platform goes through one method, so replacing the local
+full-text index with something else later is replacing one file. See
+[ADR 0009](docs/adr/0009-memory-is-reached-only-through-recall.md).
+
+Memory can be switched off entirely (`KAI_FLAGS__MEMORY=false`), and then the
+platform behaves exactly as it did before it had one.
 
 ## Tools, and the brake on them
 

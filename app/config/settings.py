@@ -76,6 +76,14 @@ class Settings(BaseSettings):
     #: one step of the loop can ask for several clicks.
     computer_max_actions: int = 200
 
+    # --- Memory --------------------------------------------------------------
+    #: How many recollections a run is given. Context is the scarcest thing in a
+    #: run, and the seventh-best memory costs the same tokens as the best one.
+    memory_recall_limit: int = 6
+    #: How many episodes accumulate before the oldest are folded into one. Below
+    #: this, recall's own ranking filters better than a summary would.
+    memory_consolidation_threshold: int = 12
+
     # --- Local interface -----------------------------------------------------
     #: The loopback address, and not configurable to anything else by accident.
     #: This interface starts tasks and approves irreversible actions; it has no
@@ -124,6 +132,16 @@ class Settings(BaseSettings):
         tools at a different level of the hierarchy.
         """
         return self.flags.computer_use
+
+    @property
+    def memory_enabled(self) -> bool:
+        """Off, employees start every task knowing only what they were told.
+
+        Which is Phase 8's behaviour exactly - nothing else changes, because
+        nothing above the container knows whether there is a memory behind the
+        contract.
+        """
+        return self.flags.memory
 
     @property
     def stop_file_path(self) -> Path:

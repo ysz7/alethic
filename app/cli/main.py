@@ -70,6 +70,10 @@ def config() -> None:
         f"computer use:  {'on' if settings.computer_use_enabled else 'off'} "
         f"(desktop; the browser surface follows the browser tools)"
     )
+    typer.echo(
+        f"memory:        {'on' if settings.memory_enabled else 'off'}"
+        f"  (recall {settings.memory_recall_limit})"
+    )
     typer.echo(f"stop file:     {settings.stop_file_path}")
     typer.echo(f"llm_base_url:  {settings.llm_base_url}")
     typer.echo(f"llm_api_key:   {'set' if settings.llm_api_key else 'not set'}")
@@ -239,6 +243,59 @@ def objectives() -> None:
                 )
                 typer.secho(f"{item.status.value:<10}", fg=colour, nl=False)
                 typer.echo(f"{item.id}  {item.text[:70]}")
+        except StorageNotInitializedError as error:
+            typer.secho(f"{error} Run: uv run alembic upgrade head", fg="red", err=True)
+            raise typer.Exit(code=1) from error
+        finally:
+            await container.aclose()
+
+    asyncio.run(_run())
+
+
+@app.command()
+def memory(
+    search: str = typer.Option("", "--search", "-s", help="Words to look for."),
+    limit: int = typer.Option(20, "--limit", "-n", help="How many to show."),
+    prune: bool = typer.Option(
+        False, "--prune", help="Drop what has passed its time to live, and show what is left."
+    ),
+) -> None:
+    """What this workspace remembers.
+
+    Read through the same contract everything else reads memory through: this
+    command has no more access to the store than a running task does, which is
+    why it shows workspace memory and not an employee's private notes.
+    """
+
+    async def _run() -> None:
+        from domain.memory.models import MemoryQuery, MemoryScope
+
+        container = build_container()
+        try:
+            store = container.memory
+            if store is None:
+                typer.echo("Memory is switched off (KAI_FLAGS__MEMORY=false).")
+                return
+            if prune:
+                maintenance = container.memory_maintenance
+                dropped = await maintenance.prune() if maintenance else 0
+                typer.echo(f"Forgot {dropped} expired item(s).")
+            items = await store.recall(
+                MemoryQuery(
+                    text=search,
+                    scopes=frozenset({MemoryScope.WORKSPACE}),
+                    limit=limit,
+                )
+            )
+            if not items:
+                typer.echo("Nothing remembered yet." if not search else "Nothing matched.")
+                return
+            for item in items:
+                typer.secho(f"{item.kind.value:<11}", fg="cyan", nl=False)
+                typer.echo(
+                    f"{item.created_at:%Y-%m-%d %H:%M}  "
+                    f"{' '.join(item.content.split())[:90]}"
+                )
         except StorageNotInitializedError as error:
             typer.secho(f"{error} Run: uv run alembic upgrade head", fg="red", err=True)
             raise typer.Exit(code=1) from error

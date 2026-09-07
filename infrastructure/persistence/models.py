@@ -11,25 +11,32 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import (
+    DDL,
     CheckConstraint,
+    Float,
     ForeignKey,
     Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    event,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import JSON
 
 from domain.approvals.models import ApprovalState
+from domain.memory.models import MemoryKind, MemoryScope
 from domain.tasks.task import TaskStatus
 from domain.workforce.protocols import ObjectiveStatus, PlanStatus
+from infrastructure.persistence import memory_fts
 
 TASK_STATUS_VALUES = tuple(status.value for status in TaskStatus)
 APPROVAL_STATE_VALUES = tuple(state.value for state in ApprovalState)
 OBJECTIVE_STATUS_VALUES = tuple(status.value for status in ObjectiveStatus)
 PLAN_STATUS_VALUES = tuple(status.value for status in PlanStatus)
+MEMORY_SCOPE_VALUES = tuple(scope.value for scope in MemoryScope)
+MEMORY_KIND_VALUES = tuple(kind.value for kind in MemoryKind)
 
 
 class Base(DeclarativeBase):
@@ -315,3 +322,60 @@ class PlanTaskDependencyRow(Base):
     )
     task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     depends_on: Mapped[str] = mapped_column(String(36), primary_key=True)
+
+
+class MemoryItemRow(Base):
+    """One thing worth remembering, and who is allowed to remember it.
+
+    `scope` is an access boundary rather than a label, so it is stored beside
+    the owner it names: an EMPLOYEE_PRIVATE row without an `employee_id` would
+    be private to nobody. The text search over `content` is an FTS5 virtual
+    table kept in step by triggers - see `memory_fts` - and it is reached only
+    through the memory adapter, never from a caller.
+
+    `employee_id` and `task_id` carry no foreign key. Memory is written *about*
+    a task and outlives it: an employee taken out of `employees/` and a task
+    deleted from history would otherwise take with them the record of what was
+    learned from them, which is the one thing here worth keeping.
+    """
+
+    __tablename__ = "memory_items"
+    __table_args__ = (
+        CheckConstraint(
+            "scope IN ('" + "','".join(MEMORY_SCOPE_VALUES) + "')",
+            name="ck_memory_items_scope",
+        ),
+        CheckConstraint(
+            "kind IN ('" + "','".join(MEMORY_KIND_VALUES) + "')",
+            name="ck_memory_items_kind",
+        ),
+        Index("ix_memory_items_scope", "workspace_id", "scope", "kind", "created_at"),
+        Index("ix_memory_items_employee", "employee_id", "kind", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    scope: Mapped[str] = mapped_column(String(16), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    employee_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    plan_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    task_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # `metadata` is taken on a declarative class, so the attribute is renamed
+    # and the column keeps the name the schema declares.
+    meta: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False, default=dict)
+    importance: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+    expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+# The search index is part of the schema, not of the adapter: a database built
+# by `create_all` - which is what the test suite does - has to be searchable the
+# same way the migrated one is, or the tests exercise a different backend than
+# the product ships.
+for _statement in memory_fts.CREATE:
+    event.listen(
+        Base.metadata,
+        "after_create",
+        DDL(_statement).execute_if(dialect="sqlite"),
+    )

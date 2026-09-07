@@ -38,8 +38,22 @@ class IntentReader:
     def __init__(self, llm: LLM) -> None:
         self._llm = llm
 
-    async def read(self, request: str, workforce: list[EmployeeDefinition]) -> Intent:
-        prompt = render("kai_intent", request=request, workforce=describe(workforce))
+    async def read(
+        self,
+        request: str,
+        workforce: list[EmployeeDefinition],
+        *,
+        remembered: tuple[str, ...] = (),
+    ) -> Intent:
+        prompt = render(
+            "kai_intent",
+            request=request,
+            workforce=describe(workforce),
+            # A sentence like "do the same again" is not readable on its own.
+            # What this workspace already knows is what makes it a request
+            # rather than a fragment.
+            remembered=_remembered(remembered),
+        )
         response = await self._llm.generate(
             LLMRequest(
                 messages=(Message.user(prompt),),
@@ -64,6 +78,7 @@ class IntentReader:
         intent = Intent(
             restatement=str(parsed.get("restatement", "")).strip() or request,
             constraints=_as_mapping(parsed.get("constraints")),
+            preferences=_as_criteria(parsed.get("preferences")),
             acceptance_criteria=_as_criteria(parsed.get("acceptance_criteria")),
             needs_work=needs_work,
             answer="" if needs_work else answer,
@@ -73,6 +88,7 @@ class IntentReader:
             needs_work=intent.needs_work,
             criteria=len(intent.acceptance_criteria),
             constraints=sorted(intent.constraints),
+            preferences=len(intent.preferences),
         )
         return intent
 
@@ -88,6 +104,17 @@ class IntentReader:
             CapabilityRequirement(),
             RoutingHints(quality=0.8, cost_sensitivity=0.3),
         )
+
+
+def _remembered(lines: tuple[str, ...]) -> str:
+    if not lines:
+        return ""
+    return (
+        "# What this workspace already knows\n\n"
+        "From earlier work here, and possibly out of date. Use it to understand "
+        "what they mean, not to decide what they want.\n"
+        + "\n".join(f"- {line}" for line in lines)
+    )
 
 
 def _as_mapping(raw: object) -> dict[str, object]:

@@ -14,6 +14,7 @@ class StubSettings:
         self.log_level = "INFO"
         self.log_format = "json"
         self.ensured = False
+        self.memory_enabled = True
 
     @property
     def resolved_database_url(self) -> str:
@@ -76,3 +77,28 @@ def test_the_configured_model_timeout_reaches_the_provider(tmp_path: Path) -> No
     # model gets minutes where a hosted one gets two.
     default = ProviderFactory(catalog=catalog, api_key=None, base_url="")
     assert default._build(choice)._timeout == DEFAULT_TIMEOUT_SECONDS
+
+
+def test_memory_is_one_store_seen_through_two_contracts(tmp_path: Path) -> None:
+    """Reading and forgetting happen over the same rows, so they are one object.
+
+    The contracts are separate so that holding `recall` does not hand a caller
+    the ability to delete; the adapter is shared because a second connection to
+    the same file would buy nothing.
+    """
+    settings = StubSettings(tmp_path)
+    settings.memory_enabled = True
+    container = Container(settings, in_memory=True)
+
+    assert container.memory is container.memory_maintenance
+    assert container.memory is not None
+
+
+def test_memory_switched_off_is_no_memory_at_all(tmp_path: Path) -> None:
+    """Off, the runtime is the one it was before the phase - not a degraded one."""
+    settings = StubSettings(tmp_path)
+    settings.memory_enabled = False
+    container = Container(settings, in_memory=True)
+
+    assert container.memory is None
+    assert container.memory_maintenance is None
