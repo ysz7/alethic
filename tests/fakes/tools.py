@@ -6,6 +6,8 @@ from collections.abc import Callable
 from typing import Any
 
 from domain.computer.interfaces import InterfaceLevel
+from domain.policies.models import RiskLevel
+from domain.policies.risk import Effect, highest, risk_of
 from domain.tools.models import ToolResult, ToolSpec
 
 
@@ -21,12 +23,20 @@ class FakeTool:
         raises: Exception | None = None,
         description: str = "A tool that exists for the test.",
         interface_level: InterfaceLevel = InterfaceLevel.API,
+        effect: Effect = Effect.READ,
+        risk_level: RiskLevel = RiskLevel.LOW,
+        reversible: bool = True,
     ) -> None:
         self._spec = ToolSpec(
             name=name,
             description=description,
             json_schema={"type": "object", "properties": {}},
             interface_level=interface_level,
+            effect=effect,
+            # The same floor `ToolSpec.of` applies, so a fake cannot be made
+            # less risky than the real declaration of the same effect would be.
+            risk_level=highest(risk_level, risk_of(effect)),
+            reversible=reversible,
         )
         self._result = result or ToolResult.ok(value="ok")
         self._handler = handler

@@ -41,7 +41,13 @@ from domain.errors import PlanningError
 from domain.tasks.plan import TaskPlan
 from domain.tasks.progress import NullProgress, ProgressEvent, ProgressKind, ProgressSink
 from domain.tasks.repository import TaskRepository
-from domain.tasks.task import Execution, Task, TaskResult, TaskStatus
+from domain.tasks.task import (
+    Execution,
+    Task,
+    TaskResult,
+    TaskStatus,
+    can_transition,
+)
 from domain.tools.protocols import ToolRegistry
 from domain.workforce.assignment import TaskAssignment
 
@@ -227,8 +233,19 @@ class EmployeeRuntime:
                     await self._deps.recorder.note_step(current, definition, observation)
                 noted = len(transcript.observations)
 
+        async def waiting(status: TaskStatus) -> None:
+            # The task really does stop running when a person is asked, and
+            # `alethic tasks` should be able to say so. Persisted rather than
+            # kept in memory, because the question outlives the process that
+            # asked it: a run killed while parked comes back parked.
+            nonlocal current
+            if current.status is status or not can_transition(current.status, status):
+                return
+            current, event = current.transition_to(status)
+            await self._deps.tasks.save(current, event)
+
         outcome = await self._deps.executor.run(
-            task, definition, state.transcript, on_step=persist
+            task, definition, state.transcript, on_step=persist, on_status=waiting
         )
         state = replace(state, transcript=outcome.transcript, stage=STAGE_VERIFYING)
         result = TaskResult(

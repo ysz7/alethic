@@ -14,12 +14,14 @@ def definition(
     tools: frozenset[str] = frozenset(),
     limits: ExecutionLimits | None = None,
     system_prompt: str = "You are a test employee.",
+    policies: frozenset[str] = frozenset(),
 ) -> EmployeeDefinition:
     return EmployeeDefinition.create(
         name,
         Role("Research Specialist", "Finds out what is true and says where it came from."),
         goals=(Goal("Answer the question that was asked."),),
         allowed_tools=tools,
+        policies=frozenset(policies),
         model_profile=ModelProfile(capabilities=frozenset({Capability.TEXT_REASONING})),
         limits=limits or ExecutionLimits(),
         system_prompt=system_prompt,

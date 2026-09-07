@@ -8,9 +8,11 @@ from application.employee_runtime.approvals import ApprovalGate
 from domain.approvals.gate import RiskAssessment, assess_call, describe
 from domain.approvals.models import ApprovalState
 from domain.policies.models import Decision, RiskLevel
-from domain.tasks.task import Task
+from domain.policies.risk import Effect
+from domain.tasks.task import Task, TaskStatus
 from domain.tools.models import ToolResult, ToolSpec
 from domain.tools.schema import Param
+from infrastructure.persistence.audit_repository import InMemoryAuditLog
 from tests.fakes.approvals import ScriptedApprovalService
 from tests.fakes.employees import definition
 from tests.fakes.tools import FakeTool
@@ -149,3 +151,107 @@ def test_an_approval_carries_its_decision_and_when_it_was_made() -> None:
     assert resolved.state is ApprovalState.APPROVED
     assert resolved.resolved_at is not None
     assert resolved.id == approval.id
+
+
+# --- The gate asks the policy engine, not only the threshold (Phase 10) --------
+
+
+async def test_a_denied_action_is_refused_without_asking_anybody() -> None:
+    """A declared restriction is not a question. Putting it to the user would
+    turn the declaration into a suggestion."""
+    service = ScriptedApprovalService.approving()
+    gate = ApprovalGate(service)
+    tool = FakeTool("fs.write", effect=Effect.WRITE)
+
+    outcome = await gate.check(
+        tool,
+        {"path": "notes.md"},
+        Task.create("write something"),
+        definition(tools={"fs.write"}, policies={"read_only"}),
+    )
+
+    assert outcome.allowed is False
+    assert service.requests == []
+    assert "read-only" in outcome.reason
+
+
+async def test_a_refusal_is_written_to_the_audit_because_nothing_else_records_it() -> None:
+    """The tool never ran, so there is no tool call to account for. A denial
+    that leaves no trace is the one an audit exists to show."""
+    audit = InMemoryAuditLog()
+    gate = ApprovalGate(ScriptedApprovalService.rejecting(), audit=audit)
+
+    await gate.check(
+        FakeTool("code.run", effect=Effect.EXECUTE, reversible=False),
+        {"code": "print(1)"},
+        Task.create("compute"),
+        definition(tools={"code.run"}),
+    )
+
+    assert [record.result for record in audit.records] == ["DENIED"]
+
+
+async def test_an_approved_action_is_not_audited_twice() -> None:
+    """The executor audits what actually ran. A second line here would make
+    every approved action appear twice in the one place people count them."""
+    audit = InMemoryAuditLog()
+    gate = ApprovalGate(ScriptedApprovalService.approving(), audit=audit)
+
+    outcome = await gate.check(
+        FakeTool("code.run", effect=Effect.EXECUTE, reversible=False),
+        {"code": "print(1)"},
+        Task.create("compute"),
+        definition(tools={"code.run"}),
+    )
+
+    assert outcome.allowed is True
+    assert audit.records == []
+
+
+async def test_the_task_is_parked_while_a_person_is_being_asked() -> None:
+    """`alethic tasks` should say what a run is doing, not show it as RUNNING
+    with nothing happening."""
+    seen: list[TaskStatus] = []
+
+    async def status(value: TaskStatus) -> None:
+        seen.append(value)
+
+    gate = ApprovalGate(ScriptedApprovalService.approving())
+    await gate.check(
+        FakeTool("code.run", effect=Effect.EXECUTE, reversible=False),
+        {"code": "print(1)"},
+        Task.create("compute"),
+        definition(tools={"code.run"}),
+        status=status,
+    )
+
+    assert seen == [TaskStatus.WAITING_FOR_APPROVAL, TaskStatus.RUNNING]
+
+
+async def test_the_task_stops_waiting_even_if_asking_blew_up() -> None:
+    """A task left in WAITING_FOR_APPROVAL would be resumable forever, waiting
+    on a person nobody asked."""
+    seen: list[TaskStatus] = []
+
+    class Broken:
+        async def request(self, action):
+            raise RuntimeError("the browser went away")
+
+        async def resolve(self, *args, **kwargs):  # pragma: no cover
+            raise NotImplementedError
+
+    gate = ApprovalGate(Broken())
+    with pytest.raises(RuntimeError):
+        await gate.check(
+            FakeTool("code.run", effect=Effect.EXECUTE, reversible=False),
+            {"code": "print(1)"},
+            Task.create("compute"),
+            definition(tools={"code.run"}),
+            status=lambda value: _record(seen, value),
+        )
+
+    assert seen[-1] is TaskStatus.RUNNING
+
+
+async def _record(seen: list[TaskStatus], value: TaskStatus) -> None:
+    seen.append(value)

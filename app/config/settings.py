@@ -55,10 +55,19 @@ class Settings(BaseSettings):
     #: The one directory the filesystem tools can see. Point it at the folder
     #: the work is actually in; nothing outside it is reachable.
     workspace_dir: Path | None = None
+    #: Where workflow declarations are read from. None means the ones that
+    #: ship with the platform, the same way employees are found.
+    workflows_dir: Path | None = None
     #: prompt | deny | allow. What happens when an irreversible action comes up:
     #: ask the person at the terminal, refuse, or - only if explicitly set -
     #: proceed. A run with nobody watching refuses whatever this says.
     approval_mode: Literal["prompt", "deny", "allow"] = "prompt"
+    #: How long an unanswered approval stays worth answering. A question nobody
+    #: came back to is closed as EXPIRED rather than left pending forever,
+    #: because a pending row is a task that `alethic resume` will keep picking up.
+    #: Zero disables the deadline, which is what a terminal prompt wants: the
+    #: person is standing there.
+    approval_ttl_seconds: float = 900.0
     browser_headless: bool = True
     browser_timeout_seconds: float = 30.0
     code_timeout_seconds: float = 30.0
@@ -134,6 +143,10 @@ class Settings(BaseSettings):
     @property
     def approvals_enabled(self) -> bool:
         return self.flags.approvals
+
+    @property
+    def workflows_enabled(self) -> bool:
+        return self.flags.workflows
 
     @property
     def computer_use_enabled(self) -> bool:

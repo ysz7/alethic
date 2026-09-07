@@ -6,6 +6,7 @@ from typing import Any
 from domain.capabilities.models import Capability
 from domain.computer.interfaces import InterfaceLevel
 from domain.policies.models import RiskLevel
+from domain.policies.risk import Effect, highest, risk_of
 from domain.tools.schema import Param, ParameterSet
 
 
@@ -16,6 +17,10 @@ class ToolSpec:
     name: str
     description: str
     json_schema: dict[str, Any] = field(default_factory=dict)
+    #: What this call does to the world. The risk level follows from it
+    #: (`domain.policies.risk`), so a tool author declares what their tool does
+    #: and not what the platform should think about it.
+    effect: Effect = Effect.READ
     risk_level: RiskLevel = RiskLevel.LOW
     capabilities: frozenset[Capability] = field(default_factory=frozenset)
     reversible: bool = True
@@ -34,18 +39,24 @@ class ToolSpec:
         name: str,
         description: str,
         *parameters: Param,
+        effect: Effect = Effect.READ,
         risk_level: RiskLevel = RiskLevel.LOW,
         capabilities: frozenset[Capability] = frozenset(),
         reversible: bool = True,
         interface_level: InterfaceLevel = InterfaceLevel.API,
     ) -> ToolSpec:
-        """Declare a tool once; the JSON Schema is derived, never hand-written."""
+        """Declare a tool once; the JSON Schema is derived, never hand-written.
+
+        `risk_level` may raise what the effect implies and never lower it: a
+        read of something sensitive is a real case, a "harmless" delete is not.
+        """
         parameter_set = ParameterSet(parameters)
         return cls(
             name=name,
             description=description,
             json_schema=parameter_set.to_json_schema(),
-            risk_level=risk_level,
+            effect=effect,
+            risk_level=highest(risk_level, risk_of(effect)),
             capabilities=capabilities,
             reversible=reversible,
             interface_level=interface_level,

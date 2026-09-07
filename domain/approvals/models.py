@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
@@ -35,6 +35,10 @@ class ApprovalRequest:
     requested_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     #: Why this action needed asking, in the words shown to the person deciding.
     reason: str = ""
+    #: When this question stops being worth answering. None means it waits
+    #: forever, which is the right default for a terminal prompt and the wrong
+    #: one for a page nobody has open.
+    expires_at: datetime | None = None
 
     @classmethod
     def create(cls, task_id: UUID, action: str, **extra: Any) -> ApprovalRequest:
@@ -43,6 +47,12 @@ class ApprovalRequest:
     def redacted(self) -> ApprovalRequest:
         """The form that is safe to show and to store."""
         return replace(self, payload=redact(self.payload))
+
+    def expiring_in(self, seconds: float | None) -> ApprovalRequest:
+        """The same question with a deadline on it. None leaves it open."""
+        if seconds is None or seconds <= 0:
+            return self
+        return replace(self, expires_at=self.requested_at + timedelta(seconds=seconds))
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +77,25 @@ class Approval:
     @property
     def is_pending(self) -> bool:
         return self.state is ApprovalState.PENDING
+
+    def is_overdue(self, now: datetime | None = None) -> bool:
+        """Still unanswered, and past the point where answering it means much.
+
+        An expired question is not an approved one. The whole design says an
+        action nobody confirmed does not happen, and a deadline passing is one
+        more way of nobody confirming it.
+        """
+        if not self.is_pending or self.request.expires_at is None:
+            return False
+        return (now or datetime.now(UTC)) >= self.request.expires_at
+
+    def expire(self, now: datetime | None = None) -> Approval:
+        return replace(
+            self,
+            state=ApprovalState.EXPIRED,
+            resolved_at=now or datetime.now(UTC),
+            resolved_by="timeout",
+        )
 
     def resolve(
         self, decision: ApprovalState, *, resolved_by: str = "user", comment: str = ""

@@ -28,6 +28,7 @@ from application.memory.distiller import OutcomeDistiller
 from application.memory.recorder import MemoryRecorder
 from application.memory.workspace import WorkspaceMemory
 from application.task_runner import TaskRunner
+from application.workflows.engine import WorkflowEngine
 from domain.employees.definition import EmployeeDefinition
 from infrastructure.container import Container
 
@@ -89,8 +90,9 @@ async def build_runtime(container: Container, definition: EmployeeDefinition) ->
                 container.llm_for(*Executor.routing(definition)),
                 container.tool_registry,
                 limits=definition.limits,
-                approvals=ApprovalGate(container.approval_service),
+                approvals=ApprovalGate(container.approval_service, audit=container.audit),
                 call_log=container.tool_call_log,
+                audit=container.audit,
                 progress=container.progress,
                 cancellation=container.cancellations,
             ),
@@ -151,4 +153,18 @@ def build_task_runner(container: Container) -> TaskRunner:
         registry=container.employee_registry,
         build_runtime=_runtime,
         progress=container.progress,
+    )
+
+
+def build_workflow_engine(container: Container) -> WorkflowEngine:
+    """A workflow runs through the same runner every other task does.
+
+    That is the whole point of the engine being three lines: a predefined
+    process and a plan Alethic invented differ in where the decomposition came
+    from and in nothing below it - same employees, same limits, same gate.
+    """
+    return WorkflowEngine(
+        container.workflow_registry,
+        build_task_runner(container),
+        container.workflow_runs,
     )

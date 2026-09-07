@@ -21,12 +21,14 @@ class RuntimeSettings(Protocol):
     llm_base_url: str
     model_catalog_path: Path | None
     employees_dir: Path | None
+    workflows_dir: Path | None
     llm_timeout_seconds: float | None
     llm_retry_attempts: int
     local_llm_base_url: str
 
     # --- Tools ----------------------------------------------------------------
     approval_mode: str
+    approval_ttl_seconds: float
     browser_headless: bool
     browser_timeout_seconds: float
     code_timeout_seconds: float
@@ -52,6 +54,9 @@ class RuntimeSettings(Protocol):
 
     @property
     def approvals_enabled(self) -> bool: ...
+
+    @property
+    def workflows_enabled(self) -> bool: ...
 
     @property
     def computer_use_enabled(self) -> bool: ...

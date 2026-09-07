@@ -40,8 +40,9 @@ from dataclasses import dataclass, replace
 
 import structlog
 
-from application.employee_runtime.approvals import ApprovalGate
+from application.employee_runtime.approvals import ApprovalGate, StatusSink
 from application.employee_runtime.transcript import Transcript
+from domain.audit.protocols import AuditLog, AuditRecord
 from domain.capabilities.models import CapabilityRequirement
 from domain.computer.interfaces import InterfaceLevel, describe, select
 from domain.employees.definition import EmployeeDefinition
@@ -61,7 +62,7 @@ from domain.tasks.plan import Observation, TaskPlan
 from domain.tasks.progress import NullProgress, ProgressEvent, ProgressKind, ProgressSink
 from domain.tasks.task import Task
 from domain.tools.models import ToolResult
-from domain.tools.protocols import ToolRegistry
+from domain.tools.protocols import Tool, ToolRegistry
 from domain.tools.telemetry import ToolCallLog, ToolCallRecord
 
 log = structlog.get_logger(__name__)
@@ -91,6 +92,7 @@ class Executor:
         limits: ExecutionLimits | None = None,
         approvals: ApprovalGate | None = None,
         call_log: ToolCallLog | None = None,
+        audit: AuditLog | None = None,
         progress: ProgressSink | None = None,
         cancellation: CancellationSignal | None = None,
         # Injected so tests can control time instead of waiting for it.
@@ -101,6 +103,7 @@ class Executor:
         self._limits = limits or ExecutionLimits()
         self._approvals = approvals or ApprovalGate()
         self._call_log = call_log
+        self._audit = audit
         self._progress = progress or NullProgress()
         self._cancellation = cancellation or NeverCancelled()
         self._clock = clock
@@ -112,12 +115,19 @@ class Executor:
         transcript: Transcript,
         *,
         on_step: Callable[[Transcript], Awaitable[None]] | None = None,
+        on_status: StatusSink | None = None,
     ) -> StepOutcome:
         """Advance the task until it finishes or runs out of budget.
 
         `on_step` is awaited after each step with the current transcript. That
         callback is what makes a killed process resumable, so it runs before the
         next model call, not at the end.
+
+        `on_status` is how the loop says the task has stopped being RUNNING
+        without owning the task row: parked on a person, and then back. The
+        executor does not persist tasks - the runtime does - and a loop that
+        reached for a repository to say what it is doing would be the wrong half
+        of the system holding it.
         """
         started = self._clock()
         specs = self._tools.list_specs(definition)
@@ -198,7 +208,7 @@ class Executor:
                     step=transcript.steps,
                     payload={"tool": call.name, "arguments": redact(call.arguments)},
                 )
-                result = await self._invoke(call, definition, task)
+                result = await self._invoke(call, definition, task, on_status)
                 observation = self._observe(transcript.steps, call, result, definition)
                 transcript = transcript.with_observation(observation).with_message(
                     Message.tool(observation.summary, call.id)
@@ -248,7 +258,11 @@ class Executor:
     # --- Acting ---------------------------------------------------------------
 
     async def _invoke(
-        self, call: ToolCallRequest, definition: EmployeeDefinition, task: Task
+        self,
+        call: ToolCallRequest,
+        definition: EmployeeDefinition,
+        task: Task,
+        on_status: StatusSink | None = None,
     ) -> ToolResult:
         try:
             tool = self._tools.get(call.name, definition)
@@ -258,7 +272,9 @@ class Executor:
             log.info("tool.refused", tool=call.name, employee=definition.name, reason=str(error))
             return ToolResult.failure(str(error))
 
-        gate = await self._approvals.check(tool, call.arguments, task, definition)
+        gate = await self._approvals.check(
+            tool, call.arguments, task, definition, status=on_status
+        )
         if not gate.allowed:
             log.info("tool.not_approved", tool=call.name, task_id=str(task.id))
             await self._record(task, call, ToolResult.failure(gate.reason))
@@ -274,7 +290,46 @@ class Executor:
         if not result.latency_ms:
             result = replace(result, latency_ms=int((self._clock() - started) * 1000))
         await self._record(task, call, result, tool.spec.interface_level)
+        await self._audit_call(task, definition, tool, call, result)
         return result
+
+    async def _audit_call(
+        self,
+        task: Task,
+        definition: EmployeeDefinition,
+        tool: Tool,
+        call: ToolCallRequest,
+        result: ToolResult,
+    ) -> None:
+        """Who did what, next to what it cost. Never at the cost of the work.
+
+        Distinct from `_record`, which is accounting: that one answers what this
+        run spent, this one answers who acted on the machine. They agree on the
+        successful calls and diverge on the refused ones, which is the pair of
+        questions worth being able to ask separately.
+        """
+        if self._audit is None:
+            return
+        try:
+            await self._audit.record(
+                AuditRecord(
+                    action=f"{call.name}({self._arguments_of(call)})",
+                    actor_kind=definition.actor_kind,
+                    actor_id=definition.actor_id,
+                    result="SUCCESS" if result.success else "FAILURE",
+                    workspace_id=task.workspace_id,
+                    task_id=task.id,
+                    tool=call.name,
+                    latency_ms=result.latency_ms,
+                    details={
+                        "effect": tool.spec.effect.value,
+                        "interface": tool.spec.interface_level.value,
+                        **({"error": result.error} if result.error else {}),
+                    },
+                )
+            )
+        except Exception as error:
+            log.warning("audit.not_recorded", tool=call.name, error=str(error))
 
     async def _record(
         self,

@@ -15,7 +15,12 @@ from uuid import UUID
 
 import typer
 
-from app.config.container import build_container, build_manager, build_task_runner
+from app.config.container import (
+    build_container,
+    build_manager,
+    build_task_runner,
+    build_workflow_engine,
+)
 from app.config.settings import get_settings
 from domain.approvals.models import ApprovalState
 from domain.errors import AlethicError, StorageNotInitializedError
@@ -527,6 +532,178 @@ def reject(
 ) -> None:
     """Reject a pending action."""
     _resolve(approval_id, ApprovalState.REJECTED, comment)
+
+
+@app.command()
+def policies() -> None:
+    """The rules an employee declaration can opt into, and who opted in.
+
+    Printed rather than documented, because a policy that is written down in
+    prose and not in the catalog enforces nothing - and this is the list the
+    engine actually reads.
+    """
+    from domain.policies.risk import EFFECT_RISK
+    from domain.policies.rules import APPROVAL_THRESHOLD, CATALOG
+
+    container = build_container()
+    declared = container.employee_registry.list()
+
+    typer.secho("Risk follows the effect", fg="cyan")
+    for effect, level in EFFECT_RISK.items():
+        waits = "  waits for a person" if level.value == APPROVAL_THRESHOLD.value else ""
+        typer.echo(f"  {effect.value:<10}{level.value}{waits}")
+    typer.echo(f"\nAt {APPROVAL_THRESHOLD.value} and above, a person decides.\n")
+
+    typer.secho("Declared policies", fg="cyan")
+    for name, rule in sorted(CATALOG.items()):
+        users = sorted(d.name for d in declared if name in d.policies)
+        typer.secho(f"  {name:<26}", fg="yellow", nl=False)
+        typer.echo(f"{rule.category.value:<16}{', '.join(users) or 'nobody'}")
+        typer.echo(f"    {rule.description}")
+
+
+@app.command()
+def audit(
+    limit: int = typer.Option(30, "--limit", "-n", help="How many lines to show."),
+    task: str = typer.Option("", "--task", "-t", help="Only this task's actions."),
+) -> None:
+    """What was done on this machine, newest first.
+
+    Distinct from `alethic spend`, which is what the models cost, and from the
+    trace, which is what one run did. This is the list that includes the actions
+    that did *not* happen - the ones a policy denied or the user refused.
+    """
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            trail = container.audit
+            records = await trail.recent(  # type: ignore[attr-defined]
+                limit=limit, task_id=UUID(task) if task else None
+            )
+            if not records:
+                typer.echo("Nothing has been recorded here yet.")
+                return
+            colours = {"SUCCESS": "green", "FAILURE": "red", "DENIED": "yellow"}
+            for record in records:
+                when = record.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                typer.secho(f"{record.result:<8}", fg=colours.get(record.result, "white"), nl=False)
+                typer.echo(f"{when}  {record.actor_kind.value.lower()}  {record.action}")
+                reason = record.details.get("reason")
+                if reason:
+                    typer.echo(f"          why: {reason}")
+        except ValueError as error:
+            typer.secho(f"'{task}' is not a task id.", fg="red", err=True)
+            raise typer.Exit(code=1) from error
+        except StorageNotInitializedError as error:
+            typer.secho(f"{error} Run: uv run alembic upgrade head", fg="red", err=True)
+            raise typer.Exit(code=1) from error
+        finally:
+            await container.aclose()
+
+    asyncio.run(_run())
+
+
+@app.command()
+def prompts() -> None:
+    """The prompt assets that ship here: name, versions, and what is current.
+
+    The digest is the point (§121). A version number says which file was used;
+    the hash says whether that file is still the text it was, which is the
+    difference between two runs being comparable and merely looking it.
+    """
+    from application import prompts as registry
+
+    found = registry.catalog()
+    if not found:
+        typer.echo("No prompts are shipped here.")
+        return
+    for info in found:
+        typer.secho(f"{info.name:<22}", fg="cyan", nl=False)
+        typer.echo(f"{info.latest:<6}{info.digest}   [{', '.join(info.versions)}]")
+
+
+@app.command()
+def workflows() -> None:
+    """The predefined processes declared here, and whether they can run.
+
+    A workflow names employees by name. Whether those employees exist on this
+    machine is the question worth answering before a run rather than three steps
+    into one, so it is answered here.
+    """
+    settings = get_settings()
+    if not settings.workflows_enabled:
+        typer.echo("Workflows are switched off (ALETHIC_FLAGS__WORKFLOWS=false).")
+        return
+    container = build_container()
+    declared = {d.name for d in container.employee_registry.list()}
+    found = container.workflow_registry.list_all()
+    if not found:
+        typer.echo("No workflows are declared here. Add one under `workflows/`.")
+        return
+    for definition in found:
+        missing = sorted(definition.employees - declared)
+        typer.secho(f"{definition.name}", fg="cyan", nl=False)
+        typer.echo(f"  {definition.trigger.value.lower()}, {len(definition.steps)} step(s)")
+        if definition.description:
+            typer.echo(f"  {definition.description.splitlines()[0]}")
+        for step in definition.steps:
+            after = f" after {', '.join(step.depends_on)}" if step.depends_on else ""
+            retry = f" x{step.max_attempts}" if step.max_attempts > 1 else ""
+            typer.echo(f"    {step.name:<14}{step.employee}{after}{retry}")
+        if missing:
+            typer.secho(
+                f"  needs {', '.join(missing)}, which is not declared here.", fg="red"
+            )
+
+
+#: Declared once, because ruff will not have a call in a default and typer
+#: needs one. The same shape every other repeatable option would take.
+_INPUT_OPTION = typer.Option(
+    [], "--input", "-i", help="key=value, repeatable. Overrides the declared default."
+)
+
+
+@app.command(name="run-workflow")
+def run_workflow(
+    name: str = typer.Argument(..., help="The workflow to run, from `alethic workflows`."),
+    inputs: list[str] = _INPUT_OPTION,
+) -> None:
+    """Run a predefined process and report what each step produced."""
+
+    if not get_settings().workflows_enabled:
+        typer.secho("Workflows are switched off (ALETHIC_FLAGS__WORKFLOWS=false).", fg="red")
+        raise typer.Exit(code=1)
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            await container.sync_employees()
+            values: dict[str, object] = {}
+            for entry in inputs:
+                key, separator, value = entry.partition("=")
+                if not separator:
+                    typer.secho(f"--input {entry} is not key=value.", fg="red", err=True)
+                    raise typer.Exit(code=1)
+                values[key.strip()] = value
+            engine = build_workflow_engine(container)
+            run = await engine.run(name, inputs=values)
+            colour = "green" if run.succeeded else "red"
+            typer.secho(f"\n{run.status.value}: {run.workflow}", fg=colour)
+            for step in run.steps:
+                mark = "ok " if step.succeeded else "no "
+                typer.echo(f"  {mark}{step.step:<14}{step.employee}  ({step.attempts} attempt(s))")
+                if step.summary:
+                    typer.echo(f"      {step.summary.splitlines()[0][:100]}")
+            if not run.succeeded:
+                raise typer.Exit(code=1)
+        except AlethicError as error:
+            typer.secho(f"{type(error).__name__}: {error}", fg="red", err=True)
+            raise typer.Exit(code=1) from error
+        finally:
+            await container.aclose()
+
+    asyncio.run(_run())
 
 
 def _resolve(approval_id: str, decision: ApprovalState, comment: str) -> None:

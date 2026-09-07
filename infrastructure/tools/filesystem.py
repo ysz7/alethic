@@ -19,6 +19,7 @@ from domain.approvals.gate import RiskAssessment
 from domain.capabilities.models import Capability
 from domain.errors import PermissionDeniedError, ToolInputError
 from domain.policies.models import RiskLevel
+from domain.policies.risk import Effect
 from domain.tools.models import ToolResult, ToolSpec
 from domain.tools.schema import Param
 from infrastructure.tools.base import BaseTool
@@ -150,7 +151,7 @@ class FileWriteTool(WorkspaceTool):
                 "file needs the user's confirmation.",
                 Param("path", description="File to write, relative to the working directory."),
                 Param("content", description="The full text to write."),
-                risk_level=RiskLevel.MEDIUM,
+                effect=Effect.WRITE,
                 capabilities=frozenset({Capability.FILE_ACCESS}),
             ),
             workspace,
@@ -192,6 +193,7 @@ class FileMoveTool(WorkspaceTool):
                 Param("source", description="File to move, relative to the working directory."),
                 Param("destination", description="Where to move it to. A path ending in '/' "
                       "or naming an existing directory moves the file into it."),
+                effect=Effect.WRITE,
                 capabilities=frozenset({Capability.FILE_ACCESS}),
             ),
             workspace,

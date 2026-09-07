@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -41,6 +41,7 @@ def _to_values(approval: Approval) -> dict:
         "state": approval.state.value,
         "reason": request.reason,
         "requested_at": request.requested_at,
+        "expires_at": request.expires_at,
         "resolved_at": approval.resolved_at,
         "resolved_by": approval.resolved_by,
         "comment": approval.comment,
@@ -61,6 +62,7 @@ def _to_approval(row: ApprovalRow) -> Approval:
             ),
             requested_at=_aware(row.requested_at),  # type: ignore[arg-type]
             reason=row.reason or "",
+            expires_at=_aware(row.expires_at),
         ),
         state=ApprovalState(row.state),
         resolved_at=_aware(row.resolved_at),
@@ -102,9 +104,28 @@ class SqliteApprovalRepository:
             row = await session.get(ApprovalRow, str(approval_id))
             return _to_approval(row) if row else None
 
+    async def expire_overdue(self, now: datetime | None = None) -> int:
+        moment = now or datetime.now(UTC)
+        async with self._session() as session:
+            result = await session.execute(
+                update(ApprovalRow)
+                .where(
+                    ApprovalRow.state == ApprovalState.PENDING.value,
+                    ApprovalRow.expires_at.is_not(None),
+                    ApprovalRow.expires_at <= moment,
+                )
+                .values(
+                    state=ApprovalState.EXPIRED.value,
+                    resolved_at=moment,
+                    resolved_by="timeout",
+                )
+            )
+            return int(result.rowcount or 0)
+
     async def list_pending(
         self, workspace_id: WorkspaceId = DEFAULT_WORKSPACE_ID
     ) -> list[Approval]:
+        await self.expire_overdue()
         async with self._session() as session:
             rows = await session.scalars(
                 select(ApprovalRow)
@@ -129,9 +150,17 @@ class InMemoryApprovalRepository:
     async def get(self, approval_id: UUID) -> Approval | None:
         return self._approvals.get(approval_id)
 
+    async def expire_overdue(self, now: datetime | None = None) -> int:
+        moment = now or datetime.now(UTC)
+        overdue = [a for a in self._approvals.values() if a.is_overdue(moment)]
+        for approval in overdue:
+            self._approvals[approval.id] = approval.expire(moment)
+        return len(overdue)
+
     async def list_pending(
         self, workspace_id: WorkspaceId = DEFAULT_WORKSPACE_ID
     ) -> list[Approval]:
+        await self.expire_overdue()
         return sorted(
             (
                 approval

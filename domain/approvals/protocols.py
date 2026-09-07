@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -35,3 +36,13 @@ class ApprovalRepository(Protocol):
     async def list_pending(
         self, workspace_id: WorkspaceId = DEFAULT_WORKSPACE_ID
     ) -> list[Approval]: ...
+
+    async def expire_overdue(self, now: datetime | None = None) -> int:
+        """Close the questions nobody came back to, and say how many.
+
+        Needed as a store operation rather than a pass over what was read: the
+        process that asked is usually gone by the time the deadline passes, so
+        nothing is holding the request in memory to time out. Its row is all
+        that is left of the question, and this is what closes it.
+        """
+        ...

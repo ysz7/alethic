@@ -10,9 +10,11 @@ can tell the difference between a harmless call and a damaging one refines it
 per call through `RiskAssessor`. Creating a new file is LOW; overwriting one
 that exists is HIGH. Above the threshold, a human decides.
 
-The full `PolicyEngine` with roles and audit arrives in Phase 10. This is
-deliberately the smallest thing that makes an irreversible action impossible
-without a human - not a governance layer for a single user.
+This module answers one question only - *how risky is this call* - and Phase
+10's `domain.policies.rules` answers the other one, *what should happen about
+it*. Keeping them apart is what lets an employee's declaration deny an action
+that risk alone would have allowed, without either half learning the other's
+vocabulary.
 """
 
 from __future__ import annotations
@@ -21,21 +23,20 @@ from dataclasses import dataclass
 from typing import Any
 
 from domain.policies.models import Decision, PolicyDecision, RiskLevel
+from domain.policies.risk import at_least, highest
 from domain.tools.models import ToolSpec
 
 #: At and above this level, an action waits for a person.
 APPROVAL_THRESHOLD = RiskLevel.HIGH
 
-_ORDER = {
-    RiskLevel.LOW: 0,
-    RiskLevel.MEDIUM: 1,
-    RiskLevel.HIGH: 2,
-    RiskLevel.CRITICAL: 3,
-}
-
-
-def at_least(level: RiskLevel, threshold: RiskLevel) -> bool:
-    return _ORDER[level] >= _ORDER[threshold]
+__all__ = [
+    "APPROVAL_THRESHOLD",
+    "RiskAssessment",
+    "assess_call",
+    "at_least",
+    "describe",
+    "resolve_risk",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,8 +47,8 @@ class RiskAssessment:
     reason: str = ""
 
 
-def assess_call(spec: ToolSpec, assessment: RiskAssessment | None = None) -> PolicyDecision:
-    """Decide whether this call may proceed or has to wait for a person.
+def resolve_risk(spec: ToolSpec, assessment: RiskAssessment | None = None) -> RiskLevel:
+    """How risky this particular call is, spec and per-call judgement combined.
 
     A tool declared irreversible always waits, whatever it says about the
     individual call - that is what declaring it irreversible means. A reversible
@@ -55,12 +56,19 @@ def assess_call(spec: ToolSpec, assessment: RiskAssessment | None = None) -> Pol
     directions: it knows more about this call than its spec does.
     """
     if spec.reversible:
-        level = assessment.risk_level if assessment else spec.risk_level
-    else:
-        level = _max(spec.risk_level, APPROVAL_THRESHOLD)
-        if assessment is not None:
-            level = _max(level, assessment.risk_level)
+        return assessment.risk_level if assessment else spec.risk_level
+    level = highest(spec.risk_level, APPROVAL_THRESHOLD)
+    return highest(level, assessment.risk_level) if assessment is not None else level
 
+
+def assess_call(spec: ToolSpec, assessment: RiskAssessment | None = None) -> PolicyDecision:
+    """Risk alone, with no policy around it: the threshold and nothing else.
+
+    Kept as its own function because it is what the risk *is*, before anything
+    an employee declared or a user configured has been applied. The policy
+    engine takes this as input; it does not re-derive it.
+    """
+    level = resolve_risk(spec, assessment)
     reason = assessment.reason if assessment else ""
     if at_least(level, APPROVAL_THRESHOLD):
         return PolicyDecision(
@@ -69,10 +77,6 @@ def assess_call(spec: ToolSpec, assessment: RiskAssessment | None = None) -> Pol
             risk_level=level,
         )
     return PolicyDecision(decision=Decision.ALLOW, reason=reason, risk_level=level)
-
-
-def _max(left: RiskLevel, right: RiskLevel) -> RiskLevel:
-    return left if _ORDER[left] >= _ORDER[right] else right
 
 
 def describe(spec: ToolSpec, input_data: dict[str, Any], *, width: int = 120) -> str:

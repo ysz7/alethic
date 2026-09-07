@@ -31,6 +31,7 @@ class Stub:
         self._browser = browser
         self._computer = computer
         self.approval_mode = "deny"
+        self.approval_ttl_seconds = 0.0
         self.browser_headless = True
         self.browser_timeout_seconds = 5.0
         self.code_timeout_seconds = 5.0

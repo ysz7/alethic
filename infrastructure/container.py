@@ -16,6 +16,7 @@ from functools import cached_property
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from domain.approvals.protocols import ApprovalRepository, ApprovalService
+from domain.audit.protocols import AuditLog
 from domain.browser.protocols import Browser
 from domain.capabilities.models import Capability, CapabilityRequirement
 from domain.computer.constraints import ComputerConstraints
@@ -33,6 +34,8 @@ from domain.tasks.cancellation import Cancellations
 from domain.tasks.repository import TaskRepository
 from domain.tools.protocols import ToolRegistry
 from domain.tools.telemetry import ToolCallLog
+from domain.workflows.protocols import WorkflowRegistry
+from domain.workflows.run import WorkflowRunRepository
 from domain.workforce.repository import (
     AssignmentRepository,
     ObjectiveRepository,
@@ -394,6 +397,19 @@ class Container:
         """None means nobody can be asked - and so nothing irreversible happens."""
         if not self.settings.approvals_enabled:
             return None
+        from infrastructure.approvals.telegram import TelegramApprovalService
+
+        if self._confirmer is None and TelegramApprovalService.configured(self.secret_resolver):
+            # A machine told how to reach somebody uses that in preference to
+            # stdin, because the case this covers is precisely the one where
+            # nobody is looking at stdin. An interface that supplied its own
+            # confirmer has already answered the question and wins over both.
+            return TelegramApprovalService(
+                self.approval_repository,
+                self.secret_resolver,
+                ttl_seconds=self.settings.approval_ttl_seconds or 900.0,
+            )
+
         from infrastructure.approvals.service import LocalApprovalService
 
         if self._confirmer is None:
@@ -404,10 +420,51 @@ class Container:
             self.approval_repository,
             mode=self.settings.approval_mode,
             confirmer=self._confirmer,  # type: ignore[arg-type]
+            ttl_seconds=self.settings.approval_ttl_seconds,
             # An interface that supplies its own approver is the approver: the
             # terminal's stdin says nothing about whether anyone is watching.
             is_interactive=lambda: True,
         )
+
+    # --- Workflows ----------------------------------------------------------------
+
+    @cached_property
+    def workflow_registry(self) -> WorkflowRegistry:
+        from infrastructure.workflows.yaml_registry import YamlWorkflowRegistry
+
+        return YamlWorkflowRegistry(self.settings.workflows_dir)
+
+    @cached_property
+    def workflow_runs(self) -> WorkflowRunRepository:
+        if self._in_memory:
+            from infrastructure.persistence.workflow_repository import (
+                InMemoryWorkflowRunRepository,
+            )
+
+            return InMemoryWorkflowRunRepository()
+        from infrastructure.persistence.workflow_repository import (
+            SqliteWorkflowRunRepository,
+        )
+
+        return SqliteWorkflowRunRepository(self.session_factory)
+
+    # --- Audit ------------------------------------------------------------------
+
+    @cached_property
+    def audit(self) -> AuditLog:
+        """Always built, unlike memory.
+
+        Memory is a feature a machine can do without; a record of what was done
+        to that machine is not. There is no flag here for the same reason there
+        is no flag on the approval gate.
+        """
+        if self._in_memory:
+            from infrastructure.persistence.audit_repository import InMemoryAuditLog
+
+            return InMemoryAuditLog()
+        from infrastructure.persistence.audit_repository import SqliteAuditLog
+
+        return SqliteAuditLog(self.session_factory)
 
     @cached_property
     def employee_repository(self):

@@ -37,6 +37,7 @@ from enum import StrEnum
 
 from domain.capabilities.models import Capability
 from domain.employees.definition import EmployeeDefinition
+from domain.policies.rules import CATALOG as POLICY_CATALOG
 
 #: What a tool lets an employee do, by tool name. Exactly what a `ToolRegistry`
 #: can produce from its specs, expressed as data so this module needs no
@@ -71,6 +72,7 @@ def check(definition: EmployeeDefinition, offered: ToolCapabilities) -> tuple[Is
         *_missing_tools(definition, offered),
         *_unbacked_capabilities(definition, offered),
         *_undeclared_capabilities(definition, offered),
+        *_unknown_policies(definition),
         *_can_do_nothing(definition),
     ]
     return tuple(sorted(issues, key=lambda issue: (not issue.is_error, issue.message)))
@@ -176,6 +178,29 @@ def _undeclared_capabilities(
                 "so it will not be found by a search for that work."
             ),
             severity=Severity.WARNING,
+        )
+    ]
+
+
+def _unknown_policies(definition: EmployeeDefinition) -> list[Issue]:
+    """A policy name no rule answers to.
+
+    An error, and the one place where a typo is most expensive: the engine
+    ignores a name it does not recognise, so `no_sendng` reads in the file as a
+    restriction that is being enforced and is in fact nothing at all. A wrong
+    tool name loses the employee a tool it can see it does not have; a wrong
+    policy name loses it a restriction nobody can see is gone.
+    """
+    unknown = sorted(definition.policies - set(POLICY_CATALOG))
+    if not unknown:
+        return []
+    return [
+        Issue(
+            employee=definition.name,
+            message=(
+                f"declares {', '.join(unknown)}, which is not a policy. "
+                f"Nothing enforces it. Known policies: {', '.join(sorted(POLICY_CATALOG))}."
+            ),
         )
     ]
 

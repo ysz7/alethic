@@ -18,10 +18,17 @@ confirmer rather than being re-decided here.
 Every request is written to the database *before* it is answered. A process
 killed while waiting for a decision leaves a PENDING row, which is what makes
 the question survivable rather than lost.
+
+A question can also have a deadline. That is not a convenience: a PENDING row is
+a task `alethic resume` keeps picking up, so a question nobody ever answers is a
+run that never finishes. Expiring is a refusal like any other - the rule that an
+unconfirmed action does not happen covers "nobody was there" as much as "they
+said no".
 """
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import sys
 from collections.abc import Awaitable, Callable
@@ -69,14 +76,17 @@ class LocalApprovalService:
         *,
         mode: ApprovalMode | str = ApprovalMode.PROMPT,
         confirmer: Confirmer | None = None,
+        ttl_seconds: float = 0.0,
         is_interactive: Callable[[], bool] = lambda: sys.stdin is not None and sys.stdin.isatty(),
     ) -> None:
         self._repository = repository
         self._mode = ApprovalMode(mode)
         self._confirmer = confirmer or console_confirmer
+        self._ttl_seconds = ttl_seconds
         self._is_interactive = is_interactive
 
     async def request(self, action: ApprovalRequest) -> ApprovalState:
+        action = action.expiring_in(self._ttl_seconds)
         approval = Approval(request=action.redacted())
         await self._repository.save(approval)
 
@@ -100,8 +110,23 @@ class LocalApprovalService:
         if self._mode is ApprovalMode.DENY or not self._is_interactive():
             return ApprovalState.REJECTED, "no-approver"
         answer = self._confirmer(action.redacted())
-        approved = await answer if inspect.isawaitable(answer) else answer
+        if not inspect.isawaitable(answer):
+            # A synchronous confirmer is the terminal, and a person at a
+            # terminal is not something to time out on: they are standing there,
+            # and stealing the prompt from under them would be worse than
+            # waiting. Only an awaited answer - a browser, a chat - can expire.
+            return (ApprovalState.APPROVED if answer else ApprovalState.REJECTED), "user"
+        try:
+            approved = await self._within_deadline(answer)
+        except TimeoutError:
+            log.info("approval.expired", approval_id=str(action.id), action=action.action)
+            return ApprovalState.EXPIRED, "timeout"
         return (ApprovalState.APPROVED if approved else ApprovalState.REJECTED), "user"
+
+    async def _within_deadline(self, answer: Awaitable[bool]) -> bool:
+        if self._ttl_seconds <= 0:
+            return await answer
+        return await asyncio.wait_for(answer, timeout=self._ttl_seconds)
 
     async def resolve(
         self,

@@ -7,6 +7,21 @@
 # these models pulled. Costs are zero because they are: the price of a local call
 # is electricity, not billing.
 
+# Ollama serves some models by running them on its own machines rather than on
+# this one. They are reached through the same local endpoint and need no
+# provider key here, so they belong in this catalog - but the entry says so,
+# because "local" in the file name stops being literally true for this one.
+# Available only if `ollama pull gemma4:31b-cloud` has been run and the account
+# behind it can reach the cloud tier.
+[models.local-strong]
+provider = "local"
+model = "gemma4:31b-cloud"
+capabilities = ["TEXT_REASONING", "TOOL_CALLING", "STRUCTURED_OUTPUT", "LONG_CONTEXT", "CODE"]
+context_tokens = 131072
+input_cost_per_1k_usd = 0.0
+output_cost_per_1k_usd = 0.0
+quality = 0.8
+
 [models.local-balanced]
 provider = "local"
 model = "gpt-oss:20b"
@@ -38,10 +53,13 @@ input_cost_per_1k_usd = 0.0
 output_cost_per_1k_usd = 0.0
 quality = 0.6
 
+# The stronger entry takes the work that decides things - planning, acting,
+# writing the answer - and the small ones keep the cheap, structured jobs.
+# Anything here still runs without a provider key.
 [defaults]
-planning = "local-balanced"
-execution = "local-balanced"
+planning = "local-strong"
+execution = "local-strong"
 verification = "local-fast"
-synthesis = "local-balanced"
+synthesis = "local-strong"
 extraction = "local-fast"
-conversation = "local-balanced"
+conversation = "local-strong"

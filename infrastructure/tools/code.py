@@ -26,7 +26,7 @@ import tempfile
 from pathlib import Path
 
 from domain.capabilities.models import Capability
-from domain.policies.models import RiskLevel
+from domain.policies.risk import Effect
 from domain.tools.models import ToolResult, ToolSpec
 from domain.tools.schema import Param
 from infrastructure.observability.logging import get_logger
@@ -91,7 +91,7 @@ class CodeExecutionTool:
                 default=int(DEFAULT_TIMEOUT_SECONDS),
                 description="How long it may run before being stopped.",
             ),
-            risk_level=RiskLevel.HIGH,
+            effect=Effect.EXECUTE,
             capabilities=frozenset({Capability.CODE}),
             reversible=False,
         )

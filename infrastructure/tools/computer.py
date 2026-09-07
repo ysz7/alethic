@@ -30,6 +30,7 @@ from domain.computer.models import ComputerAction, Screenshot, ScreenView, Surfa
 from domain.computer.protocols import Computer, ScreenReader
 from domain.errors import ConfigurationError
 from domain.policies.models import RiskLevel
+from domain.policies.risk import Effect
 from domain.tools.models import ToolResult, ToolSpec
 from domain.tools.schema import Param
 from infrastructure.tools.base import BaseTool
@@ -87,6 +88,7 @@ class ComputerTool(BaseTool):
                 # this platform can offer, and says so rather than being trusted
                 # to be careful. Looking and scrolling are always reversible.
                 reversible=not (changes_state and surface is Surface.DESKTOP),
+                effect=Effect.WRITE if changes_state else Effect.READ,
                 risk_level=_risk_of(surface, changes_state),
                 capabilities=frozenset({Capability.COMPUTER_USE}),
                 interface_level=_LEVELS[surface],

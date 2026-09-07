@@ -12,8 +12,9 @@ and give Alethic a task.
 
 ## Status
 
-**Phase 9 - Memory.** The platform now keeps what it learns. Four employees, not
-thirty:
+**Phase 10 - Workflow, approvals, policies.** The brake is now a policy layer:
+what a tool does to the world decides what it costs to do it, and an employee's
+declaration can narrow that further. Four employees, not thirty:
 `researcher` finds out what is true, `organizer` puts a folder in order,
 `operator` works interfaces that have no API, and `analyst` computes answers
 from data on this machine. Each is a directory under `employees/` with no Python
@@ -23,6 +24,10 @@ You state what you want. Alethic works out what that means, decides whether it
 needs doing at all or can just be answered, breaks it into tasks if it has to,
 gives each one to whoever is declared for it, and checks the result against
 criteria it wrote down before the work started.
+
+Processes you already know the shape of do not need planning at all: a file under
+`workflows/` names the steps and who does each, and runs through the same
+employees and the same brake.
 
 The employees do the work: read and sort files inside one working directory,
 search the web, open a page and read it, run a short program under limits - and,
@@ -160,20 +165,41 @@ trust. The filesystem tools see one directory (`ALETHIC_WORKSPACE_DIR`, by defau
 `~/.alethic/workspace`) and refuse any path that resolves outside it,
 symlinks followed.
 
-An action at HIGH or CRITICAL risk waits for a person. Overwriting a file that
-exists is HIGH; creating a new one is not. Running generated code always is.
-With nobody at the terminal the answer is no, so an unattended run cannot
-consent by being silent - set `ALETHIC_APPROVAL_MODE=allow` if that is what you
-want on your own machine. See [ADR 0004](docs/adr/0004-approval-is-a-risk-level-not-a-list-of-actions.md).
+An action at HIGH or CRITICAL risk waits for a person, and how risky an action is
+follows from **what it does to the world** rather than from a number somebody
+typed on the tool. Reading is low, writing is medium, and sending, spending,
+deleting, publishing and running generated code are high. A tool may declare
+itself riskier than its effect implies - a read of something sensitive is a real
+case - and cannot declare itself safer.
 
 ```bash
+uv run alethic policies            # the table, the named rules, and who opted in
 uv run alethic approvals           # what is waiting on a decision
 uv run alethic approve <id>        # or: alethic reject <id> --comment "not that file"
+uv run alethic audit               # what was done here, including what was refused
 ```
 
+On top of that floor, an employee's declaration can **narrow** and never widen.
+`policies: [read_only]` refuses a write outright rather than asking about it,
+because a declared restriction is not a question; `no_sending`, `no_spending`,
+`no_deleting` and `no_publishing` do the same for their own verb. A policy name
+nothing answers to fails the declaration, since a typo would otherwise read in
+the file as a restriction that is in force. See
+[ADR 0010](docs/adr/0010-risk-follows-the-effect-and-a-declaration-only-narrows.md)
+and [ADR 0004](docs/adr/0004-approval-is-a-risk-level-not-a-list-of-actions.md).
+
+With nobody at the terminal the answer is no, so an unattended run cannot
+consent by being silent - set `ALETHIC_APPROVAL_MODE=allow` if that is what you
+want on your own machine, or set `ALETHIC_SECRET_TELEGRAM_BOT_TOKEN` and
+`ALETHIC_SECRET_TELEGRAM_CHAT_ID` and be asked wherever you actually are.
+
 Under `alethic serve` the same question appears in the page and the run really is
-parked on it: nothing is written until you answer, and a question nobody answers
-times out to a no.
+parked on it - the task shows as WAITING_FOR_APPROVAL until you answer. A
+question nobody answers expires, and an expired question is a no.
+
+`alethic audit` is the list that includes what did *not* happen. A refused action
+leaves no tool call, because the tool never ran, so it is recorded there or
+nowhere.
 
 The browser is an optional extra, so installing the platform does not download a
 browser engine for a workforce that only reads files:
@@ -257,6 +283,41 @@ uv run alethic ask "Which city is the capital of Germany?"
 That is the same code path - router, adapter, metering, spend log - pointed at a
 different catalog. Local calls are priced at zero because they are.
 
+## Running something you already know the shape of
+
+A workflow is a file under `workflows/`: named steps, who does each, and what
+each depends on. Adding one requires no change to any employee and no Python at
+all.
+
+```bash
+uv run alethic workflows                                  # what is declared, and can it run
+uv run alethic run-workflow inbox-triage
+uv run alethic run-workflow weekly-report --input folder=sales
+```
+
+```yaml
+name: weekly-report
+steps:
+  - name: survey
+    employee: organizer
+    instruction: List everything under {folder} and say what is there.
+  - name: numbers
+    employee: analyst
+    depends_on: [survey]
+    instruction: Compute what these files support. The survey said {steps.survey}
+    max_attempts: 2          # reading and computing again costs nothing
+```
+
+Dependencies are declared edges, so a cycle is reported rather than looped on,
+and a step reads what earlier steps produced through `{steps.<name>}`. A failed
+step stops the run by default - the step after it usually reads what it produced
+- and `on_failure: CONTINUE` says otherwise for a step whose output is a
+nice-to-have. Retry lives on the step because whether repeating is safe depends
+on what the step does.
+
+Everything below the decomposition is the same as for work Alethic planned
+itself: the same employees, the same limits, the same approval gate.
+
 ## Adding an employee
 
 Create `employees/<name>/employee.yaml`. That is the whole change - no class, no
@@ -314,6 +375,17 @@ context - and the router answers from the catalog. Precedence is: requirements
 filter the field, the configured default for that kind of work wins, hints rank
 whatever is left. See [ADR 0003](docs/adr/0003-the-configured-default-model-wins.md).
 
+Prompts are files, versioned by the directory they sit in: `prompts/<name>/v1.md`,
+with `v2.md` next to it when the wording changes rather than replacing it.
+
+```bash
+uv run alethic prompts             # name, current version, and a digest of the text
+```
+
+The digest is the part worth having. A version number says which file a run
+used; the hash says whether that file is still the text it was, which is the
+difference between two runs being comparable and merely looking it.
+
 ## Layout
 
 | Directory | Layer | Rule |
@@ -324,6 +396,7 @@ whatever is left. See [ADR 0003](docs/adr/0003-the-configured-default-model-wins
 | `infrastructure/` | Adapters | Providers, persistence, tools. Depends on `domain/` only. |
 | `employees/` | Declarations | An employee is a definition file, not code. |
 | `prompts/` | Content | Planner and verifier templates, versioned as files. |
+| `workflows/` | Declarations | A predefined process is a file, not code. |
 
 The import rules are enforced by `import-linter` and by
 `tests/unit/test_architecture_boundaries.py`. An `httpx` import inside `domain/`

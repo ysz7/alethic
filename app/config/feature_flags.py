@@ -18,5 +18,5 @@ class FeatureFlags(BaseModel):
     computer_use: bool = False  # Phase 5
     alethic_manager: bool = False  # Phase 7
     memory: bool = True  # Phase 9
-    workflows: bool = False  # Phase 7
+    workflows: bool = True  # Phase 10
     scheduler: bool = False  # Phase 12

@@ -126,7 +126,7 @@ async def test_an_assignment_can_narrow_what_an_employee_may_use() -> None:
     seen: list[list[str]] = []
 
     class Watcher:
-        async def run(self, task, definition_, transcript, *, on_step=None):
+        async def run(self, task, definition_, transcript, *, on_step=None, on_status=None):
             seen.append(sorted(spec.name for spec in registry.list_specs(definition_)))
             from application.employee_runtime.executor import StepOutcome
 

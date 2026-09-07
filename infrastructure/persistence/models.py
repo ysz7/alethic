@@ -27,7 +27,9 @@ from sqlalchemy.types import JSON
 
 from domain.approvals.models import ApprovalState
 from domain.memory.models import MemoryKind, MemoryScope
+from domain.policies.models import ActorKind
 from domain.tasks.task import TaskStatus
+from domain.workflows.definition import WorkflowTrigger
 from domain.workforce.protocols import ObjectiveStatus, PlanStatus
 from infrastructure.persistence import memory_fts
 
@@ -37,6 +39,10 @@ OBJECTIVE_STATUS_VALUES = tuple(status.value for status in ObjectiveStatus)
 PLAN_STATUS_VALUES = tuple(status.value for status in PlanStatus)
 MEMORY_SCOPE_VALUES = tuple(scope.value for scope in MemoryScope)
 MEMORY_KIND_VALUES = tuple(kind.value for kind in MemoryKind)
+ACTOR_KIND_VALUES = tuple(kind.value for kind in ActorKind)
+AUDIT_RESULT_VALUES = ("SUCCESS", "FAILURE", "DENIED")
+WORKFLOW_TRIGGER_VALUES = tuple(trigger.value for trigger in WorkflowTrigger)
+WORKFLOW_STATUS_VALUES = ("RUNNING", "COMPLETED", "FAILED", "CANCELLED")
 
 
 class Base(DeclarativeBase):
@@ -242,6 +248,8 @@ class ApprovalRow(Base):
     state: Mapped[str] = mapped_column(String(16), nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
     requested_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+    #: When the question stops being worth answering. NULL waits forever.
+    expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(nullable=True)
     resolved_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -367,6 +375,78 @@ class MemoryItemRow(Base):
     importance: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
     created_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
     expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+class AuditRow(Base):
+    """One action, who took it and what came of it.
+
+    Separate from `tool_calls` on purpose: that table answers "what did this run
+    cost and how long did it take", and this one answers "who did what here".
+    The two overlap for a successful tool call and diverge exactly where it
+    matters - a denied action has an audit line and no tool call, because the
+    tool never ran, and those are the lines an audit exists for.
+
+    No foreign keys. An audit outlives what it describes; keying it to `tasks`
+    would mean clearing history erases the record of what was done, which is the
+    one thing a record must survive.
+    """
+
+    __tablename__ = "audit_log"
+    __table_args__ = (
+        CheckConstraint(
+            "actor_kind IN ('" + "','".join(ACTOR_KIND_VALUES) + "')",
+            name="ck_audit_log_actor_kind",
+        ),
+        CheckConstraint(
+            "result IN ('" + "','".join(AUDIT_RESULT_VALUES) + "')",
+            name="ck_audit_log_result",
+        ),
+        Index("ix_audit_log_ts", "ts"),
+        Index("ix_audit_log_task", "task_id", "ts"),
+        Index("ix_audit_log_actor", "actor_kind", "actor_id", "ts"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ts: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+    workspace_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    actor_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    task_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    assignment_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    tool: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    result: Mapped[str] = mapped_column(String(16), nullable=False)
+    cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    details: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+
+class WorkflowRunRow(Base):
+    """One execution of a predefined process."""
+
+    __tablename__ = "workflow_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "trigger IN ('" + "','".join(WORKFLOW_TRIGGER_VALUES) + "')",
+            name="ck_workflow_runs_trigger",
+        ),
+        CheckConstraint(
+            "status IN ('" + "','".join(WORKFLOW_STATUS_VALUES) + "')",
+            name="ck_workflow_runs_status",
+        ),
+        Index("ix_workflow_runs_started", "workspace_id", "started_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    workflow: Mapped[str] = mapped_column(String(64), nullable=False)
+    trigger: Mapped[str] = mapped_column(String(16), nullable=False)
+    input: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
 
 # The search index is part of the schema, not of the adapter: a database built
