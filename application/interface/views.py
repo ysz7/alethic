@@ -5,6 +5,11 @@ be read without reading the server. It is a projection, not a serialization
 format: the interface shows what a person needs to judge a run - what it did,
 what it cost, what went wrong - and nothing that only the runtime cares about.
 
+It sits in `application/` rather than in one interface's package because the
+shape is a property of the platform, not of HTTP: a desktop shell, a page and a
+chat bot showing three different summaries of the same run would be three
+answers to a question with one answer.
+
 Two omissions are deliberate. The transcript is not exposed: it is the model's
 working memory, it is large, and a page that renders it becomes a log viewer,
 which is exactly the thing Phase 6 exists to stop the developer reading. And
@@ -17,6 +22,7 @@ from __future__ import annotations
 from typing import Any
 
 from domain.approvals.models import Approval, ApprovalRequest
+from domain.conversations.models import Conversation
 from domain.employees.definition import EmployeeDefinition
 from domain.tasks.task import Task, TaskEvent
 from domain.tools.telemetry import ToolCallRecord
@@ -191,4 +197,35 @@ def plan_view(plan: Plan) -> dict[str, Any]:
             }
             for task in plan.tasks
         ],
+    }
+
+
+# --- Conversations ------------------------------------------------------------
+
+
+def conversation(item: Conversation, *, messages: int = 0) -> dict[str, Any]:
+    return {
+        "id": str(item.id),
+        "title": item.title,
+        "messages": messages,
+        "created_at": item.created_at.isoformat(),
+        "updated_at": item.updated_at.isoformat(),
+    }
+
+
+def message(item: Objective, *, thinking: bool = False) -> dict[str, Any]:
+    """One turn of a conversation: what was asked, and what came back.
+
+    A turn is an objective, so this is the objective summary plus the two things
+    a chat view needs and a history list does not - the answer's text, and
+    whether there is an answer yet. There is no separate message record; see
+    `domain/conversations/models.py` for why one would be a second history of
+    the same work.
+    """
+    answer = item.result
+    return {
+        **objective_summary(item, thinking=thinking),
+        "answer": answer.summary if answer else "",
+        "missing": list(answer.missing) if answer else [],
+        "answered": answer is not None,
     }

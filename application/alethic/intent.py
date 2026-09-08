@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import structlog
 
+from application.alethic.language import DEFAULT_LANGUAGE, instruction
 from application.alethic.workforce import describe
 from application.prompts import render
 from domain.capabilities.models import CapabilityRequirement
@@ -35,8 +36,9 @@ log = structlog.get_logger(__name__)
 class IntentReader:
     """Free text in, `Intent` out."""
 
-    def __init__(self, llm: LLM) -> None:
+    def __init__(self, llm: LLM, *, language: str = DEFAULT_LANGUAGE) -> None:
         self._llm = llm
+        self._language = language
 
     async def read(
         self,
@@ -56,7 +58,13 @@ class IntentReader:
         )
         response = await self._llm.generate(
             LLMRequest(
-                messages=(Message.user(prompt),),
+                messages=(
+                    # Only the `answer` field: the rest of this reading is
+                    # machinery, and a restatement in another language would
+                    # reach the planner rather than the person.
+                    *instruction(self._language, about='the "answer" field'),
+                    Message.user(prompt),
+                ),
                 temperature=0.0,
                 response_format={"type": "json_object"},
             )

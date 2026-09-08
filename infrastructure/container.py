@@ -22,6 +22,7 @@ from domain.capabilities.models import Capability, CapabilityRequirement
 from domain.computer.constraints import ComputerConstraints
 from domain.computer.models import Region
 from domain.computer.protocols import Computer, ScreenReader, StopSignal
+from domain.conversations.repository import ConversationRepository
 from domain.employees.protocols import EmployeeRegistry
 from domain.employees.validation import Issue, check_all
 from domain.llm.models import RoutingHints, TaskKind
@@ -563,6 +564,26 @@ class Container:
         return SqliteAssignmentRepository(self.session_factory)
 
     # --- The manager's own record ---------------------------------------------
+
+    @cached_property
+    def conversation_repository(self) -> ConversationRepository:
+        """The threads an interface groups requests into.
+
+        Built like every other repository and with no flag: a conversation is
+        four columns, and an interface that cannot show what was asked five
+        minutes ago is not a conversational surface.
+        """
+        if self._in_memory:
+            from infrastructure.persistence.conversation_repository import (
+                InMemoryConversationRepository,
+            )
+
+            return InMemoryConversationRepository()
+        from infrastructure.persistence.conversation_repository import (
+            SqliteConversationRepository,
+        )
+
+        return SqliteConversationRepository(self.session_factory)
 
     @cached_property
     def objective_repository(self) -> ObjectiveRepository:

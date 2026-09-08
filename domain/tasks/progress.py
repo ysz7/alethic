@@ -18,6 +18,8 @@ and the answer to "what happened" is still the task row and the tool-call log.
 
 from __future__ import annotations
 
+from asyncio import Queue
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -89,3 +91,24 @@ class NullProgress:
 
     async def emit(self, event: ProgressEvent) -> None:
         return None
+
+
+class ProgressStream(Protocol):
+    """The reading half: what has just been said, and what is said next.
+
+    Separate from `ProgressSink` because the two are held by different people.
+    The runtime is handed a sink and must never be able to read the stream back;
+    an interface is handed a stream and must never be able to announce progress
+    of its own. One adapter implements both, and that is fine - what matters is
+    that neither caller is given the other's half.
+
+    `recent` is bounded and lossy by construction. It exists so a watcher that
+    arrives one second late still sees the first line; it is not the record of
+    what happened, which is the task row and the tool-call log.
+    """
+
+    def recent(self, task_id: UUID) -> list[ProgressEvent]: ...
+
+    def subscribe(self) -> AbstractAsyncContextManager[Queue[ProgressEvent]]:
+        """Everything announced from now on, released on exit."""
+        ...

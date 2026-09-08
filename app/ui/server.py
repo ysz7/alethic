@@ -1,15 +1,12 @@
-"""The local interface: one page, on loopback, with no account behind it.
+"""The HTTP adapter: transport, and deliberately nothing else.
 
 Phase 6's Definition of Done is that a developer uses Alethic without reading logs
-in a terminal. That is a statement about what the page shows, so the endpoints
-here exist to answer four questions and no more: what can I ask for, what is it
-doing right now, what does it need from me, and what happened last time.
-
-Since Phase 7 the first of those has a different answer. The page asks *Alethic* for
-an outcome; the manager decides what tasks that means and who does each. The
-task endpoints stay, because a task is still the unit that runs and the trace is
-still drawn from one - but starting work now means stating a goal, not choosing
-an employee.
+in a terminal. Phase 7 changed what the page asks for - an outcome, not an
+employee. Phase 13 changed where the answer comes from: every route here now
+calls `AlethicService`, the application-level boundary, and this file owns URLs,
+status codes, request bodies and the framing of an event stream. That is the
+whole of its job. A rule that lives here is a rule the desktop shell and a chat
+bot would each have to reimplement, and the three would disagree.
 
 **It binds to 127.0.0.1 and has no authentication.** Those two facts are one
 decision, not two. The interface starts tasks, approves irreversible actions and
@@ -19,16 +16,21 @@ local tool into an unauthenticated remote one, which is why the host is a
 setting that documents itself rather than a command-line flag inviting `0.0.0.0`.
 
 **The trace is pushed, not polled.** Server-sent events, because the traffic is
-one-way - the server describes, the browser draws - and SSE reconnects on its
-own, needs no library, and survives the page being left open while nothing runs.
+one-way - the server describes, the client draws - and SSE reconnects on its
+own, needs no library, and survives a window being left open while nothing runs.
 A websocket would buy a direction nobody uses.
 
 **Approvals are answered here, and the run really is parked.** The tool call
 waits on a future (`WaitingConfirmer`); this hands it the answer. Nothing is
 approved by default, by timeout, or by the page being closed.
 
+**The desktop shell is a client of this, not a second server.** It talks the
+same HTTP and the same SSE a browser does, which is what keeps it an interface
+rather than a fork of the platform - and what makes the browser page and the
+Tauri window two views of one running engine rather than two engines.
+
 The container, the runner and the live runs are per-application, created at
-startup and closed at shutdown, so the browser talking to a dead engine is not a
+startup and closed at shutdown, so a client talking to a dead engine is not a
 state this can be in.
 """
 
@@ -44,18 +46,18 @@ from uuid import UUID
 
 import structlog
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app.config.container import build_container, build_manager, build_task_runner
+from app.config.container import build_container, build_manager, build_service
 from app.config.settings import Settings, get_settings
-from app.ui import views
-from app.ui.runs import Runs
+from application.interface.activity import ActivityEvent
+from application.interface.contracts import InputType, RequestSource, UserRequest
+from application.interface.service import AlethicService, ApprovalsDisabledError
 from application.scheduling.scheduler import Scheduler
-from domain.approvals.models import ApprovalState
 from domain.errors import AlethicError, StorageNotInitializedError
-from domain.tasks.progress import ProgressKind
 from infrastructure.approvals.waiting import WaitingConfirmer
 from infrastructure.container import Container
 
@@ -65,8 +67,23 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 #: How long the event stream waits before sending a comment line. Without it a
 #: proxy or a sleeping laptop can drop an idle connection with nothing to show
-#: for it, and the page would sit silently on a stream that is already dead.
-HEARTBEAT_SECONDS = 15.0
+#: for it, and the client would sit silently on a stream that is already dead.
+HEARTBEAT = ": keep-alive\n\n"
+
+#: The origins a desktop shell talks from. Two kinds, and the second one was
+#: learned the hard way: in development the window loads from a local dev
+#: server, but a *packaged* window serves its page from Tauri's own protocol
+#: and sends `tauri://localhost` as its origin - so a list of loopback URLs
+#: silently blocks every built application while every development run works.
+#:
+#: They are still all local: a custom protocol on this machine and two loopback
+#: ports. Nothing here widens what can reach this server from a network.
+DESKTOP_ORIGINS = (
+    "tauri://localhost",
+    "http://tauri.localhost",
+    "http://localhost:1420",
+    "http://127.0.0.1:1420",
+)
 
 
 class NewTask(BaseModel):
@@ -76,6 +93,16 @@ class NewTask(BaseModel):
 
 class NewObjective(BaseModel):
     request: str = Field(min_length=1)
+    conversation_id: UUID | None = None
+    #: Which interface this arrived from, and what the person actually gave.
+    #: Recorded on the way in and never branched on; see
+    #: `application/interface/contracts.py`.
+    source: RequestSource = RequestSource.WEB
+    input_type: InputType = InputType.TEXT
+
+
+class NewConversation(BaseModel):
+    title: str = ""
 
 
 class Decision(BaseModel):
@@ -105,7 +132,7 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         container = build(resolved)
         # Set before anything can ask: an approval that reached stdin while the
-        # person is looking at a browser is an approval nobody can answer.
+        # person is looking at a window is an approval nobody can answer.
         confirmer = WaitingConfirmer(
             timeout_seconds=resolved.ui_approval_timeout_seconds,
             progress=container.progress,
@@ -116,13 +143,8 @@ def create_app(
         app.state.settings = resolved
         app.state.container = container
         app.state.confirmer = confirmer
-        manager = build_manager(container)
-        app.state.runs = Runs(
-            runner=build_task_runner(container),
-            manager=manager,
-            tasks=container.task_repository,
-            cancellations=container.cancellations,
-            approvals=confirmer,
+        app.state.service = build_service(
+            container, confirmer, history_limit=resolved.ui_history_limit
         )
         # Started on the same loop that serves the requests, for the same
         # reason a task is: one process, one database, and a proactive
@@ -133,7 +155,7 @@ def create_app(
         scheduler_task: asyncio.Task[None] | None = None
         if resolved.scheduler_enabled:
             scheduler = Scheduler(
-                manager=manager,
+                manager=build_manager(container),
                 schedules=container.schedule_repository,
                 events=container.event_log,
                 tick_seconds=resolved.scheduler_tick_seconds,
@@ -155,10 +177,16 @@ def create_app(
                 # through an objective should finish the tick it is in, and the
                 # loop already checks the signal between them.
                 await scheduler_task
-            await app.state.runs.aclose()
+            await app.state.service.aclose()
             await container.aclose()
 
     app = FastAPI(title="Alethic", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(DESKTOP_ORIGINS),
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     _routes(app)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     return app
@@ -172,157 +200,112 @@ def _routes(app: FastAPI) -> None:
     async def index() -> FileResponse:
         return FileResponse(STATIC_DIR / "index.html")
 
+    @app.get("/api/health")
+    async def health(request: Request) -> dict[str, Any]:
+        """Is the engine answering. What a shell polls while it starts one up."""
+        return _service(request).health()
+
     @app.get("/api/employees")
     async def employees(request: Request) -> dict[str, Any]:
-        registry = _container(request).employee_registry
-        return {"employees": [views.employee(d) for d in registry.list()]}
+        return {"employees": _service(request).list_employees()}
 
     @app.get("/api/tasks")
     async def history(request: Request) -> dict[str, Any]:
-        runs = _runs(request)
-        settings: Settings = request.app.state.settings
-        tasks = await _guarded(
-            _container(request).task_repository.list_recent(limit=settings.ui_history_limit)
-        )
-        return {
-            "tasks": [views.task_summary(t, running=runs.is_running(t.id)) for t in tasks]
-        }
+        return {"tasks": await _guarded(_service(request).list_tasks())}
 
     @app.post("/api/tasks", status_code=201)
     async def start(request: Request, body: NewTask) -> dict[str, Any]:
         try:
-            task = await _runs(request).start(body.goal.strip(), body.employee)
+            return await _service(request).start_task(body.goal, body.employee)
         except AlethicError as error:
             # An unknown employee is the user asking for something that does not
             # exist, not a server fault: 400, with the reason said plainly.
             raise HTTPException(status_code=400, detail=str(error)) from error
-        return views.task_summary(task, running=True)
 
     @app.get("/api/tasks/{task_id}")
     async def detail(request: Request, task_id: UUID) -> dict[str, Any]:
-        container = _container(request)
-        task = await _guarded(container.task_repository.get(task_id))
-        if task is None:
-            raise HTTPException(status_code=404, detail=f"Unknown task: {task_id}")
-        names = {d.id: d.name for d in container.employee_registry.list()}
-        return views.task_detail(
-            task,
-            running=_runs(request).is_running(task_id),
-            calls=await _guarded(container.tool_call_log.list_for_task(task_id)),
-            events=await _guarded(container.task_repository.events(task_id)),
-            employee=names.get(task.assigned_employee_id) if task.assigned_employee_id else None,
-        )
+        found = await _guarded(_service(request).get_task(task_id))
+        return _found(found, f"Unknown task: {task_id}")
 
     @app.post("/api/tasks/{task_id}/cancel")
     async def cancel(request: Request, task_id: UUID, body: Cancellation) -> dict[str, Any]:
-        task = await _runs(request).cancel(task_id, body.reason)
-        if task is None:
-            raise HTTPException(status_code=404, detail=f"Unknown task: {task_id}")
-        return views.task_summary(task, running=_runs(request).is_running(task_id))
+        found = await _guarded(_service(request).cancel_task(task_id, body.reason))
+        return _found(found, f"Unknown task: {task_id}")
+
+    # --- Conversations --------------------------------------------------------
+
+    @app.post("/api/conversations", status_code=201)
+    async def open_thread(request: Request, body: NewConversation) -> dict[str, Any]:
+        return await _guarded(_service(request).create_conversation(body.title))
+
+    @app.get("/api/conversations")
+    async def threads(request: Request) -> dict[str, Any]:
+        return {"conversations": await _guarded(_service(request).list_conversations())}
+
+    @app.get("/api/conversations/{conversation_id}")
+    async def thread(request: Request, conversation_id: UUID) -> dict[str, Any]:
+        found = await _guarded(_service(request).get_conversation(conversation_id))
+        return _found(found, f"Unknown conversation: {conversation_id}")
+
+    @app.post("/api/conversations/{conversation_id}/messages", status_code=201)
+    async def say(
+        request: Request, conversation_id: UUID, body: NewObjective
+    ) -> dict[str, Any]:
+        """Say something in a thread. One message is one objective."""
+        return await _ask(request, body, conversation_id=conversation_id)
 
     # --- The manager ----------------------------------------------------------
 
     @app.post("/api/objectives", status_code=201)
     async def ask(request: Request, body: NewObjective) -> dict[str, Any]:
         """State a goal. Alethic decides what it means and who does it."""
-        objective = await _runs(request).ask(body.request.strip())
-        return views.objective_summary(objective, thinking=True)
+        return await _ask(request, body, conversation_id=body.conversation_id)
 
     @app.get("/api/objectives")
     async def objectives(request: Request) -> dict[str, Any]:
-        runs = _runs(request)
-        settings: Settings = request.app.state.settings
-        recent = await _guarded(
-            _container(request).objective_repository.list_recent(
-                limit=settings.ui_history_limit
-            )
-        )
-        return {
-            "objectives": [
-                views.objective_summary(item, thinking=runs.is_thinking(item.id))
-                for item in recent
-            ]
-        }
+        return {"objectives": await _guarded(_service(request).list_objectives())}
 
     @app.get("/api/objectives/{objective_id}")
     async def objective(request: Request, objective_id: UUID) -> dict[str, Any]:
-        container = _container(request)
-        item = await _guarded(container.objective_repository.get(objective_id))
-        if item is None:
-            raise HTTPException(status_code=404, detail=f"Unknown objective: {objective_id}")
-        return views.objective_detail(
-            item,
-            thinking=_runs(request).is_thinking(objective_id),
-            plans=await _guarded(container.plan_repository.for_objective(objective_id)),
-        )
+        found = await _guarded(_service(request).get_objective(objective_id))
+        return _found(found, f"Unknown objective: {objective_id}")
 
     @app.post("/api/objectives/{objective_id}/cancel")
     async def stop_objective(request: Request, objective_id: UUID) -> dict[str, Any]:
-        stopped = await _runs(request).cancel_objective(objective_id)
-        item = await _guarded(_container(request).objective_repository.get(objective_id))
-        if item is None:
-            raise HTTPException(status_code=404, detail=f"Unknown objective: {objective_id}")
-        return {**views.objective_summary(item), "stopped": stopped}
+        found = await _guarded(_service(request).cancel_objective(objective_id))
+        return _found(found, f"Unknown objective: {objective_id}")
 
     @app.get("/api/approvals")
     async def approvals(request: Request) -> dict[str, Any]:
-        """What is waiting, live first.
-
-        The pending rows are read too, because a question left behind by a
-        killed run is still an open decision - it is simply one that no tool
-        call is parked on, and the page says which is which.
-        """
-        confirmer: WaitingConfirmer = request.app.state.confirmer
-        live = {item.id: item for item in confirmer.pending()}
-        stored = await _guarded(_container(request).approval_repository.list_pending())
-        return {
-            "approvals": [views.approval(item, live=True) for item in live.values()]
-            + [
-                views.stored_approval(record)
-                for record in stored
-                if record.id not in live
-            ]
-        }
+        return {"approvals": await _guarded(_service(request).list_approvals())}
 
     @app.post("/api/approvals/{approval_id}")
     async def decide(request: Request, approval_id: UUID, body: Decision) -> dict[str, Any]:
-        state = ApprovalState.APPROVED if body.approved else ApprovalState.REJECTED
-        answered = _runs(request).decide(approval_id, body.approved)
-        if not answered:
-            # Nothing is parked on it here. Record the decision anyway, so a row
-            # from a killed run stops showing up as an open question.
-            service = _container(request).approval_service
-            if service is None:
-                raise HTTPException(
-                    status_code=409, detail="Approvals are switched off in this configuration."
-                )
-            try:
-                await service.resolve(approval_id, state, comment=body.comment)
-            except AlethicError as error:
-                raise HTTPException(status_code=404, detail=str(error)) from error
-        return {"id": str(approval_id), "state": state.value, "live": answered}
+        try:
+            return await _service(request).decide_approval(
+                approval_id, approved=body.approved, comment=body.comment
+            )
+        except ApprovalsDisabledError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        except AlethicError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
 
     @app.get("/api/spend")
     async def spend(request: Request) -> dict[str, Any]:
-        summary = await _guarded(_container(request).llm_call_log.total())
-        return {
-            "calls": summary.calls,
-            "prompt_tokens": summary.prompt_tokens,
-            "output_tokens": summary.output_tokens,
-            "cost_usd": round(summary.cost_usd, 6),
-        }
+        return await _guarded(_service(request).spend())
 
     @app.get("/api/events")
     async def events(
         request: Request, task: UUID | None = None, objective: UUID | None = None
     ) -> StreamingResponse:
-        stream = (
-            _objective_stream(request, objective)
+        service = _service(request)
+        activity = (
+            service.objective_activity(objective)
             if objective is not None
-            else _event_stream(request, task)
+            else service.task_activity(task)
         )
         return StreamingResponse(
-            stream,
+            _sse(request, activity),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
@@ -331,136 +314,52 @@ def _routes(app: FastAPI) -> None:
 # --- The stream ---------------------------------------------------------------
 
 
-async def _event_stream(request: Request, task_id: UUID | None) -> AsyncIterator[str]:
-    """Everything announced from now on, plus the little that came just before.
+async def _sse(
+    request: Request, activity: AsyncIterator[ActivityEvent | None]
+) -> AsyncIterator[str]:
+    """Frame what the application layer is already saying.
 
-    The replay is what makes opening the page mid-run useful rather than
-    confusing; it is bounded by the broadcaster's buffer and is never the record
-    of what happened - that is the task row and the tool-call log.
-
-    A stream watching one task ends when that task does. A finished run has
-    nothing further to say, and a connection held open on one is a connection
-    the page has to be told to ignore; ending it means the browser learns the
-    run is over from the stream itself. The subscription is taken out before the
-    task's state is read, so a run that finishes between the two is reported,
-    not missed. The unfiltered stream - what the page watches for approvals
-    raised by tasks it is not showing - has no such end and stays open.
+    Everything about *what* is streamed - the replay, following an objective
+    across its tasks, ending when the work does - belongs to `Activity`. What is
+    left here is the wire format and the one thing only a transport knows: that
+    a quiet connection needs a keep-alive, and that a client which has gone away
+    should stop the iteration rather than be written to.
     """
-    broadcaster = request.app.state.container.progress
-    async with broadcaster.subscribe() as queue:
-        finished = False
-        if task_id is not None:
-            try:
-                watched = await request.app.state.container.task_repository.get(task_id)
-            except StorageNotInitializedError:
-                # Every other endpoint says so plainly; a stream cannot, and
-                # ending it here would look like a task that had finished.
-                watched = None
-            finished = watched is not None and watched.is_terminal
-            for past in broadcaster.recent(task_id):
-                yield _sse(past.to_dict())
-            if finished:
-                return
-        while True:
-            if await request.is_disconnected():
-                return
-            try:
-                event = await asyncio.wait_for(queue.get(), timeout=HEARTBEAT_SECONDS)
-            except TimeoutError:
-                yield ": keep-alive\n\n"
-                continue
-            if task_id is not None and event.task_id != task_id:
-                continue
-            yield _sse(event.to_dict())
-            if task_id is not None and event.kind is ProgressKind.RESULT:
-                return
-
-
-async def _objective_stream(request: Request, objective_id: UUID) -> AsyncIterator[str]:
-    """One objective's progress, and that of every task it starts.
-
-    Alethic stamps its own events with the objective. Its employees do not - they
-    are running tasks and know nothing about a manager - so the task ids belong
-    to the objective's plan, and this follows them: seeded from whatever plan
-    revisions already exist, and extended whenever Alethic announces a task it has
-    just handed out. That is what makes the trace read as one piece of work
-    rather than as a manager talking to itself.
-
-    It ends when the objective does, for the same reason a task stream ends when
-    its task does.
-    """
-    container = request.app.state.container
-    broadcaster = container.progress
-    async with broadcaster.subscribe() as queue:
-        tracked = await _tasks_of(container, objective_id)
-        item = await _objective_or_none(container, objective_id)
-        finished = item is not None and item.is_terminal
-
-        for past in broadcaster.recent(objective_id):
-            _track(tracked, past)
-            yield _sse(past.to_dict())
-        for task_id in sorted(tracked, key=str):
-            for past in broadcaster.recent(task_id):
-                yield _sse(past.to_dict())
-        if finished:
+    async for event in activity:
+        if await request.is_disconnected():
             return
-
-        while True:
-            if await request.is_disconnected():
-                return
-            try:
-                event = await asyncio.wait_for(queue.get(), timeout=HEARTBEAT_SECONDS)
-            except TimeoutError:
-                yield ": keep-alive\n\n"
-                continue
-            mine = event.objective_id == objective_id
-            if not mine and event.task_id not in tracked:
-                continue
-            if mine:
-                _track(tracked, event)
-            yield _sse(event.to_dict())
-            if mine and event.kind is ProgressKind.RESULT:
-                return
-
-
-def _track(tracked: set[UUID], event) -> None:
-    """Follow a task the manager has just announced it delegated."""
-    raw = event.payload.get("task_id")
-    if raw:
-        tracked.add(UUID(str(raw)))
-    for task in event.payload.get("tasks") or ():
-        if isinstance(task, dict) and task.get("id"):
-            tracked.add(UUID(str(task["id"])))
-
-
-async def _tasks_of(container, objective_id: UUID) -> set[UUID]:
-    try:
-        plans = await container.plan_repository.for_objective(objective_id)
-    except StorageNotInitializedError:
-        return set()
-    return {task.id for plan in plans for task in plan.tasks}
-
-
-async def _objective_or_none(container, objective_id: UUID):
-    try:
-        return await container.objective_repository.get(objective_id)
-    except StorageNotInitializedError:
-        return None
-
-
-def _sse(payload: dict[str, Any]) -> str:
-    return f"data: {json.dumps(payload)}\n\n"
+        yield HEARTBEAT if event is None else f"data: {json.dumps(event.to_dict())}\n\n"
 
 
 # --- Helpers ------------------------------------------------------------------
 
 
-def _container(request: Request):
-    return request.app.state.container
+def _service(request: Request) -> AlethicService:
+    return request.app.state.service
 
 
-def _runs(request: Request) -> Runs:
-    return request.app.state.runs
+def _found(value: dict[str, Any] | None, missing: str) -> dict[str, Any]:
+    if value is None:
+        raise HTTPException(status_code=404, detail=missing)
+    return value
+
+
+async def _ask(
+    request: Request, body: NewObjective, *, conversation_id: UUID | None
+) -> dict[str, Any]:
+    try:
+        return await _guarded(
+            _service(request).submit(
+                UserRequest(
+                    content=body.request,
+                    source=body.source,
+                    input_type=body.input_type,
+                    conversation_id=conversation_id,
+                )
+            )
+        )
+    except AlethicError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 async def _guarded(awaitable):

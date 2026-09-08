@@ -122,16 +122,26 @@ class AlethicManager:
 
     # --- The whole of it ------------------------------------------------------
 
-    async def receive(self, request: str, workspace_id=None) -> Objective:
+    async def receive(self, request: str, workspace_id=None, conversation_id=None) -> Objective:
         """Turn a sentence into a recorded objective, before anything is done.
 
         Written down first, like a task is: a process killed one second later
         still leaves a record of what was asked, and the user's own words are
         kept beside whatever Alethic made of them.
+
+        `conversation_id` is a label carried by the record, nothing more. The
+        manager does not read the thread and does not behave differently inside
+        one: what an earlier request established reaches this one through
+        memory, which is recalled per objective and works the same whether the
+        request arrived from a page, the CLI or a schedule. A manager that
+        branched on the presence of a conversation would be a second way to run
+        work, and the interface it favoured would be the only one that worked
+        properly.
         """
         objective = Objective.create(
             request.strip(),
             **({"workspace_id": workspace_id} if workspace_id is not None else {}),
+            **({"conversation_id": conversation_id} if conversation_id is not None else {}),
         )
         await self._objectives.save(objective)
         log.info("alethic.objective_received", objective_id=str(objective.id))

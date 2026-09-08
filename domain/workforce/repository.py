@@ -42,6 +42,14 @@ class ObjectiveRepository(Protocol):
         """What has been asked for here lately, newest first."""
         ...
 
+    async def for_conversation(self, conversation_id: UUID) -> list[Objective]:
+        """One thread, oldest first - which is the order it was said in.
+
+        The opposite order to `list_recent`, and deliberately: a history list
+        is read from the top, a conversation is read from the beginning.
+        """
+        ...
+
 
 class PlanRepository(Protocol):
     """Plans and their task dependencies, stored together.

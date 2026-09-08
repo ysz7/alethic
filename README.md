@@ -12,12 +12,16 @@ and give Alethic a task.
 
 ## Status
 
-**Phase 10 - Workflow, approvals, policies.** The brake is now a policy layer:
-what a tool does to the world decides what it costs to do it, and an employee's
-declaration can narrow that further. Four employees, not thirty:
+**Phase 13 - Interface layer and the desktop application.** Every surface now
+talks to one application-level boundary, and the desktop window is an adapter
+over it rather than a second copy of the platform. Saying hello to it gets a
+reply, in the language you configured, rather than a plan. Underneath it, Phase 10's
+brake is a policy layer: what a tool does to the world decides what it costs to
+do it, and an employee's declaration can narrow that further. Five employees,
+not thirty:
 `researcher` finds out what is true, `organizer` puts a folder in order,
-`operator` works interfaces that have no API, and `analyst` computes answers
-from data on this machine. Each is a directory under `employees/` with no Python
+`operator` works interfaces that have no API, `analyst` computes answers
+from data on this machine, and `writer` puts the result into words. Each is a directory under `employees/` with no Python
 behind it, and Alethic routes work to them by what they declare they can do.
 
 You state what you want. Alethic works out what that means, decides whether it
@@ -98,6 +102,28 @@ login precisely because nothing off your machine can reach it. See
 
 Everything below still works from the terminal - a machine with no browser must
 not need one.
+
+## The desktop application
+
+```bash
+cd desktop && npm install && npm run tauri dev
+```
+
+A window instead of a tab: a greeting, a field, and what Alethic is doing about
+what you typed. It is an **interface**, not a second copy of the platform - it
+talks the same local HTTP and the same event stream the page does, to the same
+process, with the same database and the same running work. Nothing plans, calls
+a model, drives a browser or approves anything in Rust or TypeScript.
+
+The shell starts `uv run alethic serve` for you unless one is already answering,
+and leaves a runtime it did not start alone when the window closes. Details, the
+environment variables and the frontend's own layout rules are in
+[desktop/README.md](desktop/README.md).
+
+Adding another interface later - a bot, a second window, a remote client - means
+writing an adapter over `application/interface/`, not changing the core. That is
+what the boundary is for:
+[ADR 0014](docs/adr/0014-an-interface-is-an-adapter-over-one-application-boundary.md).
 
 ## Giving one employee a task directly
 
@@ -390,13 +416,14 @@ difference between two runs being comparable and merely looking it.
 
 | Directory | Layer | Rule |
 |---|---|---|
-| `app/` | Interface | The CLI and the local UI. The composition root lives here. |
-| `application/` | Coordination | Orchestration and the one shared employee runtime. Depends on `domain/` only. |
+| `app/` | Transport | The CLI and the HTTP adapter. The composition root lives here. |
+| `application/` | Coordination | Orchestration, the one shared employee runtime, and `interface/` - the boundary every surface talks to. Depends on `domain/` only. |
 | `domain/` | Business logic | Protocols and values. Depends on nothing. |
 | `infrastructure/` | Adapters | Providers, persistence, tools. Depends on `domain/` only. |
 | `employees/` | Declarations | An employee is a definition file, not code. |
 | `prompts/` | Content | Planner and verifier templates, versioned as files. |
 | `workflows/` | Declarations | A predefined process is a file, not code. |
+| `desktop/` | Interface | The Tauri + React window. An adapter over `application/interface/`, with no business logic of its own. |
 
 The import rules are enforced by `import-linter` and by
 `tests/unit/test_architecture_boundaries.py`. An `httpx` import inside `domain/`
@@ -409,6 +436,8 @@ uv run pytest                        # no network, no provider keys needed
 uv run ruff check .
 uv run lint-imports
 uv run python scripts/check_english_only.py
+
+cd desktop && npm test               # the window, against a scripted runtime
 ```
 
 `tests/integration/test_local_provider.py` is the one exception to "no network":

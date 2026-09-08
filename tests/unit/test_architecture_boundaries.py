@@ -119,3 +119,60 @@ def test_no_vendor_is_named_anywhere_in_the_domain() -> None:
         if found:
             offenders[str(path.relative_to(REPO_ROOT))] = found
     assert not offenders, f"vendor names leaked into the domain: {offenders}"
+
+
+def test_the_interface_boundary_owns_no_transport() -> None:
+    """Phase 13: `application/interface/` is a boundary, not a server.
+
+    The moment it imports FastAPI, a socket or a template engine, a second
+    interface stops being an adapter and starts being a fork - and the surface
+    that got there first is the one every other one has to imitate.
+    """
+    transport = {"fastapi", "starlette", "uvicorn", "socket", "http", "websockets"}
+    offenders = {
+        str(path.relative_to(REPO_ROOT)): sorted(imported_roots(path) & transport)
+        for path in sorted((REPO_ROOT / "application" / "interface").rglob("*.py"))
+    }
+    offenders = {path: roots for path, roots in offenders.items() if roots}
+    assert not offenders, f"the interface boundary must not know a transport: {offenders}"
+
+
+def test_the_http_adapter_reaches_the_platform_only_through_the_boundary() -> None:
+    """`app/ui/` is transport. Everything it shows comes from `AlethicService`.
+
+    Checked by what it may reach for: the composition root, its own settings,
+    the boundary's own types, and the confirmer it must construct because who
+    answers an approval is a property of the interface. A repository, the
+    manager or the runtime appearing here would be a route that had started
+    deciding something, and the desktop shell would have no way to reach it.
+    """
+    allowed = {
+        "application.interface",
+        "application.scheduling",
+        "app.config",
+        "app.ui",
+        "domain.errors",
+        "infrastructure.approvals",
+        "infrastructure.container",
+    }
+    offenders: dict[str, list[str]] = {}
+    for path in sorted((REPO_ROOT / "app" / "ui").rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        reached = sorted(
+            {
+                node.module
+                for node in ast.walk(tree)
+                if isinstance(node, ast.ImportFrom)
+                and node.level == 0
+                and node.module
+                and node.module.split(".")[0]
+                in {"application", "domain", "infrastructure", "app"}
+                and not any(
+                    node.module == prefix or node.module.startswith(prefix + ".")
+                    for prefix in allowed
+                )
+            }
+        )
+        if reached:
+            offenders[str(path.relative_to(REPO_ROOT))] = reached
+    assert not offenders, f"the HTTP adapter must go through AlethicService: {offenders}"

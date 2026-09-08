@@ -1,0 +1,365 @@
+/*
+ * Calm, spacious, native-feeling. The window is mostly empty on purpose: the
+ * request is the only thing on it that matters, and every element that is not
+ * the request competes with it.
+ *
+ * It follows the system theme rather than offering a switch. A local
+ * application that looks unlike everything else on the machine reads as a web
+ * page in a frame, which is exactly what this must not feel like.
+ */
+
+:root {
+  --ink: #1b1b1f;
+  --muted: #6c6c78;
+  --line: rgba(0, 0, 0, 0.08);
+  --ground: #fbfbfd;
+  --raised: #ffffff;
+  --accent: #3a3a44;
+  --warn: #9a3d1f;
+  --radius: 14px;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #ececf1;
+    --muted: #9a9aa6;
+    --line: rgba(255, 255, 255, 0.1);
+    --ground: #131316;
+    --raised: #1b1b20;
+    --accent: #d8d8e0;
+    --warn: #e0a189;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.window {
+  display: grid;
+  grid-template-columns: 1fr 232px;
+  height: 100vh;
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 56px 40px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.stage.empty .scroll {
+  justify-content: center;
+}
+
+/* --- The greeting --------------------------------------------------------- */
+
+.greeting {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.greeting h1 {
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  margin: 0 0 6px;
+}
+
+.greeting p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 17px;
+}
+
+/* --- The conversation ----------------------------------------------------- */
+
+.thread {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.turn .asked {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.turn .answer {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.turn .answer p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.turn .answer.failed,
+.turn .answer.escalated {
+  border-color: var(--warn);
+}
+
+.missing {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--warn);
+  font-size: 13px;
+}
+
+.working {
+  margin: 0;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: breathe 1.4s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+/* --- What it is doing ----------------------------------------------------- */
+
+.trail ol {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 14px;
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.trail li {
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  gap: 8px;
+}
+
+.trail .kind {
+  color: var(--accent);
+  flex: none;
+  opacity: 0.75;
+}
+
+.trail .what {
+  overflow-wrap: anywhere;
+}
+
+.trail li.approval .what {
+  color: var(--warn);
+}
+
+/* --- Approvals ------------------------------------------------------------ */
+
+.approval {
+  background: var(--raised);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.approval header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.approval h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 550;
+}
+
+.approval .risk {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--warn);
+}
+
+.approval .why,
+.approval .stale {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.approval dl {
+  margin: 12px 0 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  font-size: 13px;
+}
+
+.approval dl > div {
+  display: contents;
+}
+
+.approval dt {
+  color: var(--muted);
+}
+
+.approval dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.approval footer {
+  margin-top: 16px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* --- The entry field ------------------------------------------------------ */
+
+.entry {
+  padding: 12px 40px 28px;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.composer {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 10px 10px 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.composer textarea {
+  flex: 1;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  max-height: 180px;
+  min-height: 24px;
+  padding: 0;
+}
+
+button {
+  font: inherit;
+  font-size: 13px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  border-radius: 9px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.approve {
+  background: var(--ink);
+  color: var(--ground);
+  border-color: transparent;
+}
+
+/* --- The workforce -------------------------------------------------------- */
+
+.workforce {
+  border-left: 1px solid var(--line);
+  padding: 56px 20px;
+  overflow-y: auto;
+}
+
+.workforce h2 {
+  margin: 0 0 14px;
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.workforce ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.workforce li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.workforce .who {
+  font-size: 14px;
+}
+
+.workforce .what {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.workforce .note {
+  margin-top: 22px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.problem {
+  color: var(--warn);
+}
+
+.waking {
+  color: var(--muted);
+  text-align: center;
+}

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import structlog
 
+from application.alethic.language import DEFAULT_LANGUAGE, instruction
 from application.alethic.supervisor import TaskOutcome
 from application.prompts import render
 from domain.capabilities.models import CapabilityRequirement
@@ -33,8 +34,9 @@ log = structlog.get_logger(__name__)
 class Synthesizer:
     """Turns what the team produced into what the user reads."""
 
-    def __init__(self, llm: LLM) -> None:
+    def __init__(self, llm: LLM, *, language: str = DEFAULT_LANGUAGE) -> None:
         self._llm = llm
+        self._language = language
 
     async def synthesize(
         self,
@@ -51,6 +53,7 @@ class Synthesizer:
         response = await self._llm.generate(
             LLMRequest(
                 messages=(
+                    *instruction(self._language),
                     Message.user(
                         render(
                             "alethic_synthesis",

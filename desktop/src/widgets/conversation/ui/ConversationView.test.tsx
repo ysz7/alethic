@@ -1,0 +1,54 @@
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+
+import type { Message } from "../../../entities/conversation";
+import { ConversationView } from "./ConversationView";
+import { greetingFor } from "./Greeting";
+
+const message: Message = {
+  id: "m1",
+  text: "Sort these files",
+  status: "RUNNING",
+  thinking: true,
+  answer: "",
+  missing: [],
+  answered: false,
+  cost_usd: 0,
+  created_at: "2026-09-08T09:00:00+00:00",
+  finished_at: null,
+};
+
+describe("ConversationView", () => {
+  it("greets when nothing has been asked yet", () => {
+    render(<ConversationView messages={[]} activity={[]} busy={false} />);
+
+    expect(screen.getByText("What would you like me to do?")).toBeInTheDocument();
+  });
+
+  it("greets by the hour", () => {
+    expect(greetingFor(9)).toBe("Good morning.");
+    expect(greetingFor(15)).toBe("Good afternoon.");
+    expect(greetingFor(21)).toBe("Good evening.");
+  });
+
+  it("shows the trail only while something is running", () => {
+    const events = [
+      {
+        task_id: "t1",
+        objective_id: "o1",
+        kind: "TOOL_CALL" as const,
+        message: "files.write",
+        step: 1,
+        payload: {},
+        at: null,
+      },
+    ];
+
+    const idle = render(<ConversationView messages={[message]} activity={events} busy={false} />);
+    expect(idle.queryByText("files.write")).not.toBeInTheDocument();
+    idle.unmount();
+
+    render(<ConversationView messages={[message]} activity={events} busy />);
+    expect(screen.getByText("files.write")).toBeInTheDocument();
+  });
+});

@@ -59,6 +59,11 @@ class Objective:
     acceptance_criteria: tuple[str, ...] = ()
     status: ObjectiveStatus = ObjectiveStatus.RECEIVED
     result: ObjectiveResult | None = None
+    #: The thread this was asked in, when it was asked through an interface
+    #: that keeps one. None is not an error and never will be: the CLI, a
+    #: schedule and an event all state a goal with no conversation around it,
+    #: and an objective is complete without one.
+    conversation_id: UUID | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     finished_at: datetime | None = None
 

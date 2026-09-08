@@ -24,6 +24,9 @@ def _to_row(objective: Objective) -> dict[str, object]:
     return {
         "id": str(objective.id),
         "workspace_id": str(objective.workspace_id),
+        "conversation_id": (
+            str(objective.conversation_id) if objective.conversation_id else None
+        ),
         "text": objective.text,
         "constraints": objective.constraints,
         "acceptance_criteria": list(objective.acceptance_criteria),
@@ -50,6 +53,7 @@ def _to_objective(row: ObjectiveRow) -> Objective:
         id=UUID(row.id),
         text=row.text,
         workspace_id=WorkspaceId(row.workspace_id),
+        conversation_id=UUID(row.conversation_id) if row.conversation_id else None,
         constraints=row.constraints or {},
         acceptance_criteria=tuple(row.acceptance_criteria or ()),
         status=status,
@@ -123,6 +127,15 @@ class SqliteObjectiveRepository:
             )
             return [_to_objective(row) for row in rows]
 
+    async def for_conversation(self, conversation_id: UUID) -> list[Objective]:
+        async with self._session() as session:
+            rows = await session.scalars(
+                select(ObjectiveRow)
+                .where(ObjectiveRow.conversation_id == str(conversation_id))
+                .order_by(ObjectiveRow.created_at, ObjectiveRow.id)
+            )
+            return [_to_objective(row) for row in rows]
+
 
 class InMemoryObjectiveRepository:
     """Implements `domain.workforce.repository.ObjectiveRepository`."""
@@ -142,3 +155,7 @@ class InMemoryObjectiveRepository:
     ) -> list[Objective]:
         newest = sorted(self._objectives.values(), key=lambda o: o.created_at, reverse=True)
         return [deepcopy(o) for o in newest if o.workspace_id == workspace_id][:limit]
+
+    async def for_conversation(self, conversation_id: UUID) -> list[Objective]:
+        thread = [o for o in self._objectives.values() if o.conversation_id == conversation_id]
+        return [deepcopy(o) for o in sorted(thread, key=lambda o: o.created_at)]

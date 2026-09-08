@@ -273,10 +273,14 @@ class ObjectiveRow(Base):
             name="ck_objectives_status",
         ),
         Index("ix_objectives_workspace_created", "workspace_id", "created_at"),
+        Index("ix_objectives_conversation", "conversation_id", "created_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     workspace_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    #: The thread this was asked in, if any. No foreign key: deleting a thread
+    #: must not delete the record of what was done because of it.
+    conversation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     constraints: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     acceptance_criteria: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
@@ -284,6 +288,26 @@ class ObjectiveRow(Base):
     result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+class ConversationRow(Base):
+    """A thread of requests, and nothing else.
+
+    Deliberately without a `messages` table beside it. One user message is one
+    objective, already recorded in full; a second copy of the same history
+    would be the one that goes stale. See migration 012.
+    """
+
+    __tablename__ = "conversations"
+    __table_args__ = (
+        Index("ix_conversations_workspace_updated", "workspace_id", "updated_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    title: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
 
 
 class PlanRow(Base):

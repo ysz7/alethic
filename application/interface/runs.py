@@ -19,6 +19,12 @@ work - reading the request, planning, delegating, checking - takes as long as
 the tasks it starts. So it too goes on the loop and the request returns an
 objective id, which is what the page then watches.
 
+**The approvals it holds are a contract, not an adapter.** It needs to release
+a cancelled run's parked questions, and it takes `ApprovalWaiter` to do it -
+which is what lets this live in the application layer rather than inside one
+interface, where it sat until Phase 13 and where a second interface could not
+reach it.
+
 **Cancelling has two cases, and they are not the same.** A task this process is
 running is asked to stop and stops itself between steps, keeping what it did. A
 task that is *not* running - left behind by a killed process, or never started -
@@ -36,11 +42,11 @@ import structlog
 
 from application.alethic.manager import AlethicManager
 from application.task_runner import TaskRunner
+from domain.approvals.protocols import ApprovalWaiter
 from domain.tasks.cancellation import Cancellations
 from domain.tasks.repository import TaskRepository
 from domain.tasks.task import Task, TaskResult, TaskStatus
 from domain.workforce.protocols import Objective, ObjectiveResult
-from infrastructure.approvals.waiting import WaitingConfirmer
 
 log = structlog.get_logger(__name__)
 
@@ -60,7 +66,7 @@ class Runs:
         manager: AlethicManager,
         tasks: TaskRepository,
         cancellations: Cancellations,
-        approvals: WaitingConfirmer,
+        approvals: ApprovalWaiter,
     ) -> None:
         self._runner = runner
         self._manager = manager
@@ -82,9 +88,9 @@ class Runs:
         run.add_done_callback(lambda _: self._finished(task.id))
         return task
 
-    async def ask(self, request: str) -> Objective:
+    async def ask(self, request: str, *, conversation_id: UUID | None = None) -> Objective:
         """Record the objective, schedule Alethic, and hand the objective back."""
-        objective = await self._manager.receive(request)
+        objective = await self._manager.receive(request, conversation_id=conversation_id)
         work = asyncio.create_task(
             self._manager.handle_objective(objective), name=f"alethic-objective-{objective.id}"
         )

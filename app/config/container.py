@@ -11,6 +11,7 @@ from __future__ import annotations
 from app.config.settings import Settings, get_settings
 from application.alethic.delegation import CapabilityDelegator
 from application.alethic.intent import IntentReader
+from application.alethic.language import DEFAULT_LANGUAGE
 from application.alethic.manager import AlethicManager
 from application.alethic.planner import ObjectivePlanner
 from application.alethic.reconciliation import Reconciler
@@ -23,6 +24,13 @@ from application.employee_runtime.executor import Executor
 from application.employee_runtime.planner import Planner
 from application.employee_runtime.runtime import EmployeeRuntime, RuntimeDependencies
 from application.employee_runtime.verifier import Verifier
+from application.interface.activity import Activity
+from application.interface.runs import Runs
+from application.interface.service import (
+    DEFAULT_LIMIT,
+    AlethicService,
+    ServiceDependencies,
+)
 from application.memory.assembler import ContextAssembler
 from application.memory.consolidation import Consolidator
 from application.memory.distiller import OutcomeDistiller
@@ -31,6 +39,7 @@ from application.memory.workspace import WorkspaceMemory
 from application.task_runner import TaskRunner
 from application.validation.harness import ValidationHarness
 from application.workflows.engine import WorkflowEngine
+from domain.approvals.protocols import ApprovalWaiter
 from domain.employees.definition import EmployeeDefinition
 from infrastructure.container import Container
 
@@ -123,8 +132,13 @@ def build_manager(container: Container) -> AlethicManager:
     """
     registry = container.employee_registry
     _, recorder = build_memory(container)
+    # The one setting the manager needs. Read here rather than inside
+    # `application/`, which is not allowed to know a settings object exists.
+    language = getattr(container.settings, "response_language", DEFAULT_LANGUAGE)
     return AlethicManager(
-        intent=IntentReader(container.llm_for(*IntentReader.routing())),
+        intent=IntentReader(
+            container.llm_for(*IntentReader.routing()), language=language
+        ),
         planner=ObjectivePlanner(container.llm_for(*ObjectivePlanner.routing())),
         supervisor=Supervisor(
             execution=build_task_runner(container),
@@ -134,7 +148,9 @@ def build_manager(container: Container) -> AlethicManager:
             progress=container.progress,
         ),
         verifier=ObjectiveVerifier(container.llm_for(*ObjectiveVerifier.routing())),
-        synthesizer=Synthesizer(container.llm_for(*Synthesizer.routing())),
+        synthesizer=Synthesizer(
+            container.llm_for(*Synthesizer.routing()), language=language
+        ),
         reconciler=Reconciler(container.llm_for(*Reconciler.routing())),
         registry=registry,
         objectives=container.objective_repository,
@@ -158,6 +174,47 @@ def build_task_runner(container: Container) -> TaskRunner:
         registry=container.employee_registry,
         build_runtime=_runtime,
         progress=container.progress,
+    )
+
+
+def build_service(
+    container: Container, waiter: ApprovalWaiter, *, history_limit: int = DEFAULT_LIMIT
+) -> AlethicService:
+    """Assemble the boundary every interface talks to.
+
+    The waiter is passed in rather than read off the container because it is a
+    property of the *interface*, not of the machine: a terminal answers an
+    approval on the call stack that asked, a page answers it from a request
+    arriving later, and whoever built the surface is the only one who knows
+    which. Nothing else here differs between one interface and the next.
+    """
+    return AlethicService(
+        ServiceDependencies(
+            runs=Runs(
+                runner=build_task_runner(container),
+                manager=build_manager(container),
+                tasks=container.task_repository,
+                cancellations=container.cancellations,
+                approvals=waiter,
+            ),
+            activity=Activity(
+                container.progress,
+                tasks=container.task_repository,
+                objectives=container.objective_repository,
+                plans=container.plan_repository,
+            ),
+            conversations=container.conversation_repository,
+            objectives=container.objective_repository,
+            plans=container.plan_repository,
+            tasks=container.task_repository,
+            employees=container.employee_registry,
+            approvals=container.approval_repository,
+            waiter=waiter,
+            tool_calls=container.tool_call_log,
+            llm_calls=container.llm_call_log,
+            approval_service=container.approval_service,
+            history_limit=history_limit,
+        )
     )
 
 

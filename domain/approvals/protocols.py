@@ -56,3 +56,27 @@ class ApprovalRepository(Protocol):
         that is left of the question, and this is what closes it.
         """
         ...
+
+
+class ApprovalWaiter(Protocol):
+    """The other side of a question: who is holding the call while it is asked.
+
+    `ApprovalService` is the asking. This is the answering, and it is a separate
+    contract because it is a property of *this process* - a tool call parked on
+    a future in memory - while the service's record outlives the process
+    entirely. Anything above the adapters needs the second half to release a
+    cancelled run and to answer a click, and needs it without importing the
+    adapter that implements it.
+
+    `decide` returning False is not a failure. It means no call here was parked
+    on that question - a row left by a run that has already died - and the
+    caller records the decision against the store instead.
+    """
+
+    def pending(self, task_id: UUID | None = None) -> list[ApprovalRequest]: ...
+
+    def decide(self, approval_id: UUID, approved: bool) -> bool: ...
+
+    def release(self, task_id: UUID) -> int:
+        """Reject everything this task is waiting on, and say how many."""
+        ...
