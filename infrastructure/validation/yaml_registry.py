@@ -42,6 +42,8 @@ KNOWN_FIELDS = frozenset(
         "inputs",
         "setup",
         "reset",
+        "workspace",
+        "knowledge",
         "expect",
         "regression",
     }
@@ -49,6 +51,7 @@ KNOWN_FIELDS = frozenset(
 KNOWN_EXPECT_FIELDS = frozenset(
     {
         "output_contains",
+        "output_excludes",
         "files_exist",
         "file_contains",
         "tools_denied",
@@ -144,10 +147,35 @@ def _load(path: Path) -> Scenario:
         requires=_requirements(path, raw.get("requires")),
         setup=_files(path, "setup", raw.get("setup")),
         reset=_paths(path, raw.get("reset")),
+        workspace=str(raw.get("workspace", "") or "").strip(),
+        knowledge=_knowledge(path, raw.get("knowledge")),
         inputs=dict(raw.get("inputs") or {}),
         expect=_expectations(path, raw.get("expect")),
         regression=bool(raw.get("regression", False)),
     )
+
+
+def _knowledge(path: Path, raw: Any) -> dict[str, dict[str, str]]:
+    """Documents to add before the request, as workspace -> title -> text.
+
+    Checked as strictly as `setup` is, and for the same reason: a scenario file
+    is a declaration, and a mistyped shape has to be an error at load rather
+    than an empty workspace that quietly makes the run pass.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ConfigurationError(f"{path}: knowledge must be workspace -> title -> text.")
+    found: dict[str, dict[str, str]] = {}
+    for workspace, documents in raw.items():
+        if not isinstance(documents, dict) or not documents:
+            raise ConfigurationError(
+                f"{path}: knowledge['{workspace}'] must be title -> text."
+            )
+        found[str(workspace)] = {
+            str(title): str(text) for title, text in documents.items() if str(text).strip()
+        }
+    return found
 
 
 def _entry(path: Path, raw: dict[str, Any]) -> tuple[Entry, str]:
@@ -242,6 +270,7 @@ def _expectations(path: Path, raw: Any) -> Expectations:
 
     return Expectations(
         output_contains=_strings(path, "output_contains", raw.get("output_contains")),
+        output_excludes=_strings(path, "output_excludes", raw.get("output_excludes")),
         files_exist=_strings(path, "files_exist", raw.get("files_exist")),
         file_contains=_files(path, "file_contains", raw.get("file_contains")),
         tools_denied=_strings(path, "tools_denied", raw.get("tools_denied")),

@@ -17,14 +17,14 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from domain.memory.models import MemoryItem, MemoryKind, MemoryQuery, MemoryScope
-from infrastructure.memory.sqlite import SqliteMemory
+from infrastructure.memory.sql import SqlMemory
 
 NOW = datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
 
 
 @pytest.fixture
-def memory(session_factory: async_sessionmaker[AsyncSession]) -> SqliteMemory:
-    return SqliteMemory(session_factory)
+def memory(session_factory: async_sessionmaker[AsyncSession]) -> SqlMemory:
+    return SqlMemory(session_factory)
 
 
 def item(content: str, **extra) -> MemoryItem:
@@ -33,7 +33,7 @@ def item(content: str, **extra) -> MemoryItem:
     return MemoryItem.create(content, scope=extra.pop("scope"), kind=extra.pop("kind"), **extra)
 
 
-async def test_what_was_remembered_is_found_by_the_words_in_it(memory: SqliteMemory) -> None:
+async def test_what_was_remembered_is_found_by_the_words_in_it(memory: SqlMemory) -> None:
     await memory.remember(item("The quarterly report lives in reports/q3.md"))
     await memory.remember(item("The invoices live in finance/2026"))
 
@@ -46,7 +46,7 @@ async def test_what_was_remembered_is_found_by_the_words_in_it(memory: SqliteMem
 
 
 async def test_prose_with_punctuation_is_a_query_not_a_syntax_error(
-    memory: SqliteMemory,
+    memory: SqlMemory,
 ) -> None:
     """A goal is prose, and FTS5's query language is full of operators.
 
@@ -62,13 +62,13 @@ async def test_prose_with_punctuation_is_a_query_not_a_syntax_error(
     assert len(found) == 1
 
 
-async def test_a_search_that_matches_nothing_returns_nothing(memory: SqliteMemory) -> None:
+async def test_a_search_that_matches_nothing_returns_nothing(memory: SqlMemory) -> None:
     await memory.remember(item("Something entirely unrelated"))
 
     assert await memory.recall(MemoryQuery(text="kangaroo")) == []
 
 
-async def test_rewriting_an_item_rewrites_what_is_searchable(memory: SqliteMemory) -> None:
+async def test_rewriting_an_item_rewrites_what_is_searchable(memory: SqlMemory) -> None:
     """The index is kept in step by triggers, so this is the trigger's test."""
     original = item("The report is in reports/q2.md")
     await memory.remember(original)
@@ -79,7 +79,7 @@ async def test_rewriting_an_item_rewrites_what_is_searchable(memory: SqliteMemor
     assert len(await memory.recall(MemoryQuery(limit=50))) == 1, "one item, not two"
 
 
-async def test_forgetting_removes_it_from_the_index_too(memory: SqliteMemory) -> None:
+async def test_forgetting_removes_it_from_the_index_too(memory: SqlMemory) -> None:
     remembered = item("A thing that will be forgotten")
     await memory.remember(remembered)
 
@@ -88,7 +88,7 @@ async def test_forgetting_removes_it_from_the_index_too(memory: SqliteMemory) ->
 
 
 async def test_an_employee_never_reads_another_employees_private_memory(
-    memory: SqliteMemory,
+    memory: SqlMemory,
 ) -> None:
     """The isolation rule (§9.8), against the store that actually holds rows."""
     mine, theirs = uuid4(), uuid4()
@@ -112,7 +112,7 @@ async def test_an_employee_never_reads_another_employees_private_memory(
     assert [i.content for i in found] == ["Mine: the key is in the vault"]
 
 
-async def test_expiry_is_read_on_recall_and_enforced_on_prune(memory: SqliteMemory) -> None:
+async def test_expiry_is_read_on_recall_and_enforced_on_prune(memory: SqlMemory) -> None:
     await memory.remember(
         item("Yesterday's note", kind=MemoryKind.WORKING, expires_at=NOW - timedelta(hours=1))
     )
@@ -125,7 +125,7 @@ async def test_expiry_is_read_on_recall_and_enforced_on_prune(memory: SqliteMemo
     assert await memory.prune(now=NOW) == 0
 
 
-async def test_what_matters_outranks_what_merely_matched(memory: SqliteMemory) -> None:
+async def test_what_matters_outranks_what_merely_matched(memory: SqlMemory) -> None:
     await memory.remember(
         item("The report is somewhere", importance=0.2, created_at=NOW - timedelta(days=90))
     )
@@ -142,18 +142,18 @@ async def test_what_matters_outranks_what_merely_matched(memory: SqliteMemory) -
 async def test_memory_survives_the_process_that_wrote_it(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    await SqliteMemory(session_factory).remember(item("Written by the first process"))
+    await SqlMemory(session_factory).remember(item("Written by the first process"))
 
     # A second adapter over the same file is the closest a test gets to a
     # restart, which is the point of memory in the first place.
-    found = await SqliteMemory(session_factory).recall(MemoryQuery(text="first process"))
+    found = await SqlMemory(session_factory).recall(MemoryQuery(text="first process"))
 
     assert len(found) == 1
     assert found[0].created_at.tzinfo is not None
 
 
 async def test_metadata_and_importance_come_back_as_they_went_in(
-    memory: SqliteMemory,
+    memory: SqlMemory,
 ) -> None:
     stored = item("With provenance", metadata={"employee": "organizer"}, importance=0.75)
     await memory.remember(stored)

@@ -19,13 +19,13 @@ from datetime import UTC, datetime, time
 from uuid import UUID
 
 from sqlalchemy import delete, select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from domain.errors import StorageError, StorageNotInitializedError
 from domain.scheduling.models import Event, Recurrence, Schedule
 from domain.workspace.models import DEFAULT_WORKSPACE_ID, WorkspaceId
+from infrastructure.persistence.dialect import upsert
 from infrastructure.persistence.models import EventRow, ScheduleRow
 from infrastructure.persistence.session import session_scope
 
@@ -90,7 +90,7 @@ class _SqliteBase:
             raise StorageError(message) from error
 
 
-class SqliteScheduleRepository(_SqliteBase):
+class SqlScheduleRepository(_SqliteBase):
     """Implements `domain.scheduling.protocols.ScheduleRepository`."""
 
     async def save(self, schedule: Schedule) -> None:
@@ -118,7 +118,7 @@ class SqliteScheduleRepository(_SqliteBase):
             "created_at": _naive(schedule.created_at),
         }
         async with self._session() as session:
-            statement = sqlite_insert(ScheduleRow).values(**values)
+            statement = upsert(session, ScheduleRow).values(**values)
             await session.execute(
                 statement.on_conflict_do_update(
                     index_elements=[ScheduleRow.id],
@@ -164,7 +164,7 @@ class SqliteScheduleRepository(_SqliteBase):
             return bool(result.rowcount)
 
 
-class SqliteEventLog(_SqliteBase):
+class SqlEventLog(_SqliteBase):
     """Implements `domain.scheduling.protocols.EventLog`."""
 
     async def record(self, event: Event) -> None:

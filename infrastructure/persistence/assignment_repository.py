@@ -8,7 +8,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -18,6 +17,7 @@ from domain.policies.models import ActorKind
 from domain.tasks.task import TaskResult
 from domain.workforce.assignment import AssignmentOutcome, SharedContext, TaskAssignment
 from domain.workspace.models import WorkspaceId
+from infrastructure.persistence.dialect import upsert
 from infrastructure.persistence.models import TaskAssignmentRow
 from infrastructure.persistence.session import session_scope
 
@@ -90,7 +90,7 @@ def _to_assignment(row: TaskAssignmentRow) -> TaskAssignment:
     )
 
 
-class SqliteAssignmentRepository:
+class SqlAssignmentRepository:
     """Implements `domain.workforce.repository.AssignmentRepository`."""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -110,7 +110,7 @@ class SqliteAssignmentRepository:
     async def save(self, assignment: TaskAssignment) -> None:
         values = _to_values(assignment)
         async with self._session() as session:
-            statement = sqlite_insert(TaskAssignmentRow).values(**values)
+            statement = upsert(session, TaskAssignmentRow).values(**values)
             await session.execute(
                 statement.on_conflict_do_update(
                     index_elements=[TaskAssignmentRow.id],

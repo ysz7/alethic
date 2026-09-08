@@ -11,6 +11,7 @@ from domain.memory.models import MemoryItem, MemoryKind, MemoryQuery, MemoryScop
 from domain.memory.ranking import decay, expires_at, is_live, score
 from domain.tasks.plan import Observation
 from domain.tasks.task import Task, TaskResult, TaskStatus
+from domain.workspace.models import WorkspaceId
 from infrastructure.memory.in_memory import InMemoryMemory
 from tests.fakes.employees import definition
 from tests.fakes.llm import FakeLLM, reply
@@ -231,9 +232,35 @@ async def test_a_preference_is_stored_one_per_item_and_never_expires() -> None:
         source="the request",
     )
 
-    stored = await memory.recall(MemoryQuery(kinds=frozenset({MemoryKind.SEMANTIC})))
+    stored = await memory.recall(
+        MemoryQuery(
+            kinds=frozenset({MemoryKind.SEMANTIC}),
+            scopes=frozenset({MemoryScope.USER}),
+        )
+    )
     assert len(stored) == 2, "an empty line is not a preference"
     assert all(found.expires_at is None for found in stored)
+    assert not await memory.recall(MemoryQuery(kinds=frozenset({MemoryKind.SEMANTIC}))), (
+        "a preference is about the person, not about the workspace it was said in"
+    )
+
+
+async def test_a_preference_is_read_in_a_workspace_it_was_not_stated_in() -> None:
+    """§15.4: USER scope is above the workspace boundary, on purpose."""
+    memory = InMemoryMemory()
+
+    await MemoryRecorder(memory).record_preferences(
+        ("always answer in Markdown",), workspace_id=WorkspaceId("work")
+    )
+
+    elsewhere = await memory.recall(
+        MemoryQuery(
+            workspace_id=WorkspaceId("personal"),
+            scopes=frozenset({MemoryScope.WORKSPACE, MemoryScope.USER}),
+        )
+    )
+    assert [item.content for item in elsewhere] == ["The user prefers: always answer in Markdown"]
+    assert elsewhere[0].metadata["stated_in"] == "work", "and it says where it was said"
 
 
 async def test_a_step_note_is_private_short_lived_and_tied_to_its_task() -> None:

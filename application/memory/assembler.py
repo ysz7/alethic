@@ -1,12 +1,23 @@
 """What a run is told about what happened before it.
 
-A run's context is three things put together, in this order of trust:
+A run's context is four things put together, in this order of trust:
 
 1. **the goal** - what was asked, unmodified;
 2. **what the delegator passed down** - facts and constraints the manager chose
    deliberately, which are the most recent and the most specific;
-3. **what was recalled** - and it is last, because it is the only part nobody
-   wrote for this task.
+3. **what was recalled** - the platform's own notes about earlier work;
+4. **what was retrieved** - passages of the user's own documents.
+
+The last two are different in kind, which is why they are separate fields rather
+than one list. A recollection is hedged ("you noted last time") because memory
+can be stale; a passage is a *quotation*, and the useful thing about it is which
+document it came from. They meet here and nowhere else, which is what keeps one
+answer to "what does this run know" (ADR 0016).
+
+A retrieved passage is also external content: it was written by somebody who is
+not the user, and an instruction inside it is not an instruction to the
+platform. It is framed with the same helper an integration's results are framed
+with, rather than a second one written for documents (§25).
 
 Recall is scoped, always. The query names the workspace, the plan and the
 employee, and the store answers within those bounds - an employee never reads
@@ -26,6 +37,9 @@ from dataclasses import dataclass
 import structlog
 
 from domain.employees.definition import EmployeeDefinition
+from domain.integrations.untrusted import frame
+from domain.knowledge.models import KnowledgeQuery, Passage
+from domain.knowledge.protocols import Retriever
 from domain.memory.models import MemoryItem, MemoryQuery, MemoryScope
 from domain.memory.protocols import Memory
 from domain.tasks.task import Task
@@ -38,6 +52,10 @@ log = structlog.get_logger(__name__)
 #: costs the same tokens as the best one.
 DEFAULT_LIMIT = 6
 
+#: How many passages of the user's own documents. Smaller than the recall
+#: budget because a passage is a page of text and a recollection is a sentence.
+DEFAULT_KNOWLEDGE_LIMIT = 4
+
 
 @dataclass(frozen=True, slots=True)
 class AssembledContext:
@@ -47,22 +65,48 @@ class AssembledContext:
     facts: tuple[str, ...] = ()
     constraints: tuple[str, ...] = ()
     recalled: tuple[MemoryItem, ...] = ()
+    retrieved: tuple[Passage, ...] = ()
 
     @property
     def is_empty(self) -> bool:
-        return not (self.facts or self.constraints or self.recalled)
+        return not (self.facts or self.constraints or self.recalled or self.retrieved)
 
     def recollections(self) -> tuple[str, ...]:
         """The remembered part, as the lines a prompt shows."""
         return tuple(item.content.strip() for item in self.recalled if item.content.strip())
 
+    def quotations(self) -> tuple[str, ...]:
+        """The retrieved part, framed as what it is: someone else's words.
+
+        Each passage carries its citation, because a quotation whose origin was
+        dropped between the store and the prompt is a recollection - and this is
+        deliberately not one.
+        """
+        return tuple(
+            frame(passage.chunk.content.strip(), origin=passage.citation)
+            for passage in self.retrieved
+            if passage.chunk.content.strip()
+        )
+
 
 class ContextAssembler:
     """Goal, assignment and memory, assembled into one context (§9.6)."""
 
-    def __init__(self, memory: Memory, *, limit: int = DEFAULT_LIMIT) -> None:
+    def __init__(
+        self,
+        memory: Memory | None,
+        *,
+        limit: int = DEFAULT_LIMIT,
+        retriever: Retriever | None = None,
+        knowledge_limit: int = DEFAULT_KNOWLEDGE_LIMIT,
+    ) -> None:
         self._memory = memory
         self._limit = limit
+        # None where knowledge is switched off or nothing was ever added. The
+        # run is then a Phase 14 run, which is the same arrangement memory has:
+        # optional at every level, never a degraded special case.
+        self._retriever = retriever
+        self._knowledge_limit = knowledge_limit
 
     async def assemble(
         self,
@@ -72,23 +116,69 @@ class ContextAssembler:
     ) -> AssembledContext:
         passed = context or SharedContext()
         recalled = await self._recall(task, definition, passed)
+        retrieved = await self._retrieve(task, passed)
         return AssembledContext(
             goal=task.goal,
             facts=passed.facts,
             constraints=passed.constraints,
             recalled=recalled,
+            retrieved=retrieved,
         )
+
+    async def _retrieve(
+        self, task: Task, context: SharedContext
+    ) -> tuple[Passage, ...]:
+        """Passages of the user's own documents that bear on this task.
+
+        Guarded exactly as recall is: knowledge improves a run and is never a
+        precondition for one, so a store that cannot be read costs the run its
+        citations rather than its existence.
+        """
+        if self._retriever is None or self._knowledge_limit <= 0:
+            return ()
+        try:
+            passages = await self._retriever.retrieve(
+                KnowledgeQuery(
+                    text=" ".join((task.goal, *context.facts)),
+                    workspace_id=task.workspace_id,
+                    limit=self._knowledge_limit,
+                )
+            )
+        except Exception as error:
+            log.warning("knowledge.retrieval_failed", task_id=str(task.id), error=str(error))
+            return ()
+        if passages:
+            log.info(
+                "knowledge.retrieved",
+                task_id=str(task.id),
+                passages=len(passages),
+                documents=len({passage.chunk.document_id for passage in passages}),
+            )
+        return tuple(passages)
 
     async def _recall(
         self, task: Task, definition: EmployeeDefinition, context: SharedContext
     ) -> tuple[MemoryItem, ...]:
+        # None where memory is switched off and knowledge is not. The two are
+        # separate capabilities, and a machine that wants its own documents
+        # searched should not have to keep notes about its own runs to get them.
+        if self._memory is None:
+            return ()
         query = MemoryQuery(
             # The goal plus what came with it: an assignment's facts name the
             # subject in words the goal often leaves out.
             text=" ".join((task.goal, *context.facts)),
             workspace_id=task.workspace_id,
+            # Three scopes inside this workspace and one above it: how the
+            # person wants work done is true wherever they are working, and a
+            # run that could not see it would ask them again (§15.4).
             scopes=frozenset(
-                {MemoryScope.WORKSPACE, MemoryScope.PLAN, MemoryScope.EMPLOYEE_PRIVATE}
+                {
+                    MemoryScope.WORKSPACE,
+                    MemoryScope.PLAN,
+                    MemoryScope.EMPLOYEE_PRIVATE,
+                    MemoryScope.USER,
+                }
             ),
             employee_id=definition.id,
             plan_id=task.plan_id,

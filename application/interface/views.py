@@ -26,11 +26,14 @@ from domain.conversations.models import Conversation
 from domain.employees.definition import EmployeeDefinition
 from domain.integrations.models import Integration
 from domain.integrations.specs import spec_for
+from domain.knowledge.models import Document, Passage
+from domain.memory.models import MemoryItem
 from domain.policies.risk import at_least
 from domain.policies.rules import APPROVAL_THRESHOLD
 from domain.tasks.task import Task, TaskEvent
 from domain.tools.telemetry import ToolCallRecord
 from domain.workforce.protocols import Objective, Plan
+from domain.workspace.models import Workspace
 
 
 def task_summary(task: Task, *, running: bool = False) -> dict[str, Any]:
@@ -280,4 +283,92 @@ def message(item: Objective, *, thinking: bool = False) -> dict[str, Any]:
         "answer": answer.summary if answer else "",
         "missing": list(answer.missing) if answer else [],
         "answered": answer is not None,
+    }
+
+
+# --- Workspaces ---------------------------------------------------------------
+
+
+def workspace(
+    item: Workspace, *, active: bool = False, file_root: str = ""
+) -> dict[str, Any]:
+    """One separation of contexts, as an interface sees it.
+
+    `file_root` is passed in rather than read off the record because the record
+    holds only an override: where a workspace's files actually are is a question
+    about this machine, and the process's `WorkspaceContext` is what answers it.
+    """
+    return {
+        "id": str(item.id),
+        "name": item.name,
+        "description": item.description,
+        "file_root": file_root or item.file_root or "",
+        "is_default": item.is_default,
+        "active": active,
+        "created_at": item.created_at.isoformat(),
+    }
+
+
+# --- Knowledge ----------------------------------------------------------------
+
+
+def document(item: Document) -> dict[str, Any]:
+    """One thing the user brought, as an interface sees it.
+
+    `searchable` rather than a rule about which statuses count: whether a
+    document answers questions is the domain's answer, and an interface that
+    derived it from the status string would be the second place that rule lives.
+    """
+    return {
+        "id": str(item.id),
+        "title": item.title,
+        "source": item.source,
+        "media_type": item.media_type,
+        "status": item.status.value,
+        "searchable": item.is_searchable,
+        "chunks": item.chunk_count,
+        "size_bytes": item.size_bytes,
+        "error": item.error,
+        "created_at": item.created_at.isoformat(),
+        "updated_at": item.updated_at.isoformat(),
+    }
+
+
+def passage(item: Passage) -> dict[str, Any]:
+    """A retrieved quotation, with what it came from and how it was found.
+
+    Both halves of the score are shown. A machine with no embedding model
+    retrieves lexically and answers slightly worse, and that should be visible
+    in the interface rather than inferred from disappointing answers.
+    """
+    return {
+        "document_id": str(item.chunk.document_id),
+        "title": item.title,
+        "source": item.source,
+        "content": item.chunk.content,
+        "score": round(item.score, 4),
+        "lexical": round(item.lexical, 4),
+        "semantic": round(item.semantic, 4),
+    }
+
+
+# --- Memory -------------------------------------------------------------------
+
+
+def memory_item(item: MemoryItem) -> dict[str, Any]:
+    """One thing the platform remembers, as an interface shows it.
+
+    The scope is shown because it answers a question a person actually asks:
+    whether something is true of this workspace or of them. Nothing here is
+    derived - the ranking that decided this item came back at all happened in
+    the domain, and re-scoring it for display would be a second opinion.
+    """
+    return {
+        "id": str(item.id),
+        "kind": item.kind.value,
+        "scope": item.scope.value,
+        "content": item.content,
+        "importance": round(item.importance, 3),
+        "created_at": item.created_at.isoformat(),
+        "expires_at": item.expires_at.isoformat() if item.expires_at else "",
     }

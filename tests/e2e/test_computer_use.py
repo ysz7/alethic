@@ -57,7 +57,7 @@ def registry(root: Path, *, screens: bool = True, desktop: bool = False):
     if desktop:
         surfaces.append((FakeComputer(surface=Surface.DESKTOP, focused="Preview"), reader))
     return computer, build_registry(
-        workspace_root=root / "workspace",
+        file_root=root / "workspace",
         search_engine=FakeSearchEngine,
         browser=FakeBrowser,
         code_execution=False,
@@ -212,7 +212,7 @@ async def test_nothing_reaches_the_desktop_without_a_person_saying_yes(
 ) -> None:
     surface = FakeComputer(surface=Surface.DESKTOP, focused="Preview")
     tools = build_registry(
-        workspace_root=tmp_path / "workspace",
+        file_root=tmp_path / "workspace",
         code_execution=False,
         computers=lambda: [(surface, FakeScreenReader())],
     )

@@ -32,6 +32,8 @@ from application.interface.service import (
     AlethicService,
     ServiceDependencies,
 )
+from application.knowledge.service import KnowledgeService
+from application.knowledge.workspace import WorkspaceKnowledge
 from application.memory.assembler import ContextAssembler
 from application.memory.consolidation import Consolidator
 from application.memory.distiller import OutcomeDistiller
@@ -40,10 +42,12 @@ from application.memory.workspace import WorkspaceMemory
 from application.task_runner import TaskRunner
 from application.validation.harness import ValidationHarness
 from application.workflows.engine import WorkflowEngine
+from application.workspaces.service import WorkspaceService
 from domain.approvals.protocols import ApprovalWaiter
 from domain.employees.definition import EmployeeDefinition
 from domain.errors import AlethicError
 from infrastructure.container import Container
+from infrastructure.knowledge.extraction import Extractors
 from infrastructure.mcp.connector import cached_connector, mcp_connector
 
 
@@ -102,16 +106,24 @@ async def load_grants(container: Container) -> None:
 async def prepare(container: Container) -> None:
     """Everything that has to be true before this process does any work.
 
-    Two steps, and the order is the point. The integrations are restored first,
-    because syncing the employees checks their declarations against what this
-    machine offers - and a grant to a service that has not been restored yet
-    reads, correctly but uselessly, as a grant to a service nobody connected.
+    Three steps, and the order is the point.
+
+    The workspaces are declared first, and cost one query: the filesystem tools
+    ask the context for a root on every call and cannot wait on a read, so what
+    exists has to be in it before anything runs. A machine that has never
+    created a second one gets the row migration 014 wrote.
+
+    The integrations are restored next, because syncing the employees checks
+    their declarations against what this machine offers - and a grant to a
+    service that has not been restored yet reads, correctly but uselessly, as a
+    grant to a service nobody connected.
 
     Restoring is guarded the way remembering is: a machine whose integration
     store cannot be read should run the work it was asked for without them,
     with a line in the log saying so. Losing a capability is worse than not
     having it, and losing the whole run over it is worse again.
     """
+    await build_workspaces(container).list()
     integrations = getattr(container, "integrations", None)
     if integrations is not None:
         try:
@@ -122,20 +134,35 @@ async def prepare(container: Container) -> None:
             container.logger.warning("integrations.not_restored", error=str(error))
     await container.sync_employees()
 
+
 def build_memory(
     container: Container,
 ) -> tuple[ContextAssembler | None, MemoryRecorder | None]:
-    """The two halves of memory, or neither.
+    """The two halves of memory, or neither - and the run's context either way.
 
     Neither when memory is switched off, and that is the whole of the difference
     it makes: the runtime takes both as optional, so a machine with memory off
     runs the Phase 8 loop rather than a degraded Phase 9 one.
+
+    The assembler outlives that switch, because since Phase 15 it also carries
+    retrieved documents (ADR 0016), and the two capabilities are separate: a
+    machine that wants its own documents searched should not have to keep notes
+    about its own runs in order to get them.
     """
+    settings = container.settings
     memory = container.memory
     maintenance = container.memory_maintenance
     if memory is None or maintenance is None:
-        return None, None
-    settings = container.settings
+        assembler = (
+            ContextAssembler(
+                None,
+                retriever=container.retriever,
+                knowledge_limit=settings.knowledge_recall_limit,
+            )
+            if container.retriever is not None
+            else None
+        )
+        return assembler, None
     recorder = MemoryRecorder(
         memory,
         distiller=OutcomeDistiller(container.llm_for(*OutcomeDistiller.routing())),
@@ -146,7 +173,15 @@ def build_memory(
             threshold=settings.memory_consolidation_threshold,
         ),
     )
-    return ContextAssembler(memory, limit=settings.memory_recall_limit), recorder
+    return (
+        ContextAssembler(
+            memory,
+            limit=settings.memory_recall_limit,
+            retriever=container.retriever,
+            knowledge_limit=settings.knowledge_recall_limit,
+        ),
+        recorder,
+    )
 
 
 async def build_runtime(container: Container, definition: EmployeeDefinition) -> EmployeeRuntime:
@@ -224,6 +259,11 @@ def build_manager(container: Container) -> AlethicManager:
             if container.memory is not None and recorder is not None
             else None
         ),
+        knowledge=(
+            WorkspaceKnowledge(container.retriever)
+            if container.retriever is not None
+            else None
+        ),
     )
 
 
@@ -237,6 +277,35 @@ def build_task_runner(container: Container) -> TaskRunner:
         registry=container.employee_registry,
         build_runtime=_runtime,
         progress=container.progress,
+        workspaces=container.workspaces,
+    )
+
+
+def build_workspaces(container: Container) -> WorkspaceService:
+    """The records and the switch, which are two halves of one answer.
+
+    The repository says what exists; the context says which one this process is
+    in and where its files are. Neither is useful without the other, so nothing
+    above is handed one of them.
+    """
+    return WorkspaceService(
+        repository=container.workspace_repository, context=container.workspaces
+    )
+
+
+def build_knowledge(container: Container) -> KnowledgeService | None:
+    """The lifecycle of the user's own documents, or None where that is off.
+
+    The extractors are built here rather than in the infrastructure container
+    for no deeper reason than that they are a set: which formats this machine
+    can read is a composition decision, and adding one is adding a class to the
+    tuple.
+    """
+    store = container.knowledge_store
+    if store is None:
+        return None
+    return KnowledgeService(
+        store=store, extractors=Extractors(), embeddings=container.embeddings
     )
 
 
@@ -277,6 +346,10 @@ def build_service(
             llm_calls=container.llm_call_log,
             approval_service=container.approval_service,
             integrations=container.integrations,
+            workspaces=build_workspaces(container),
+            knowledge=build_knowledge(container),
+            retriever=container.retriever,
+            memory=container.memory,
             credentials=(
                 container.credential_store
                 if container.settings.integrations_enabled
@@ -313,7 +386,7 @@ def build_harness(container: Container) -> ValidationHarness:
         scenarios=container.scenario_registry,
         runs=container.validation_runs,
         tasks=container.task_repository,
-        workspace=container.settings.ensure_workspace_dir(),
+        workspace=container.settings.ensure_file_root(),
         available=container.available_requirements(),
         objectives=build_manager(container),
         employees=build_task_runner(container),
@@ -322,4 +395,6 @@ def build_harness(container: Container) -> ValidationHarness:
         audit=container.audit,  # type: ignore[arg-type]
         approvals=container.approval_repository,
         memory=container.memory,
+        knowledge=build_knowledge(container),
+        workspaces=build_workspaces(container),
     )

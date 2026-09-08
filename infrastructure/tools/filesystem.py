@@ -13,6 +13,7 @@ other, so the tools tell the gate which one this is.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from domain.approvals.gate import RiskAssessment
@@ -29,30 +30,44 @@ from infrastructure.tools.base import BaseTool
 DEFAULT_MAX_BYTES = 100_000
 
 
-class Workspace:
-    """The one directory the filesystem tools can see."""
+class FileRoot:
+    """The one directory the filesystem tools can see, asked for per call.
 
-    def __init__(self, root: Path) -> None:
-        self.root = root.expanduser().resolve()
+    A callable rather than a fixed path, because since Phase 15 the root follows
+    the workspace: switching workspace moves what an employee can read, and a
+    root captured when the registry was built would keep the second workspace
+    reading the first one's files. The tools are built once and the answer is
+    resolved at the moment of the call - which is also how the run that is
+    already going keeps the root it started with (`WorkspaceContext.enter`).
+    """
+
+    def __init__(self, root: Path | Callable[[], Path]) -> None:
+        self._root = root if callable(root) else (lambda path=root: path)
+
+    @property
+    def root(self) -> Path:
+        return self._root().expanduser().resolve()
 
     def ensure(self) -> Path:
-        self.root.mkdir(parents=True, exist_ok=True)
-        return self.root
+        root = self.root
+        root.mkdir(parents=True, exist_ok=True)
+        return root
 
     def resolve(self, relative: str) -> Path:
         """Turn a model-supplied path into a real one inside the root, or refuse.
 
         `resolve()` before the check, not after: `notes/../../.ssh/id_rsa` and a
-        symlink pointing out of the workspace both only reveal themselves once
+        symlink pointing out of the root both only reveal themselves once
         the path is made absolute.
         """
         if not relative or not relative.strip():
             raise ToolInputError("A path is required")
-        candidate = (self.root / relative.strip()).expanduser()
+        root = self.ensure()
+        candidate = (root / relative.strip()).expanduser()
         resolved = candidate.resolve()
-        if resolved != self.root and self.root not in resolved.parents:
+        if resolved != root and root not in resolved.parents:
             raise PermissionDeniedError(
-                f"'{relative}' is outside the working directory ({self.root})"
+                f"'{relative}' is outside the working directory ({root})"
             )
         return resolved
 
@@ -64,14 +79,14 @@ class Workspace:
             return str(path)
 
 
-class WorkspaceTool(BaseTool):
-    def __init__(self, spec: ToolSpec, workspace: Workspace) -> None:
+class FileRootTool(BaseTool):
+    def __init__(self, spec: ToolSpec, root: FileRoot) -> None:
         super().__init__(spec)
-        self._workspace = workspace
+        self._root = root
 
 
-class FileListTool(WorkspaceTool):
-    def __init__(self, workspace: Workspace) -> None:
+class FileListTool(FileRootTool):
+    def __init__(self, root: FileRoot) -> None:
         super().__init__(
             ToolSpec.of(
                 "fs.list",
@@ -84,30 +99,30 @@ class FileListTool(WorkspaceTool):
                       required=False, default=False),
                 capabilities=frozenset({Capability.FILE_ACCESS}),
             ),
-            workspace,
+            root,
         )
 
     async def run(
         self, path: str = ".", pattern: str = "*", recursive: bool = False
     ) -> ToolResult:
-        target = self._workspace.resolve(path)
+        target = self._root.resolve(path)
         if not target.is_dir():
             return ToolResult.failure(f"'{path}' is not a directory")
         matches = target.rglob(pattern) if recursive else target.glob(pattern)
         entries = [
             {
-                "path": self._workspace.display(entry),
+                "path": self._root.display(entry),
                 "kind": "directory" if entry.is_dir() else "file",
                 "bytes": entry.stat().st_size if entry.is_file() else None,
             }
             for entry in sorted(matches)
         ]
-        return ToolResult.ok(path=self._workspace.display(target), entries=entries,
+        return ToolResult.ok(path=self._root.display(target), entries=entries,
                              count=len(entries))
 
 
-class FileReadTool(WorkspaceTool):
-    def __init__(self, workspace: Workspace, *, max_bytes: int = DEFAULT_MAX_BYTES) -> None:
+class FileReadTool(FileRootTool):
+    def __init__(self, root: FileRoot, *, max_bytes: int = DEFAULT_MAX_BYTES) -> None:
         super().__init__(
             ToolSpec.of(
                 "fs.read",
@@ -117,12 +132,12 @@ class FileReadTool(WorkspaceTool):
                       "a file too large to read at once.", required=False, default=0),
                 capabilities=frozenset({Capability.FILE_ACCESS}),
             ),
-            workspace,
+            root,
         )
         self._max_bytes = max_bytes
 
     async def run(self, path: str, offset: int = 0) -> ToolResult:
-        target = self._workspace.resolve(path)
+        target = self._root.resolve(path)
         if not target.is_file():
             return ToolResult.failure(f"'{path}' is not a file")
         size = target.stat().st_size
@@ -132,7 +147,7 @@ class FileReadTool(WorkspaceTool):
         # Replacing undecodable bytes rather than failing: a stray byte in a log
         # file should not stop an employee from reading the rest of it.
         return ToolResult.ok(
-            path=self._workspace.display(target),
+            path=self._root.display(target),
             content=chunk.decode("utf-8", errors="replace"),
             bytes_read=len(chunk),
             total_bytes=size,
@@ -140,10 +155,10 @@ class FileReadTool(WorkspaceTool):
         )
 
 
-class FileWriteTool(WorkspaceTool):
+class FileWriteTool(FileRootTool):
     """Implements `domain.tools.protocols.Tool` and `RiskAssessor`."""
 
-    def __init__(self, workspace: Workspace) -> None:
+    def __init__(self, root: FileRoot) -> None:
         super().__init__(
             ToolSpec.of(
                 "fs.write",
@@ -154,37 +169,37 @@ class FileWriteTool(WorkspaceTool):
                 effect=Effect.WRITE,
                 capabilities=frozenset({Capability.FILE_ACCESS}),
             ),
-            workspace,
+            root,
         )
 
     def assess(self, input_data: dict[str, object]) -> RiskAssessment | None:
         try:
-            target = self._workspace.resolve(str(input_data.get("path", "")))
+            target = self._root.resolve(str(input_data.get("path", "")))
         except (ToolInputError, PermissionDeniedError):
             # Refused paths never reach execution; the gate has nothing to ask.
             return RiskAssessment(RiskLevel.LOW, "")
         if target.exists():
             return RiskAssessment(
-                RiskLevel.HIGH, f"Overwrite the existing file {self._workspace.display(target)}"
+                RiskLevel.HIGH, f"Overwrite the existing file {self._root.display(target)}"
             )
         return RiskAssessment(RiskLevel.LOW, "")
 
     async def run(self, path: str, content: str) -> ToolResult:
-        target = self._workspace.resolve(path)
+        target = self._root.resolve(path)
         target.parent.mkdir(parents=True, exist_ok=True)
         existed = target.exists()
         target.write_text(content, encoding="utf-8")
         return ToolResult.ok(
-            path=self._workspace.display(target),
+            path=self._root.display(target),
             bytes_written=len(content.encode("utf-8")),
             overwritten=existed,
         )
 
 
-class FileMoveTool(WorkspaceTool):
+class FileMoveTool(FileRootTool):
     """Implements `domain.tools.protocols.Tool` and `RiskAssessor`."""
 
-    def __init__(self, workspace: Workspace) -> None:
+    def __init__(self, root: FileRoot) -> None:
         super().__init__(
             ToolSpec.of(
                 "fs.move",
@@ -196,38 +211,38 @@ class FileMoveTool(WorkspaceTool):
                 effect=Effect.WRITE,
                 capabilities=frozenset({Capability.FILE_ACCESS}),
             ),
-            workspace,
+            root,
         )
 
     def assess(self, input_data: dict[str, object]) -> RiskAssessment | None:
         try:
-            source = self._workspace.resolve(str(input_data.get("source", "")))
+            source = self._root.resolve(str(input_data.get("source", "")))
             destination = self._destination(source, str(input_data.get("destination", "")))
         except (ToolInputError, PermissionDeniedError):
             return RiskAssessment(RiskLevel.LOW, "")
         if destination.exists():
             return RiskAssessment(
                 RiskLevel.HIGH,
-                f"Replace the existing file {self._workspace.display(destination)}",
+                f"Replace the existing file {self._root.display(destination)}",
             )
-        # A move inside the workspace is undone by another move, so sorting a
+        # A move inside the root is undone by another move, so sorting a
         # folder full of documents does not ask a question per document.
         return RiskAssessment(RiskLevel.LOW, "")
 
     def _destination(self, source: Path, raw: str) -> Path:
-        target = self._workspace.resolve(raw)
+        target = self._root.resolve(raw)
         if raw.strip().endswith("/") or target.is_dir():
             return target / source.name
         return target
 
     async def run(self, source: str, destination: str) -> ToolResult:
-        origin = self._workspace.resolve(source)
+        origin = self._root.resolve(source)
         if not origin.exists():
             return ToolResult.failure(f"'{source}' does not exist")
         target = self._destination(origin, destination)
         target.parent.mkdir(parents=True, exist_ok=True)
         origin.rename(target)
         return ToolResult.ok(
-            source=self._workspace.display(origin),
-            destination=self._workspace.display(target),
+            source=self._root.display(origin),
+            destination=self._root.display(target),
         )

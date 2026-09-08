@@ -16,7 +16,7 @@ from domain.validation.failures import FailureKind
 from domain.validation.reliability import Verdict, reliability_of
 from domain.validation.run import RunStatus, ValidationRun
 from infrastructure.persistence.validation_run_repository import (
-    SqliteValidationRunRepository,
+    SqlValidationRunRepository,
 )
 
 
@@ -31,7 +31,7 @@ def run(scenario: str = "sort-a-folder", **extra) -> ValidationRun:
 async def test_a_run_survives_the_process_that_recorded_it(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    runs = SqliteValidationRunRepository(session_factory)
+    runs = SqlValidationRunRepository(session_factory)
     recorded = run(
         failure=FailureKind.NONE,
         summary="Five files filed, index written.",
@@ -60,7 +60,7 @@ async def test_a_note_a_person_added_is_kept(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     """The one field no model writes, and usually the only one worth reading."""
-    runs = SqliteValidationRunRepository(session_factory)
+    runs = SqlValidationRunRepository(session_factory)
     recorded = run(status=RunStatus.FAILED, failure=FailureKind.MODEL)
     await runs.save(recorded)
     await runs.save(recorded.with_note("It wrote a closing message instead of the file."))
@@ -73,7 +73,7 @@ async def test_a_note_a_person_added_is_kept(
 async def test_the_history_of_one_scenario_reads_back_as_a_verdict(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    runs = SqliteValidationRunRepository(session_factory)
+    runs = SqlValidationRunRepository(session_factory)
     now = datetime.now(UTC)
     for index, status in enumerate(
         (RunStatus.FAILED, RunStatus.PASSED, RunStatus.PASSED)
@@ -105,7 +105,7 @@ async def test_a_run_recorded_under_a_category_this_build_forgot_is_still_eviden
 ) -> None:
     """Reading is lenient on purpose: losing history to a rename would be the
     storage layer editing the record of what happened."""
-    runs = SqliteValidationRunRepository(session_factory)
+    runs = SqlValidationRunRepository(session_factory)
     await runs.save(run(status=RunStatus.FAILED, failure=FailureKind.TOOL))
     async with session_factory() as session:
         from sqlalchemy import text

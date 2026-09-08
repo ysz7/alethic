@@ -19,19 +19,19 @@ from domain.conversations.models import Conversation
 from domain.workforce.protocols import Objective, ObjectiveResult, ObjectiveStatus
 from infrastructure.persistence.conversation_repository import (
     InMemoryConversationRepository,
-    SqliteConversationRepository,
+    SqlConversationRepository,
 )
-from infrastructure.persistence.objective_repository import SqliteObjectiveRepository
+from infrastructure.persistence.objective_repository import SqlObjectiveRepository
 
 
 @pytest.fixture
 def repository(session_factory: async_sessionmaker[AsyncSession]):
-    return SqliteConversationRepository(session_factory)
+    return SqlConversationRepository(session_factory)
 
 
 @pytest.fixture
 def objectives(session_factory: async_sessionmaker[AsyncSession]):
-    return SqliteObjectiveRepository(session_factory)
+    return SqlObjectiveRepository(session_factory)
 
 
 async def test_a_thread_survives_the_process_that_opened_it(repository) -> None:

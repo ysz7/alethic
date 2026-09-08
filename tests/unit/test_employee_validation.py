@@ -49,7 +49,7 @@ def test_the_shipped_workforce_is_consistent_with_the_tools_it_ships_with() -> N
     from infrastructure.tools.builtin import build_registry
 
     root = Path(__file__).resolve().parents[2]
-    registry = build_registry(workspace_root=root / "employees")  # nothing is written
+    registry = build_registry(file_root=root / "employees")  # nothing is written
     from domain.policies.models import ActorKind, SimpleActor
 
     everything = SimpleActor("test", ActorKind.SYSTEM, frozenset({"*"}))

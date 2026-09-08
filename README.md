@@ -12,10 +12,18 @@ and give Alethic a task.
 
 ## Status
 
-**Phase 14 - Integrations.** Alethic can be given services it did not ship
-with: an MCP server is added in Settings, its capabilities become ordinary tools,
-and what each one is allowed to do is decided on this machine rather than by the
-server. Before it, **Phase 13 - Interface layer and the desktop application.** Every surface now
+**Phase 15 - Knowledge, memory and workspaces.** Work and personal are two
+workspaces now rather than one heap: each has its own files, its own documents
+and its own history, and switching moves what the employees can see. You can
+give Alethic something to read - a contract, a specification, minutes - and it is
+quoted back with its source rather than half-remembered; a question whose answer
+is in another workspace's document gets "I do not know", which is the point.
+Everything can live in PostgreSQL instead of the SQLite file, and moving there
+copies, verifies row by row, and only then offers to erase what it came from.
+Before it, **Phase 14 - Integrations:** Alethic can be given services it did not
+ship with, an MCP server is added in Settings, its capabilities become ordinary
+tools, and what each one is allowed to do is decided on this machine rather than
+by the server. Before that, **Phase 13 - Interface layer and the desktop application.** Every surface now
 talks to one application-level boundary, and the desktop window is an adapter
 over it rather than a second copy of the platform. Saying hello to it gets a
 reply, in the language you configured, rather than a plan. Underneath it, Phase 10's
@@ -80,6 +88,42 @@ missing, rather than a confident summary of eleven things you asked twenty of.
 Nothing in Alethic names an employee. Add a directory under `employees/` and it is
 offered on the next run; that is enforced by a test that reads the directory.
 See [ADR 0007](docs/adr/0007-the-manager-decides-and-never-executes.md).
+
+## Workspaces and documents
+
+```bash
+uv run alethic workspaces                  # what exists here, and where you are
+uv run alethic workspace-new "Client A"    # its own files, documents and history
+uv run alethic workspace-use client-a
+uv run alethic document-add ~/policies/delivery.md
+uv run alethic documents
+```
+
+A workspace is a boundary rather than a label. Switching moves the one directory
+the file tools can see, so isolation does not stop at the moment an employee
+opens a file, and a run already going keeps the workspace it started in.
+
+A document is not a memory. What the platform noticed about its own work decays
+and expires; what you brought does not, and it is quoted with its source instead
+of recalled as a lead. Search is by meaning as well as by words, and the model
+that does the embedding runs on this machine by default - what is being embedded
+is the contents of your documents. See
+[ADR 0016](docs/adr/0016-a-document-is-not-a-memory.md).
+
+## Where everything is kept
+
+```bash
+uv run alethic storage                     # backend, and how much is in it
+uv run alethic storage-migrate --to postgresql://localhost/alethic
+uv run alethic storage-migrate --to postgresql://localhost/alethic --erase
+```
+
+SQLite by default: one file, no server between `clone` and `run`. PostgreSQL -
+including Supabase, which is the same thing with a different connection string -
+is a setting rather than a rewrite. Moving is three separate steps in one safe
+order: copy, verify row by row against the destination, and only then, when you
+ask for it and confirm what will be destroyed, erase the source. See
+[ADR 0017](docs/adr/0017-storage-is-a-setting-and-moving-is-copy-verify-erase.md).
 
 ## The interface
 

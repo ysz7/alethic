@@ -152,6 +152,11 @@ def test_the_http_adapter_reaches_the_platform_only_through_the_boundary() -> No
         "app.config",
         "app.ui",
         "domain.errors",
+        # Value types, on the same footing as the errors: a route has to be able
+        # to say which workspace a request belongs to, and turning a path
+        # segment into one is transport work. Neither module holds a rule, which
+        # is what makes it safe to name here.
+        "domain.workspace",
         "infrastructure.approvals",
         "infrastructure.container",
     }

@@ -9,7 +9,7 @@ import pytest
 from domain.tools.telemetry import ToolCallRecord
 from infrastructure.persistence.tool_call_repository import (
     InMemoryToolCallLog,
-    SqliteToolCallLog,
+    SqlToolCallLog,
 )
 
 
@@ -17,7 +17,7 @@ from infrastructure.persistence.tool_call_repository import (
 def call_log(request: pytest.FixtureRequest):
     if request.param == "in_memory":
         return InMemoryToolCallLog()
-    return SqliteToolCallLog(request.getfixturevalue("session_factory"))
+    return SqlToolCallLog(request.getfixturevalue("session_factory"))
 
 
 def call(tool: str = "fs.read", *, task_id=None, success: bool = True) -> ToolCallRecord:

@@ -38,7 +38,7 @@ def settings_for(tmp_path: Path) -> Settings:
     return Settings(
         data_dir=tmp_path,
         database_url=f"sqlite+aiosqlite:///{tmp_path / 'alethic.db'}",
-        workspace_dir=tmp_path / "workspace",
+        file_root=tmp_path / "workspace",
         employees_dir=REPO_ROOT / "employees",
         ui_approval_timeout_seconds=5.0,
         log_format="console",

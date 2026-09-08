@@ -37,6 +37,15 @@ SCOPES = ("WORKSPACE", "PLAN", "EMPLOYEE_PRIVATE")
 KINDS = ("WORKING", "EPISODIC", "SEMANTIC", "PROCEDURAL")
 
 
+def _sqlite() -> bool:
+    """Which backend this migration is running against.
+
+    Asked rather than configured: the schema is the same on both, and what is
+    not is the text index - FTS5 with triggers on one, a GIN index over
+    `to_tsvector` on the other (ADR 0017).
+    """
+    return op.get_context().dialect.name == "sqlite"
+
 def upgrade() -> None:
     op.create_table(
         "memory_items",
@@ -63,12 +72,12 @@ def upgrade() -> None:
     op.create_index(
         "ix_memory_items_employee", "memory_items", ["employee_id", "kind", "created_at"]
     )
-    for statement in memory_fts.CREATE:
+    for statement in memory_fts.CREATE if _sqlite() else memory_fts.CREATE_POSTGRES:
         op.execute(statement)
 
 
 def downgrade() -> None:
-    for statement in memory_fts.DROP:
+    for statement in memory_fts.DROP if _sqlite() else memory_fts.DROP_POSTGRES:
         op.execute(statement)
     op.drop_index("ix_memory_items_employee", table_name="memory_items")
     op.drop_index("ix_memory_items_scope", table_name="memory_items")

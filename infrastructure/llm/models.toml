@@ -31,6 +31,26 @@ input_cost_per_1k_usd = 0.015
 output_cost_per_1k_usd = 0.075
 quality = 1.0
 
+# Turning text into a vector, for retrieval over the user's own documents.
+#
+# Local by default even in the hosted catalog, and that is deliberate: what is
+# embedded here is the contents of documents somebody put on this machine, one
+# call per passage, and there is no reason to send them anywhere. It also costs
+# nothing and needs no key, so `alethic documents` works on a machine that has
+# never configured a provider.
+#
+# Needs `ollama pull nomic-embed-text`. Without it, retrieval falls back to the
+# text index alone and says so in the log rather than failing the run.
+[models.embedding]
+provider = "local"
+model = "nomic-embed-text"
+capabilities = ["EMBEDDING"]
+context_tokens = 8192
+input_cost_per_1k_usd = 0.0
+output_cost_per_1k_usd = 0.0
+quality = 0.5
+dimensions = 768
+
 # Which entry each kind of work reaches for first.
 [defaults]
 planning = "balanced"
@@ -39,3 +59,4 @@ verification = "fast"
 synthesis = "balanced"
 extraction = "fast"
 conversation = "balanced"
+embedding = "embedding"

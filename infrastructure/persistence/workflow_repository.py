@@ -9,7 +9,6 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -17,6 +16,7 @@ from domain.errors import StorageError, StorageNotInitializedError
 from domain.workflows.definition import WorkflowTrigger
 from domain.workflows.run import RunStatus, StepOutcome, WorkflowRun
 from domain.workspace.models import DEFAULT_WORKSPACE_ID, WorkspaceId
+from infrastructure.persistence.dialect import upsert
 from infrastructure.persistence.models import WorkflowRunRow
 from infrastructure.persistence.session import session_scope
 
@@ -68,7 +68,7 @@ def _to_run(row: WorkflowRunRow) -> WorkflowRun:
     )
 
 
-class SqliteWorkflowRunRepository:
+class SqlWorkflowRunRepository:
     """Implements `domain.workflows.run.WorkflowRunRepository`."""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -88,7 +88,7 @@ class SqliteWorkflowRunRepository:
     async def save(self, run: WorkflowRun) -> None:
         values = _to_values(run)
         async with self._session() as session:
-            statement = sqlite_insert(WorkflowRunRow).values(**values)
+            statement = upsert(session, WorkflowRunRow).values(**values)
             await session.execute(
                 statement.on_conflict_do_update(
                     index_elements=[WorkflowRunRow.id],

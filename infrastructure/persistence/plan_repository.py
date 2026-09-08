@@ -28,7 +28,6 @@ from dataclasses import replace
 from uuid import UUID
 
 from sqlalchemy import delete, select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -36,12 +35,13 @@ from domain.errors import StorageError, StorageNotInitializedError
 from domain.tasks.repository import TaskRepository
 from domain.workforce.protocols import Plan, PlanStatus
 from domain.workspace.models import WorkspaceId
+from infrastructure.persistence.dialect import upsert
 from infrastructure.persistence.mappers import row_to_task
 from infrastructure.persistence.models import PlanRow, PlanTaskDependencyRow, TaskRow
 from infrastructure.persistence.session import session_scope
 
 
-class SqlitePlanRepository:
+class SqlPlanRepository:
     """Implements `domain.workforce.repository.PlanRepository`."""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -70,7 +70,7 @@ class SqlitePlanRepository:
             "rationale": plan.rationale,
         }
         async with self._session() as session:
-            statement = sqlite_insert(PlanRow).values(**values)
+            statement = upsert(session, PlanRow).values(**values)
             await session.execute(
                 statement.on_conflict_do_update(
                     index_elements=[PlanRow.id],

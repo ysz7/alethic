@@ -51,3 +51,16 @@ DROP = (
 
 #: Everything needed to make an existing `memory_items` searchable, in order.
 CREATE = (CREATE_INDEX, *CREATE_TRIGGERS)
+
+
+#: The same capability on PostgreSQL, which has no FTS5 and needs none: a GIN
+#: index over `to_tsvector` answers the same question, is kept current by the
+#: database rather than by triggers, and is queried by the adapter's other
+#: branch. Written here beside the SQLite version so the two cannot drift into
+#: being about different columns (ADR 0017).
+CREATE_POSTGRES = (
+    "CREATE INDEX IF NOT EXISTS ix_memory_items_text ON memory_items "
+    "USING GIN (to_tsvector('simple', content))",
+)
+
+DROP_POSTGRES = ("DROP INDEX IF EXISTS ix_memory_items_text",)

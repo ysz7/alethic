@@ -52,7 +52,7 @@ def settings_for(tmp_path: Path) -> Settings:
     return Settings(
         data_dir=tmp_path,
         database_url=f"sqlite+aiosqlite:///{tmp_path / 'alethic.db'}",
-        workspace_dir=tmp_path / "workspace",
+        file_root=tmp_path / "workspace",
         employees_dir=REPO_ROOT / "employees",
         ui_approval_timeout_seconds=5.0,
         log_format="console",
@@ -321,11 +321,11 @@ def test_cancelling_a_task_left_behind_by_an_earlier_process(tmp_path: Path) -> 
 
     from domain.tasks.task import Task, TaskStatus
     from infrastructure.persistence.session import create_session_factory
-    from infrastructure.persistence.task_repository import SqliteTaskRepository
+    from infrastructure.persistence.task_repository import SqlTaskRepository
 
     async def _leave_behind() -> str:
         engine = create_engine(settings.resolved_database_url)
-        repository = SqliteTaskRepository(create_session_factory(engine))
+        repository = SqlTaskRepository(create_session_factory(engine))
         task = Task.create("Interrupted last time")
         await repository.save(task)
         running, event = task.transition_to(TaskStatus.RUNNING)

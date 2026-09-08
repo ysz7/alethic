@@ -15,13 +15,23 @@ to the task that wrote it and is not read from another.
 
 from __future__ import annotations
 
-from domain.memory.models import MemoryItem, MemoryKind, MemoryQuery, MemoryScope
+from domain.memory.models import (
+    WORKSPACE_BOUND,
+    MemoryItem,
+    MemoryKind,
+    MemoryQuery,
+    MemoryScope,
+)
 from domain.memory.ranking import is_live
 
 
 def visible(item: MemoryItem, query: MemoryQuery) -> bool:
     """Whether this item may be returned for this query."""
-    if item.workspace_id != query.workspace_id:
+    # Two scopes are above the workspace: what the *person* prefers and what is
+    # true of this *installation*. Both were stated in some workspace and
+    # neither is about it, so the row keeps that as provenance and the boundary
+    # does not apply. Everything else is inside one.
+    if item.scope in WORKSPACE_BOUND and item.workspace_id != query.workspace_id:
         return False
     if item.scope not in query.scopes:
         return False

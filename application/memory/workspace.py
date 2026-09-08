@@ -48,7 +48,7 @@ class WorkspaceMemory:
                 MemoryQuery(
                     text=request,
                     workspace_id=workspace_id,
-                    scopes=frozenset({MemoryScope.WORKSPACE}),
+                    scopes=frozenset({MemoryScope.WORKSPACE, MemoryScope.USER}),
                     # Preferences and what became of past work. Not WORKING:
                     # another run's half-finished notes are noise here.
                     kinds=frozenset({MemoryKind.SEMANTIC, MemoryKind.EPISODIC}),

@@ -40,6 +40,19 @@ const TOOLS = [
 function scriptedRuntime({ available = true } = {}) {
   const state = {
     integrations: [] as Record<string, unknown>[],
+    workspaces: [
+      {
+        id: "default",
+        name: "Default",
+        description: "",
+        file_root: "/tmp/default",
+        is_default: true,
+        active: true,
+        created_at: "2026-09-08T09:00:00+00:00",
+      },
+    ] as Record<string, unknown>[],
+    documents: [] as Record<string, unknown>[],
+    memory: [] as Record<string, unknown>[],
     posted: [] as { path: string; body: unknown }[],
     deleted: [] as string[],
   };
@@ -89,6 +102,11 @@ function scriptedRuntime({ available = true } = {}) {
     if (path === "/api/integrations") {
       return json({ available, integrations: state.integrations });
     }
+    if (path === "/api/workspaces") return json({ workspaces: state.workspaces });
+    if (path === "/api/documents") {
+      return json({ available: true, documents: state.documents });
+    }
+    if (path.startsWith("/api/memory")) return json({ items: state.memory });
     return json({});
   });
 
@@ -228,6 +246,10 @@ describe("Settings → Integrations", () => {
     );
     show(failing);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("no schema yet");
+    // Every section on this screen reads the runtime, so a database with no
+    // schema is reported by each of them. What is asserted is the words, not
+    // how many places say them.
+    const said = await screen.findAllByRole("alert");
+    expect(said[0]).toHaveTextContent("no schema yet");
   });
 });

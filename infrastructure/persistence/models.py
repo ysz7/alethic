@@ -18,6 +18,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -28,13 +29,14 @@ from sqlalchemy.types import JSON
 
 from domain.approvals.models import ApprovalState
 from domain.integrations.models import IntegrationKind, IntegrationStatus
+from domain.knowledge.models import DocumentStatus
 from domain.memory.models import MemoryKind, MemoryScope
 from domain.policies.models import ActorKind
 from domain.tasks.task import TaskStatus
 from domain.validation.run import RunStatus as ValidationStatus
 from domain.workflows.definition import WorkflowTrigger
 from domain.workforce.protocols import ObjectiveStatus, PlanStatus
-from infrastructure.persistence import memory_fts
+from infrastructure.persistence import knowledge_fts, memory_fts
 
 TASK_STATUS_VALUES = tuple(status.value for status in TaskStatus)
 APPROVAL_STATE_VALUES = tuple(state.value for state in ApprovalState)
@@ -49,6 +51,7 @@ WORKFLOW_STATUS_VALUES = ("RUNNING", "COMPLETED", "FAILED", "CANCELLED")
 VALIDATION_STATUS_VALUES = tuple(status.value for status in ValidationStatus)
 INTEGRATION_KIND_VALUES = tuple(kind.value for kind in IntegrationKind)
 INTEGRATION_STATUS_VALUES = tuple(status.value for status in IntegrationStatus)
+DOCUMENT_STATUS_VALUES = tuple(status.value for status in DocumentStatus)
 
 
 class Base(DeclarativeBase):
@@ -576,6 +579,27 @@ class EventRow(Base):
     consumed_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
 
+class WorkspaceRow(Base):
+    """The table the `workspace_id` column has been pointing at since 001.
+
+    No foreign keys point here. Every other table already carries the column as
+    a plain string, and turning thirteen of them into children of this row would
+    mean that deleting a workspace either cascades through the whole history or
+    is refused by the database - both of which are decisions for the application
+    to make out loud rather than for the schema to make silently.
+    """
+
+    __tablename__ = "workspaces"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    file_root: Mapped[str | None] = mapped_column(Text, nullable=True)
+    settings: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+
+
 class IntegrationRow(Base):
     """An external service the user connected.
 
@@ -624,11 +648,88 @@ class IntegrationRow(Base):
     created_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
 
+class DocumentRow(Base):
+    """Something the user brought: a contract, a specification, minutes.
+
+    Deliberately not a `memory_items` row with a different kind. Memory decays
+    and is pruned by age; a document the user uploaded does not stop being true
+    because nobody opened it for a fortnight, and the maintenance that keeps
+    memory bounded would quietly delete it (ADR 0016).
+
+    `checksum` is of the extracted text rather than of the file, so re-adding a
+    document that has not changed updates one record instead of making a second
+    copy that answers the same queries twice.
+    """
+
+    __tablename__ = "documents"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN " + str(DOCUMENT_STATUS_VALUES), name="ck_documents_status"
+        ),
+        Index("ix_documents_workspace", "workspace_id", "created_at"),
+        Index("ix_documents_checksum", "workspace_id", "checksum"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    media_type: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="PENDING")
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    meta: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+
+
+class ChunkRow(Base):
+    """A passage of a document, with the model that embedded it beside it.
+
+    `embedding_model` and `embedding_dimension` are the two columns that make a
+    change of embedding model answerable instead of a guess: vectors written by
+    another model are not comparable with a query's, and a name that matches
+    while the length does not is exactly the case where comparing anyway
+    produces a number rather than an error (ADR 0016).
+
+    The vector is bytes - float32, in order - rather than JSON. It is read for
+    every query and never read by a person, and a text encoding of a thousand
+    floats is four times the file for no benefit. A store that has a vector type
+    of its own uses it; this is the local one.
+
+    The foreign key onto `documents` is the one place in this schema a cascade
+    is right: a chunk is part of its document, not a record about it, and a
+    chunk whose document is gone is unreachable text that still answers queries.
+    """
+
+    __tablename__ = "chunks"
+    __table_args__ = (
+        UniqueConstraint("document_id", "ordinal", name="uq_chunks_ordinal"),
+        Index("ix_chunks_document", "document_id", "ordinal"),
+        Index("ix_chunks_workspace", "workspace_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    document_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    embedding_model: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    embedding_dimension: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    meta: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+
+
 # The search index is part of the schema, not of the adapter: a database built
 # by `create_all` - which is what the test suite does - has to be searchable the
 # same way the migrated one is, or the tests exercise a different backend than
 # the product ships.
-for _statement in memory_fts.CREATE:
+for _statement in (*memory_fts.CREATE, *knowledge_fts.CREATE):
     event.listen(
         Base.metadata,
         "after_create",

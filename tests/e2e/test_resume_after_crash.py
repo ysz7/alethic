@@ -21,7 +21,7 @@ from domain.llm.models import ToolCallRequest
 from domain.tasks.task import Task, TaskStatus
 from infrastructure.persistence.models import Base
 from infrastructure.persistence.session import create_engine, create_session_factory
-from infrastructure.persistence.task_repository import SqliteTaskRepository
+from infrastructure.persistence.task_repository import SqlTaskRepository
 from infrastructure.tools.registry import InMemoryToolRegistry
 from tests.fakes.employees import definition
 from tests.fakes.llm import FakeLLM, reply, tool_reply
@@ -33,7 +33,7 @@ PASS = reply('{"passed": true, "reason": "complete"}')
 EMPLOYEE = definition(tools=frozenset({"fs.read"}))
 
 
-def build_runtime(llm: FakeLLM, tasks: SqliteTaskRepository) -> EmployeeRuntime:
+def build_runtime(llm: FakeLLM, tasks: SqlTaskRepository) -> EmployeeRuntime:
     """A fresh runtime, as a restarted process would build."""
     registry = InMemoryToolRegistry([FakeTool("fs.read", description="Read a file")])
     return EmployeeRuntime(
@@ -57,7 +57,7 @@ async def test_a_task_killed_mid_run_continues_from_its_last_step(tmp_path: Path
     engine = create_engine(database_url)
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
-    tasks = SqliteTaskRepository(create_session_factory(engine))
+    tasks = SqlTaskRepository(create_session_factory(engine))
 
     task = Task.create("Read a.txt and tell me what is in it")
     await tasks.save(task)
@@ -76,7 +76,7 @@ async def test_a_task_killed_mid_run_continues_from_its_last_step(tmp_path: Path
 
     # --- What survived the crash ---------------------------------------------
     engine = create_engine(database_url)
-    tasks = SqliteTaskRepository(create_session_factory(engine))
+    tasks = SqlTaskRepository(create_session_factory(engine))
 
     interrupted = await tasks.get(task.id)
     assert interrupted.status is TaskStatus.RUNNING
@@ -116,7 +116,7 @@ async def test_resuming_does_not_pay_for_the_work_again(tmp_path: Path) -> None:
     engine = create_engine(database_url)
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
-    tasks = SqliteTaskRepository(create_session_factory(engine))
+    tasks = SqlTaskRepository(create_session_factory(engine))
 
     task = Task.create("Read a.txt")
     await tasks.save(task)
@@ -131,7 +131,7 @@ async def test_resuming_does_not_pay_for_the_work_again(tmp_path: Path) -> None:
     await engine.dispose()
 
     engine = create_engine(database_url)
-    tasks = SqliteTaskRepository(create_session_factory(engine))
+    tasks = SqlTaskRepository(create_session_factory(engine))
     interrupted = await tasks.get(task.id)
 
     # What the first process spent is carried into the second, so a task that

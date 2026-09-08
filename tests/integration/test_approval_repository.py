@@ -11,18 +11,18 @@ from domain.policies.models import RiskLevel
 from domain.tasks.task import Task
 from infrastructure.persistence.approval_repository import (
     InMemoryApprovalRepository,
-    SqliteApprovalRepository,
+    SqlApprovalRepository,
 )
-from infrastructure.persistence.task_repository import SqliteTaskRepository
+from infrastructure.persistence.task_repository import SqlTaskRepository
 
 
 @pytest.fixture
-async def repository(request: pytest.FixtureRequest, sqlite_repository: SqliteTaskRepository):
+async def repository(request: pytest.FixtureRequest, sqlite_repository: SqlTaskRepository):
     """SQLite only for the parts that need a real task row behind the foreign key."""
-    return SqliteApprovalRepository(request.getfixturevalue("session_factory"))
+    return SqlApprovalRepository(request.getfixturevalue("session_factory"))
 
 
-async def stored_task(tasks: SqliteTaskRepository) -> Task:
+async def stored_task(tasks: SqlTaskRepository) -> Task:
     task = Task.create("Tidy the folder")
     await tasks.save(task)
     return task

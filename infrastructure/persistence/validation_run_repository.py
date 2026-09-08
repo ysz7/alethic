@@ -9,7 +9,6 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -18,6 +17,7 @@ from domain.validation.evidence import Metrics
 from domain.validation.failures import FailureKind
 from domain.validation.run import RunStatus, ValidationRun
 from domain.workspace.models import DEFAULT_WORKSPACE_ID, WorkspaceId
+from infrastructure.persistence.dialect import upsert
 from infrastructure.persistence.models import ValidationRunRow
 from infrastructure.persistence.session import session_scope
 
@@ -68,7 +68,7 @@ def _failure(value: str) -> FailureKind:
         return FailureKind.UNKNOWN
 
 
-class SqliteValidationRunRepository:
+class SqlValidationRunRepository:
     """Implements `domain.validation.run.ValidationRunRepository`."""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -88,7 +88,7 @@ class SqliteValidationRunRepository:
     async def save(self, run: ValidationRun) -> None:
         values = _to_values(run)
         async with self._session() as session:
-            statement = sqlite_insert(ValidationRunRow).values(**values)
+            statement = upsert(session, ValidationRunRow).values(**values)
             await session.execute(
                 statement.on_conflict_do_update(
                     index_elements=[ValidationRunRow.id],

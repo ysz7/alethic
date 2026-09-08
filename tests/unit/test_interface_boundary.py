@@ -36,6 +36,7 @@ from domain.llm.telemetry import SpendSummary
 from domain.tasks.progress import ProgressEvent, ProgressKind
 from domain.tasks.task import Task, TaskResult, TaskStatus
 from domain.workforce.protocols import Objective, ObjectiveResult, ObjectiveStatus
+from domain.workspace.models import WorkspaceId
 from infrastructure.persistence.conversation_repository import InMemoryConversationRepository
 from infrastructure.persistence.in_memory_task_repository import InMemoryTaskRepository
 from infrastructure.persistence.objective_repository import InMemoryObjectiveRepository
@@ -53,11 +54,15 @@ class RecordingManager:
     def __init__(self, objectives: InMemoryObjectiveRepository) -> None:
         self._objectives = objectives
         self.received: list[tuple[str, UUID | None]] = []
+        self.workspaces: list[str | None] = []
 
     async def receive(self, request: str, workspace_id=None, conversation_id=None) -> Objective:
         self.received.append((request, conversation_id))
+        self.workspaces.append(str(workspace_id) if workspace_id else None)
         objective = Objective.create(
-            request, **({"conversation_id": conversation_id} if conversation_id else {})
+            request,
+            **({"workspace_id": workspace_id} if workspace_id else {}),
+            **({"conversation_id": conversation_id} if conversation_id else {}),
         )
         await self._objectives.save(objective)
         return objective
@@ -239,6 +244,25 @@ async def test_the_same_sentence_from_two_interfaces_becomes_the_same_objective(
 
     asked = [text for text, _ in parts["manager"].received]
     assert asked == ["What do my notes say?"] * 3
+
+
+async def test_the_workspace_a_request_names_reaches_the_objective() -> None:
+    """The defect Phase 15 was written knowing about (§15.2).
+
+    `UserRequest.workspace_id` was declared at the boundary in Phase 13 and
+    dropped in `Runs.ask`. With one workspace nothing showed it; with two,
+    switching would have looked like it worked and would not have been.
+    """
+    service, parts = build()
+
+    await service.submit(
+        UserRequest(content="Sort the invoices", workspace_id=WorkspaceId("work"))
+    )
+
+    assert parts["manager"].workspaces == ["work"]
+    stored = await parts["objectives"].list_recent(WorkspaceId("work"))
+    assert [item.workspace_id for item in stored] == ["work"]
+    assert await parts["objectives"].list_recent() == [], "and not in the other one"
 
 
 async def test_an_empty_request_is_refused_before_anything_is_recorded() -> None:

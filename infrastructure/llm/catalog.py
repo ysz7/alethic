@@ -30,6 +30,11 @@ class ModelEntry:
     #: Rough, hand-maintained quality ranking used to break ties. It is a
     #: preference order, not a benchmark.
     quality: float = 0.5
+    #: How many numbers this model's vectors have. Nothing but an embedding
+    #: entry sets it, and it is here rather than discovered because a store
+    #: full of vectors of one size has to be able to say so before a query is
+    #: made rather than after it returns a wrong answer (ADR 0016).
+    dimensions: int = 0
 
     def cost_of(self, prompt_tokens: int, output_tokens: int) -> float:
         return (
@@ -73,6 +78,7 @@ class ModelCatalog:
                         input_cost_per_1k_usd=float(spec.get("input_cost_per_1k_usd", 0.0)),
                         output_cost_per_1k_usd=float(spec.get("output_cost_per_1k_usd", 0.0)),
                         quality=float(spec.get("quality", 0.5)),
+                        dimensions=int(spec.get("dimensions", 0)),
                     )
                 )
             except (KeyError, ValueError) as error:

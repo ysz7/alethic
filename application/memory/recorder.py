@@ -17,7 +17,7 @@ answering a question a later run actually asks.
   tools actually reached the work. It is private because it is about how *this*
   employee works, and telling another employee would be advice from someone
   else's machine.
-* **How the user wants things done** (SEMANTIC, workspace) - the standing
+* **How the user wants things done** (SEMANTIC, user) - the standing
   preferences Alethic read out of a request, and *only* those. These are the
   memories with no expiry, because a preference does not stop being true on a
   timer - which is exactly why what goes in here has to be a preference. A
@@ -190,6 +190,12 @@ class MemoryRecorder:
         Whether something *is* a standing preference is decided when the request
         is read, not here - see `prompts/alethic_intent/v1.md`. This writes what it
         is given, which is why what it is given matters so much.
+
+        Written at USER scope since Phase 15: a preference is about the person,
+        not about the context they happened to state it in, and one that had to
+        be re-stated per workspace would be re-stated in none of them. The
+        workspace it was said in is kept as provenance, so narrowing one to a
+        single context later is an edit rather than a migration.
         """
         for preference in preferences:
             stated = trim(str(preference), 300)
@@ -198,13 +204,16 @@ class MemoryRecorder:
             await self.remember(
                 MemoryItem.create(
                     f"The user prefers: {stated}",
-                    scope=MemoryScope.WORKSPACE,
+                    scope=MemoryScope.USER,
                     kind=MemoryKind.SEMANTIC,
                     workspace_id=workspace_id,
                     # No expiry: a preference is superseded by another
                     # preference, not by time passing.
                     importance=0.8,
-                    metadata={"source": trim(source, 200)},
+                    metadata={
+                        "source": trim(source, 200),
+                        "stated_in": str(workspace_id),
+                    },
                 )
             )
 

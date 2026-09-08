@@ -11,9 +11,9 @@ from domain.tasks.task import Task, TaskResult
 from domain.workforce.assignment import AssignmentOutcome, SharedContext, TaskAssignment
 from infrastructure.persistence.assignment_repository import (
     InMemoryAssignmentRepository,
-    SqliteAssignmentRepository,
+    SqlAssignmentRepository,
 )
-from infrastructure.persistence.employee_repository import SqliteEmployeeRepository
+from infrastructure.persistence.employee_repository import SqlEmployeeRepository
 from tests.fakes.employees import definition
 
 EMPLOYEE = definition()
@@ -24,19 +24,19 @@ async def repository(request: pytest.FixtureRequest, session_factory):
     if request.param == "in_memory":
         return InMemoryAssignmentRepository()
     # SQLite enforces the foreign keys, so the employee has to exist first.
-    await SqliteEmployeeRepository(session_factory).sync([EMPLOYEE])
-    return SqliteAssignmentRepository(session_factory)
+    await SqlEmployeeRepository(session_factory).sync([EMPLOYEE])
+    return SqlAssignmentRepository(session_factory)
 
 
 @pytest.fixture
 async def task(request: pytest.FixtureRequest, session_factory) -> Task:
     from dataclasses import replace
 
-    from infrastructure.persistence.task_repository import SqliteTaskRepository
+    from infrastructure.persistence.task_repository import SqlTaskRepository
 
     created = replace(Task.create("Explain WAL mode"), assigned_employee_id=EMPLOYEE.id)
     if request.param != "in_memory":
-        await SqliteTaskRepository(session_factory).save(created)
+        await SqlTaskRepository(session_factory).save(created)
     return created
 
 

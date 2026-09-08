@@ -1,0 +1,42 @@
+# Phase 15's first half: a question whose answer is in something the user
+# brought, asked where that document actually is. The point is not that a model
+# can read a paragraph - it is that the paragraph reached the run at all, out of
+# a store, chosen by meaning rather than by the words in the question.
+#
+# The question deliberately says "express" and "how quickly", and the document
+# says "next working day" under a heading about delivery speeds. A lexical index
+# alone can still find it here, which is on purpose: what is being measured is
+# the pipeline, and a scenario that only passes with an embedding server would
+# report "this platform cannot answer from documents" on a machine that can.
+
+name: answer-from-a-document
+description: A question answered from a document the user added, with the document cited.
+phase: 15
+tags: [knowledge, manager]
+
+request: >
+  How quickly does express delivery arrive, and what does it cost? Answer from
+  the delivery policy I gave you.
+
+workspace: default
+
+knowledge:
+  default:
+    Delivery policy: |
+      Delivery policy, effective 1 September.
+
+      Orders placed before 14:00 are dispatched the same working day. Orders
+      after that are dispatched the next working day.
+
+      Standard delivery arrives in three to five working days and is included in
+      the price. Express delivery arrives the next working day and costs twelve
+      euros.
+
+      Returns are accepted within thirty days of delivery, provided the goods
+      are unused and in their original packaging.
+
+expect:
+  # The two facts that are only in the document. An answer that has both came
+  # from the passage rather than from the model's own idea of a delivery policy.
+  output_contains: ["next working day", "twelve"]
+  max_steps: 20

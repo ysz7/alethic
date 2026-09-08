@@ -473,6 +473,7 @@ class Executor:
         feedback: tuple[str, ...] = (),
         interfaces: tuple[InterfaceLevel, ...] = (),
         recalled: tuple[str, ...] = (),
+        knowledge: tuple[str, ...] = (),
     ) -> tuple[Message, ...]:
         """The transcript a fresh run starts from."""
         system = system_prompt or f"You are a {definition.role.title}."
@@ -503,6 +504,15 @@ class Executor:
                 "These may be out of date. Use them as leads, and confirm "
                 "anything you rely on:\n"
                 + "\n".join(f"- {line}" for line in recalled)
+            )
+        if knowledge:
+            # A quotation, not a recollection: it comes with its source, it is
+            # not hedged, and it is framed as external content because the user
+            # brought it and did not write it (ADR 0016, §25).
+            instruction += (
+                "\n\n# From the user's own documents\n\n"
+                "Quote and cite these where they answer the task:\n\n"
+                + "\n\n".join(knowledge)
             )
         if feedback:
             instruction += (

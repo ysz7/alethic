@@ -10,14 +10,35 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.config.feature_flags import FeatureFlags
+from domain.workspace.models import DEFAULT_WORKSPACE_ID
 
 
 def _default_data_dir() -> Path:
     return Path.home() / ".alethic"
+
+
+def normalise_database_url(url: str) -> str:
+    """The URL a person pasted, with the driver this platform speaks.
+
+    Everything here is async, so a bare `postgresql://` - what every hosting
+    panel hands out - has to become `postgresql+asyncpg://` before an engine
+    can be built from it. Done once, here, rather than in each of the three
+    places a URL is read.
+    """
+    for prefix in ("postgresql+asyncpg://", "sqlite+aiosqlite://"):
+        if url.startswith(prefix):
+            return url
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+asyncpg://", 1)
+    if url.startswith("sqlite://"):
+        return url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+    return url
 
 
 class Settings(BaseSettings):
@@ -31,6 +52,11 @@ class Settings(BaseSettings):
 
     # --- Paths ---------------------------------------------------------------
     data_dir: Path = Field(default_factory=_default_data_dir)
+    #: Where everything is kept. Unset means the SQLite file in `data_dir`,
+    #: which is what `clone && run` gets and what the packaged window needs.
+    #: A PostgreSQL URL - including a Supabase one, which is the same thing -
+    #: puts the whole store on a server instead. `alethic storage migrate --to`
+    #: is how the data follows.
     database_url: str | None = None
 
     # --- Provider access -----------------------------------------------------
@@ -53,8 +79,23 @@ class Settings(BaseSettings):
 
     # --- Tools ---------------------------------------------------------------
     #: The one directory the filesystem tools can see. Point it at the folder
-    #: the work is actually in; nothing outside it is reachable.
-    workspace_dir: Path | None = None
+    #: the work is actually in; nothing outside it is reachable. It belongs to
+    #: the *first* workspace: another workspace gets its own root, so that
+    #: switching moves what an employee can read (§15.3).
+    #:
+    #: `ALETHIC_WORKSPACE_DIR` still sets it. The name was one of three things
+    #: the word "workspace" meant, and this is the one that lost the argument -
+    #: but an installation that put it in an `.env` file a year ago should not
+    #: silently start writing somewhere else.
+    file_root: Path | None = Field(
+        default=None,
+        validation_alias=AliasChoices("ALETHIC_FILE_ROOT", "ALETHIC_WORKSPACE_DIR"),
+    )
+    #: Which workspace this machine works in when nothing says otherwise. The
+    #: switch itself is a file beside the database, written by
+    #: `alethic workspace use`; this is what an installation that has never
+    #: switched gets, and what a fresh one starts in.
+    active_workspace: str = str(DEFAULT_WORKSPACE_ID)
     #: Where workflow declarations are read from. None means the ones that
     #: ship with the platform, the same way employees are found.
     workflows_dir: Path | None = None
@@ -99,6 +140,13 @@ class Settings(BaseSettings):
     #: this, recall's own ranking filters better than a summary would.
     memory_consolidation_threshold: int = 12
 
+    # --- Knowledge -----------------------------------------------------------
+    #: How many passages of the user's own documents a run is given. Smaller
+    #: than it could be: a passage is a page of text, and four of them beside
+    #: the goal, the assignment and what was recalled is already most of what a
+    #: run can carry.
+    knowledge_recall_limit: int = 4
+
     # --- Local interface -----------------------------------------------------
     #: The loopback address, and not configurable to anything else by accident.
     #: This interface starts tasks and approves irreversible actions; it has no
@@ -127,7 +175,7 @@ class Settings(BaseSettings):
 
     flags: FeatureFlags = Field(default_factory=FeatureFlags)
 
-    @field_validator("data_dir", "workspace_dir", mode="after")
+    @field_validator("data_dir", "file_root", mode="after")
     @classmethod
     def _expand_home(cls, value: Path | None) -> Path | None:
         """`~/.alethic` in the environment means the home directory, not a directory called `~`.
@@ -140,9 +188,24 @@ class Settings(BaseSettings):
         return value if value is None else Path(value).expanduser()
 
     @property
-    def resolved_workspace_dir(self) -> Path:
-        """Where the employees' files live, separate from the platform's own."""
-        return self.workspace_dir or (self.data_dir / "workspace")
+    def resolved_file_root(self) -> Path:
+        """Where the first workspace's files live, separate from the platform's own."""
+        return self.file_root or (self.data_dir / "workspace")
+
+    @property
+    def workspace_roots_dir(self) -> Path:
+        """Where a workspace that was created later keeps its files.
+
+        Beside the database rather than under the first workspace's root: a
+        workspace nested inside another is one the other's employees can read,
+        and an isolation the file tools do not enforce is not one.
+        """
+        return self.data_dir / "workspaces"
+
+    @property
+    def active_workspace_path(self) -> Path:
+        """Which workspace this machine is in. A file, like the stop signal."""
+        return self.data_dir / "ACTIVE_WORKSPACE"
 
     @property
     def browser_tools_enabled(self) -> bool:
@@ -196,12 +259,17 @@ class Settings(BaseSettings):
         return self.flags.memory
 
     @property
+    def knowledge_enabled(self) -> bool:
+        """Off, a run knows only what it was told and what it remembers."""
+        return self.flags.knowledge
+
+    @property
     def stop_file_path(self) -> Path:
         """The brake. `alethic stop` writes it; every screen action reads it."""
         return self.data_dir / "STOP"
 
-    def ensure_workspace_dir(self) -> Path:
-        directory = self.resolved_workspace_dir
+    def ensure_file_root(self) -> Path:
+        directory = self.resolved_file_root
         directory.mkdir(parents=True, exist_ok=True)
         return directory
 
@@ -211,10 +279,30 @@ class Settings(BaseSettings):
 
     @property
     def resolved_database_url(self) -> str:
-        """SQLite by default: one file, no server between `clone` and `run`."""
-        if self.database_url:
-            return self.database_url
-        return f"sqlite+aiosqlite:///{self.db_path}"
+        """Where everything is kept. SQLite by default (§3, ADR 0017).
+
+        One database for all of it - tasks, objectives, plans, memory,
+        knowledge, audit - because two stores can disagree about what happened
+        and would need two migrations instead of one.
+
+        A `postgresql://` or `postgres://` URL is normalised to the async driver
+        rather than refused: that is what a person copies out of Supabase or a
+        hosting panel, and failing on it would be the platform being right about
+        a driver name at the user's expense.
+        """
+        if not self.database_url:
+            return f"sqlite+aiosqlite:///{self.db_path}"
+        return normalise_database_url(self.database_url)
+
+    @property
+    def storage_backend(self) -> str:
+        """Which backend this installation is on, as a word for a person.
+
+        Supabase is not a third answer: it is PostgreSQL with a different
+        connection string, and treating it as its own backend would mean
+        maintaining two implementations of one dialect (ADR 0017).
+        """
+        return "postgres" if "postgres" in self.resolved_database_url else "sqlite"
 
     def ensure_data_dir(self) -> Path:
         self.data_dir.mkdir(parents=True, exist_ok=True)

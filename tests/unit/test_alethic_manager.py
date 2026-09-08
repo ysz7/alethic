@@ -71,6 +71,7 @@ def build(
     plans: InMemoryPlanRepository | None = None,
     max_revisions: int = 2,
     memory=None,
+    knowledge=None,
     reconciler=None,
     #: Supply one to read back what each stage was actually told.
     llm: FakeLLM | None = None,
@@ -106,6 +107,7 @@ def build(
         progress=progress or InMemoryProgressBroadcaster(),
         max_revisions=max_revisions,
         memory=memory,
+        knowledge=knowledge,
     )
     return manager, runs, objective_store, plan_store
 

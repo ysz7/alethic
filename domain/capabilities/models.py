@@ -22,6 +22,9 @@ class Capability(StrEnum):
     WEB_BROWSING = "WEB_BROWSING"
     COMPUTER_USE = "COMPUTER_USE"
     FILE_ACCESS = "FILE_ACCESS"
+    #: Turns text into a vector. Declared like any other capability, so
+    #: retrieval asks the router for a model rather than naming one (ADR 0003).
+    EMBEDDING = "EMBEDDING"
     EMAIL = "EMAIL"
 
 

@@ -18,7 +18,7 @@ from infrastructure.llm.catalog import ModelCatalog
 from infrastructure.llm.factory import ProviderFactory
 from infrastructure.llm.openrouter import OpenRouterProvider
 from infrastructure.llm.router import CapabilityAwareModelRouter
-from infrastructure.persistence.llm_call_repository import SqliteLLMCallLog
+from infrastructure.persistence.llm_call_repository import SqlLLMCallLog
 from infrastructure.persistence.models import Base
 from infrastructure.persistence.session import create_engine, create_session_factory
 
@@ -62,7 +62,7 @@ async def test_a_question_is_routed_answered_priced_and_recorded(tmp_path: Path)
     engine = create_engine(f"sqlite+aiosqlite:///{tmp_path / 'alethic.db'}")
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
-    call_log = SqliteLLMCallLog(create_session_factory(engine))
+    call_log = SqlLLMCallLog(create_session_factory(engine))
 
     catalog = ModelCatalog.from_dict(CATALOG)
     router = CapabilityAwareModelRouter(catalog)

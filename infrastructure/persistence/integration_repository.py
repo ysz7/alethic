@@ -18,7 +18,6 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import delete, select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -32,6 +31,7 @@ from domain.integrations.models import (
 )
 from domain.policies.risk import Effect
 from domain.workspace.models import DEFAULT_WORKSPACE_ID, WorkspaceId
+from infrastructure.persistence.dialect import upsert
 from infrastructure.persistence.models import IntegrationRow
 from infrastructure.persistence.session import session_scope
 
@@ -114,7 +114,7 @@ def _to_integration(row: IntegrationRow) -> Integration:
     )
 
 
-class SqliteIntegrationRepository:
+class SqlIntegrationRepository:
     """Implements `domain.integrations.repository.IntegrationRepository`."""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -136,7 +136,7 @@ class SqliteIntegrationRepository:
     async def save(self, integration: Integration) -> None:
         values = _to_row(integration)
         async with self._session() as session:
-            statement = sqlite_insert(IntegrationRow).values(
+            statement = upsert(session, IntegrationRow).values(
                 **values, created_at=datetime.now(UTC)
             )
             await session.execute(

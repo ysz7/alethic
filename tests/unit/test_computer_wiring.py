@@ -38,13 +38,14 @@ class Stub:
         self.computer_allowed_applications: tuple[str, ...] = ()
         self.computer_allowed_region: str | None = None
         self.computer_max_actions = 50
+        self.active_workspace = "default"
 
     @property
     def resolved_database_url(self) -> str:
         return f"sqlite+aiosqlite:///{self.data_dir / 'alethic.db'}"
 
     @property
-    def resolved_workspace_dir(self) -> Path:
+    def resolved_file_root(self) -> Path:
         return self.data_dir / "workspace"
 
     @property
@@ -64,6 +65,14 @@ class Stub:
         return self._computer
 
     @property
+    def workspace_roots_dir(self) -> Path:
+        return self.data_dir / "workspaces"
+
+    @property
+    def active_workspace_path(self) -> Path:
+        return self.data_dir / "ACTIVE_WORKSPACE"
+
+    @property
     def stop_file_path(self) -> Path:
         return self.data_dir / "STOP"
 
@@ -71,9 +80,9 @@ class Stub:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         return self.data_dir
 
-    def ensure_workspace_dir(self) -> Path:
-        self.resolved_workspace_dir.mkdir(parents=True, exist_ok=True)
-        return self.resolved_workspace_dir
+    def ensure_file_root(self) -> Path:
+        self.resolved_file_root.mkdir(parents=True, exist_ok=True)
+        return self.resolved_file_root
 
 
 def container(settings: Stub) -> Container:

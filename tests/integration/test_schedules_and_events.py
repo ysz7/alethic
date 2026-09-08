@@ -12,8 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from domain.scheduling.models import Event, Recurrence, Schedule
 from infrastructure.persistence.schedule_repository import (
-    SqliteEventLog,
-    SqliteScheduleRepository,
+    SqlEventLog,
+    SqlScheduleRepository,
 )
 
 NOON = datetime(2026, 9, 8, 12, 0, tzinfo=UTC)
@@ -22,7 +22,7 @@ NOON = datetime(2026, 9, 8, 12, 0, tzinfo=UTC)
 async def test_a_schedule_survives_being_written_and_read(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    store = SqliteScheduleRepository(session_factory)
+    store = SqlScheduleRepository(session_factory)
     created = Schedule.create(
         "Summarise the notes",
         name="daily-notes",
@@ -43,7 +43,7 @@ async def test_due_answers_about_a_moment_rather_than_now(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     """`now` is passed in, so the whole of this can be tested without waiting."""
-    store = SqliteScheduleRepository(session_factory)
+    store = SqlScheduleRepository(session_factory)
     hourly = Schedule.create(
         "check", recurrence=Recurrence(every_seconds=3600), next_due_at=NOON
     )
@@ -60,7 +60,7 @@ async def test_due_answers_about_a_moment_rather_than_now(
 async def test_a_paused_schedule_is_never_due(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    store = SqliteScheduleRepository(session_factory)
+    store = SqlScheduleRepository(session_factory)
     created = Schedule.create(
         "check", recurrence=Recurrence(every_seconds=3600), next_due_at=NOON
     )
@@ -73,7 +73,7 @@ async def test_an_event_is_claimed_exactly_once(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     """The check and the write are one statement, so two passes cannot both win."""
-    log = SqliteEventLog(session_factory)
+    log = SqlEventLog(session_factory)
     event = Event.create("inbox.arrived", payload={"from": "someone"})
     await log.record(event)
 
@@ -89,7 +89,7 @@ async def test_an_event_is_claimed_exactly_once(
 async def test_deleting_a_schedule_says_whether_there_was_one(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    store = SqliteScheduleRepository(session_factory)
+    store = SqlScheduleRepository(session_factory)
     created = Schedule.create("check", recurrence=Recurrence(every_seconds=3600))
     await store.save(created)
 

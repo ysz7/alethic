@@ -8,8 +8,10 @@ staying in the manager's own head.
 
 from __future__ import annotations
 
+from application.knowledge.workspace import WorkspaceKnowledge
 from application.memory.recorder import MemoryRecorder
 from application.memory.workspace import WorkspaceMemory
+from domain.knowledge.models import Chunk, Document, Passage
 from domain.memory.models import MemoryItem, MemoryKind, MemoryQuery, MemoryScope
 from domain.workforce.protocols import ObjectiveStatus
 from infrastructure.memory.in_memory import InMemoryMemory
@@ -35,7 +37,12 @@ async def test_a_preference_stated_in_passing_is_kept() -> None:
 
     await manager.handle_objective(await manager.receive("Summarise the notes"))
 
-    kept = await memory.recall(MemoryQuery(kinds=frozenset({MemoryKind.SEMANTIC})))
+    kept = await memory.recall(
+        MemoryQuery(
+            kinds=frozenset({MemoryKind.SEMANTIC}),
+            scopes=frozenset({MemoryScope.WORKSPACE, MemoryScope.USER}),
+        )
+    )
     assert any("Markdown" in item.content for item in kept)
     assert all(item.expires_at is None for item in kept), "a preference has no expiry"
 
@@ -146,3 +153,85 @@ async def test_the_manager_plans_from_what_the_workspace_knows() -> None:
     for stage, request in (("the reading", llm.requests[0]), ("the plan", llm.requests[1])):
         prompt = "\n".join(message.content for message in request.messages)
         assert "summary.md documents them" in prompt, f"{stage} was made without memory"
+
+
+# --- What the user brought (§15.6) --------------------------------------------
+
+
+class OneDocument:
+    """Implements `domain.knowledge.protocols.Retriever` with a fixed passage."""
+
+    def __init__(self, content: str, *, title: str = "Delivery policy") -> None:
+        self._content = content
+        self._title = title
+        self.asked: list[tuple[str, str]] = []
+
+    async def retrieve(self, query):
+        self.asked.append((query.text, str(query.workspace_id)))
+        document = Document.create("d", workspace_id=query.workspace_id)
+        return [
+            Passage(
+                chunk=Chunk.create(document, 0, self._content),
+                title=self._title,
+                source="policies/delivery.md",
+                score=1.0,
+            )
+        ]
+
+
+async def test_a_document_reaches_the_reading_of_the_request() -> None:
+    """The first Phase 15 validation run's finding, as a test.
+
+    Retrieval lived only inside a task. So a question whose answer was in an
+    uploaded document was read as needing no work, answered "I do not have
+    that", and the document was never reached - because nothing had started a
+    task to reach it with.
+    """
+    retriever = OneDocument("Express delivery arrives the next working day.")
+    llm = FakeLLM(
+        [
+            reply(intent(needs_work=False, answer="Next working day.")),
+            reply(verdict(True)),
+        ]
+    )
+    manager, _, _, _ = build(script=[], llm=llm, knowledge=WorkspaceKnowledge(retriever))
+
+    await manager.handle_objective(await manager.receive("How fast is express delivery?"))
+
+    prompt = "\n".join(message.content for message in llm.requests[0].messages)
+    assert "Express delivery arrives the next working day." in prompt
+    assert "Delivery policy" in prompt, "quoted with its source, not as a recollection"
+    assert retriever.asked == [("How fast is express delivery?", "default")]
+
+
+async def test_documents_are_read_from_the_workspace_the_request_was_asked_in() -> None:
+    """Phase 15's Definition of Done, at the level a unit test can hold it."""
+    retriever = OneDocument("Express delivery arrives the next working day.")
+    manager, _, _, _ = build(
+        script=[
+            intent(needs_work=False, answer="I do not know."),
+            verdict(True),
+        ],
+        knowledge=WorkspaceKnowledge(retriever),
+    )
+
+    await manager.handle_objective(
+        await manager.receive("How fast is express delivery?", workspace_id="personal")
+    )
+
+    assert retriever.asked[0][1] == "personal", "and never the workspace the document is in"
+
+
+async def test_a_retriever_that_fails_leaves_the_manager_working() -> None:
+    class Broken:
+        async def retrieve(self, query):
+            raise RuntimeError("the store is not answering")
+
+    manager, _, _, _ = build(
+        script=[intent(needs_work=False, answer="Answered anyway."), verdict(True)],
+        knowledge=WorkspaceKnowledge(Broken()),
+    )
+
+    result = await manager.handle_objective(await manager.receive("Anything"))
+
+    assert result.status is ObjectiveStatus.DONE

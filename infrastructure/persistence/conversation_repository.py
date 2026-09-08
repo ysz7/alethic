@@ -14,13 +14,13 @@ from datetime import UTC
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from domain.conversations.models import Conversation
 from domain.errors import StorageError, StorageNotInitializedError
 from domain.workspace.models import DEFAULT_WORKSPACE_ID, WorkspaceId
+from infrastructure.persistence.dialect import upsert
 from infrastructure.persistence.models import ConversationRow
 from infrastructure.persistence.session import session_scope
 
@@ -49,7 +49,7 @@ def _aware(value):
     return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
-class SqliteConversationRepository:
+class SqlConversationRepository:
     """Implements `domain.conversations.repository.ConversationRepository`."""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -71,7 +71,7 @@ class SqliteConversationRepository:
     async def save(self, conversation: Conversation) -> None:
         values = _to_row(conversation)
         async with self._session() as session:
-            statement = sqlite_insert(ConversationRow).values(**values)
+            statement = upsert(session, ConversationRow).values(**values)
             await session.execute(
                 statement.on_conflict_do_update(
                     index_elements=[ConversationRow.id],

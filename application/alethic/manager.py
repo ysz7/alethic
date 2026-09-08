@@ -64,6 +64,7 @@ from application.alethic.reconciliation import Reconciler, Reconciliation
 from application.alethic.supervisor import Recovery, Supervision, Supervisor
 from application.alethic.synthesis import Synthesizer, describe
 from application.alethic.verification import ObjectiveVerifier
+from application.knowledge.workspace import WorkspaceKnowledge
 from application.memory.workspace import WorkspaceMemory
 from domain.employees.protocols import EmployeeRegistry
 from domain.errors import DelegationError
@@ -104,6 +105,7 @@ class AlethicManager:
         progress: ProgressSink | None = None,
         max_revisions: int = MAX_PLAN_REVISIONS,
         memory: WorkspaceMemory | None = None,
+        knowledge: WorkspaceKnowledge | None = None,
     ) -> None:
         self._intent = intent
         self._planner = planner
@@ -119,6 +121,12 @@ class AlethicManager:
         self._progress = progress or NullProgress()
         self._max_revisions = max_revisions
         self._memory = memory
+        # Optional the way memory is, and read at the same moment: a question
+        # whose answer is in a document the user added has to reach the reading
+        # of the request, or it is answered "I do not have that" before any task
+        # exists to retrieve it. That is what the first Phase 15 validation run
+        # did (validation/tasks/phase-15-*).
+        self._knowledge = knowledge
 
     # --- The whole of it ------------------------------------------------------
 
@@ -156,9 +164,11 @@ class AlethicManager:
         # request written against the last one - "do the same for the returns
         # folder" - cannot be understood without what the last one was, and
         # every stage below reads better for having it.
-        remembered = await self._remembered(objective)
+        remembered, documents = await self._remembered(objective)
 
-        intent = await self._intent.read(objective.text, workforce, remembered=remembered)
+        intent = await self._intent.read(
+            objective.text, workforce, remembered=remembered, documents=documents
+        )
         objective = self._understood(objective, intent)
         await self._objectives.save(objective)
         if self._memory is not None and intent.preferences:
@@ -192,7 +202,9 @@ class AlethicManager:
             )
 
         try:
-            return await self._work(objective, intent, remembered, feedback=rejected)
+            return await self._work(
+                objective, intent, remembered + documents, feedback=rejected
+            )
         except DelegationError as error:
             # Nothing to delegate to is the user's to fix, not something to
             # replan around: every plan would end in the same place.
@@ -431,19 +443,30 @@ class AlethicManager:
         )
         return await self._reconciler.reconcile(objective, reports)
 
-    async def _remembered(self, objective: Objective) -> tuple[str, ...]:
+    async def _remembered(
+        self, objective: Objective
+    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
         """What this workspace knows that bears on this request.
 
-        Read once per objective and used everywhere: by the reading of the
-        request, by the decomposition, and by every task in the plan. Recalling
-        it per stage would cost the same query three times and could answer it
-        three different ways.
+        Two sources, one query each, read once per objective and used
+        everywhere: by the reading of the request, by the decomposition, and by
+        every task in the plan. Reading them per stage would cost the same
+        queries three times and could answer them three different ways.
         """
-        if self._memory is None:
-            return ()
-        return await self._memory.context_for(
-            objective.text, workspace_id=objective.workspace_id
-        )
+        remembered: tuple[str, ...] = ()
+        documents: tuple[str, ...] = ()
+        if self._memory is not None:
+            remembered = await self._memory.context_for(
+                objective.text, workspace_id=objective.workspace_id
+            )
+        if self._knowledge is not None:
+            documents = await self._knowledge.context_for(
+                objective.text, workspace_id=objective.workspace_id
+            )
+        # Kept apart all the way down. What the platform noted is a lead that
+        # may be stale; what the user brought is evidence with a source on it,
+        # and the two are rendered differently wherever they are shown.
+        return remembered, documents
 
     @staticmethod
     def _understood(objective: Objective, intent: Intent) -> Objective:

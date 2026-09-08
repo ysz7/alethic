@@ -15,11 +15,32 @@ class MemoryScope(StrEnum):
     """Scope is an access boundary, not a hint.
 
     An employee never reads another employee's EMPLOYEE_PRIVATE memory.
+
+    Three of these are inside a workspace and two are above it. USER is the
+    person rather than the context they are working in: "always answer in
+    Markdown" was not said about the sales folder, and re-stating it in every
+    workspace is a chore the platform would be creating for itself. SYSTEM is
+    the installation - what has been learned about this machine, which no
+    workspace owns either.
+
+    The cost is stated rather than hidden: a preference stated at work applies
+    at home too. The workspace it was stated in is kept on the item as
+    provenance, so a future "only here" is a narrowing of an existing record and
+    not a migration.
     """
 
     WORKSPACE = "WORKSPACE"
     PLAN = "PLAN"
     EMPLOYEE_PRIVATE = "EMPLOYEE_PRIVATE"
+    USER = "USER"
+    SYSTEM = "SYSTEM"
+
+
+#: The scopes a workspace boundary applies to. Everything else is above it, and
+#: `domain/memory/access.py` is the one place that difference is expressed.
+WORKSPACE_BOUND: frozenset[MemoryScope] = frozenset(
+    {MemoryScope.WORKSPACE, MemoryScope.PLAN, MemoryScope.EMPLOYEE_PRIVATE}
+)
 
 
 class MemoryKind(StrEnum):

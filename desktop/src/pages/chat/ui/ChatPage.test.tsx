@@ -41,6 +41,9 @@ function scriptedRuntime() {
       };
     }
     if (path.endsWith("/api/approvals")) return { approvals: state.approvals };
+    if (path.endsWith("/api/workspaces")) {
+      return { workspaces: [workspace("default", "Default", true)] };
+    }
     if (path.endsWith("/api/conversations") && init?.method === "POST") {
       return {
         id: "c1",
@@ -65,6 +68,16 @@ function scriptedRuntime() {
     }
     return {};
   };
+
+  const workspace = (id: string, name: string, active: boolean) => ({
+    id,
+    name,
+    description: "",
+    file_root: `/tmp/${id}`,
+    is_default: id === "default",
+    active,
+    created_at: "2026-09-08T09:00:00+00:00",
+  });
 
   const message = (answered: boolean) => ({
     id: "o1",

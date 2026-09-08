@@ -8,7 +8,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select, update
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -16,6 +15,7 @@ from domain.approvals.models import Approval, ApprovalRequest, ApprovalState
 from domain.errors import StorageError, StorageNotInitializedError
 from domain.policies.models import RiskLevel
 from domain.workspace.models import DEFAULT_WORKSPACE_ID, WorkspaceId
+from infrastructure.persistence.dialect import upsert
 from infrastructure.persistence.models import ApprovalRow
 from infrastructure.persistence.session import session_scope
 
@@ -71,7 +71,7 @@ def _to_approval(row: ApprovalRow) -> Approval:
     )
 
 
-class SqliteApprovalRepository:
+class SqlApprovalRepository:
     """Implements `domain.approvals.protocols.ApprovalRepository`."""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -91,7 +91,7 @@ class SqliteApprovalRepository:
     async def save(self, approval: Approval) -> None:
         values = _to_values(approval)
         async with self._session() as session:
-            statement = sqlite_insert(ApprovalRow).values(**values)
+            statement = upsert(session, ApprovalRow).values(**values)
             await session.execute(
                 statement.on_conflict_do_update(
                     index_elements=[ApprovalRow.id],

@@ -39,15 +39,31 @@ class RuntimeSettings(Protocol):
     computer_allowed_region: str | None
     computer_max_actions: int
 
+    # --- Workspaces -----------------------------------------------------------
+    #: Which workspace this machine works in when the switch file says nothing.
+    active_workspace: str
+
     # --- Memory ---------------------------------------------------------------
     memory_recall_limit: int
     memory_consolidation_threshold: int
+
+    # --- Knowledge ------------------------------------------------------------
+    knowledge_recall_limit: int
 
     @property
     def resolved_database_url(self) -> str: ...
 
     @property
-    def resolved_workspace_dir(self) -> Path: ...
+    def storage_backend(self) -> str: ...
+
+    @property
+    def resolved_file_root(self) -> Path: ...
+
+    @property
+    def workspace_roots_dir(self) -> Path: ...
+
+    @property
+    def active_workspace_path(self) -> Path: ...
 
     @property
     def browser_tools_enabled(self) -> bool: ...
@@ -71,8 +87,11 @@ class RuntimeSettings(Protocol):
     def memory_enabled(self) -> bool: ...
 
     @property
+    def knowledge_enabled(self) -> bool: ...
+
+    @property
     def stop_file_path(self) -> Path: ...
 
     def ensure_data_dir(self) -> Path: ...
 
-    def ensure_workspace_dir(self) -> Path: ...
+    def ensure_file_root(self) -> Path: ...

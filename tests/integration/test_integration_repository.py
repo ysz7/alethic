@@ -18,7 +18,7 @@ from domain.integrations.models import (
 )
 from domain.policies.risk import Effect
 from infrastructure.persistence.integration_repository import (
-    SqliteIntegrationRepository,
+    SqlIntegrationRepository,
 )
 
 TOOLS = (
@@ -46,7 +46,7 @@ def notes(**extra) -> Integration:
 
 
 async def test_an_integration_comes_back_exactly_as_it_was_stored(session_factory) -> None:
-    repository = SqliteIntegrationRepository(session_factory)
+    repository = SqlIntegrationRepository(session_factory)
     stored = notes()
 
     await repository.save(stored)
@@ -57,7 +57,7 @@ async def test_an_integration_comes_back_exactly_as_it_was_stored(session_factor
 
 async def test_what_it_offers_is_read_back_without_starting_it(session_factory) -> None:
     """The cache is the point: discovery must not be a prerequisite for listing."""
-    repository = SqliteIntegrationRepository(session_factory)
+    repository = SqlIntegrationRepository(session_factory)
     await repository.save(notes())
 
     loaded = await repository.by_name("notes")
@@ -69,7 +69,7 @@ async def test_what_it_offers_is_read_back_without_starting_it(session_factory) 
 
 
 async def test_the_local_classification_survives_the_round_trip(session_factory) -> None:
-    repository = SqliteIntegrationRepository(session_factory)
+    repository = SqlIntegrationRepository(session_factory)
     await repository.save(notes())
 
     loaded = await repository.by_name("notes")
@@ -83,7 +83,7 @@ async def test_an_effect_that_is_no_longer_a_known_label_falls_back_to_asking(
     session_factory,
 ) -> None:
     """A stale label must not make a whole integration unloadable."""
-    repository = SqliteIntegrationRepository(session_factory)
+    repository = SqlIntegrationRepository(session_factory)
     stored = notes()
     await repository.save(stored)
     async with session_factory() as session:
@@ -103,7 +103,7 @@ async def test_an_effect_that_is_no_longer_a_known_label_falls_back_to_asking(
 
 async def test_no_credential_is_written_to_the_row(session_factory) -> None:
     """Only the names of the secrets. §74."""
-    repository = SqliteIntegrationRepository(session_factory)
+    repository = SqlIntegrationRepository(session_factory)
     await repository.save(notes())
 
     async with session_factory() as session:
@@ -117,7 +117,7 @@ async def test_no_credential_is_written_to_the_row(session_factory) -> None:
 
 
 async def test_disabling_keeps_the_configuration(session_factory) -> None:
-    repository = SqliteIntegrationRepository(session_factory)
+    repository = SqlIntegrationRepository(session_factory)
     stored = notes()
     await repository.save(stored)
 
@@ -134,7 +134,7 @@ async def test_disabling_keeps_the_configuration(session_factory) -> None:
 async def test_a_failure_is_a_status_and_keeps_what_was_already_known(
     session_factory,
 ) -> None:
-    repository = SqliteIntegrationRepository(session_factory)
+    repository = SqlIntegrationRepository(session_factory)
     stored = notes()
     await repository.save(stored)
 
@@ -147,7 +147,7 @@ async def test_a_failure_is_a_status_and_keeps_what_was_already_known(
 
 
 async def test_listing_and_removing(session_factory) -> None:
-    repository = SqliteIntegrationRepository(session_factory)
+    repository = SqlIntegrationRepository(session_factory)
     first, second = notes(), Integration.create("issues")
     await repository.save(first)
     await repository.save(second)

@@ -24,6 +24,7 @@ from domain.tasks.task import Task, TaskCreatedBy, TaskError, TaskResult, TaskSt
 from domain.workforce.assignment import AssignmentOutcome, SharedContext, TaskAssignment
 from domain.workforce.repository import AssignmentRepository
 from domain.workspace.models import DEFAULT_WORKSPACE_ID, WorkspaceId
+from domain.workspace.protocols import WorkspaceContext
 
 log = structlog.get_logger(__name__)
 
@@ -43,12 +44,20 @@ class TaskRunner:
         build_runtime: Callable[[EmployeeDefinition], Awaitable[EmployeeRuntime]],
         max_attempts: int = MAX_TASK_ATTEMPTS,
         progress: ProgressSink | None = None,
+        workspaces: WorkspaceContext | None = None,
     ) -> None:
         self._tasks = tasks
         self._assignments = assignments
         self._registry = registry
         self._build_runtime = build_runtime
         self._max_attempts = max_attempts
+        # The task carries the workspace it was created in, and the run has to
+        # keep it: a person switching workspace mid-run must not move the root
+        # the run's file tools resolve against, and two tasks running at once in
+        # different workspaces must not resolve one relative path to one file.
+        # None means nothing switches, which is every configuration before
+        # Phase 15 and every test that does not care.
+        self._workspaces = workspaces
         # A failure classified here never reaches the runtime's announcer: the
         # run it would have announced from is the one that just died.
         self._progress = progress or NullProgress()
@@ -101,6 +110,12 @@ class TaskRunner:
 
     async def run(self, task: Task, assignment: TaskAssignment | None = None) -> Task:
         """Carry one task to a terminal state, retrying transient failures."""
+        if self._workspaces is None:
+            return await self._run(task, assignment)
+        with self._workspaces.enter(task.workspace_id):
+            return await self._run(task, assignment)
+
+    async def _run(self, task: Task, assignment: TaskAssignment | None = None) -> Task:
         attempt = 1
 
         while True:

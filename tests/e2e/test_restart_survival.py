@@ -12,7 +12,7 @@ from pathlib import Path
 from domain.tasks.task import Task, TaskStatus
 from infrastructure.persistence.models import Base
 from infrastructure.persistence.session import create_engine, create_session_factory
-from infrastructure.persistence.task_repository import SqliteTaskRepository
+from infrastructure.persistence.task_repository import SqlTaskRepository
 
 
 async def test_work_in_progress_is_recovered_from_a_new_process(tmp_path: Path) -> None:
@@ -22,7 +22,7 @@ async def test_work_in_progress_is_recovered_from_a_new_process(tmp_path: Path) 
     engine = create_engine(database_url)
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
-    repository = SqliteTaskRepository(create_session_factory(engine))
+    repository = SqlTaskRepository(create_session_factory(engine))
 
     task = Task.create("Compile the weekly report")
     await repository.save(task)
@@ -37,7 +37,7 @@ async def test_work_in_progress_is_recovered_from_a_new_process(tmp_path: Path) 
 
     # --- Second run: a brand new engine, as after a restart. ------------------
     engine = create_engine(database_url)
-    repository = SqliteTaskRepository(create_session_factory(engine))
+    repository = SqlTaskRepository(create_session_factory(engine))
 
     resumable = await repository.list_resumable()
     assert [t.id for t in resumable] == [task.id]

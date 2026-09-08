@@ -41,7 +41,7 @@ def _interface(raw: str | None) -> InterfaceLevel:
         return InterfaceLevel.API
 
 
-class SqliteToolCallLog:
+class SqlToolCallLog:
     """Implements `domain.tools.telemetry.ToolCallLog`."""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:

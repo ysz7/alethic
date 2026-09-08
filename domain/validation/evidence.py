@@ -152,6 +152,17 @@ def check(expect: Expectations, evidence: Evidence) -> tuple[CheckResult, ...]:
             )
         )
 
+    for phrase in expect.output_excludes:
+        # A fact that exists only in another workspace's documents appearing
+        # here is the failure; the answer saying it does not know is the pass.
+        results.append(
+            _result(
+                f"output does not contain '{phrase}'",
+                phrase.lower() not in lowered,
+                "" if phrase.lower() not in lowered else "it is in the answer",
+            )
+        )
+
     present = set(evidence.files_present)
     for path in expect.files_exist:
         results.append(

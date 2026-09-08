@@ -19,13 +19,15 @@ import typer
 from app.config.container import (
     build_container,
     build_harness,
+    build_knowledge,
     build_manager,
     build_task_runner,
     build_workflow_engine,
+    build_workspaces,
     load_grants,
     prepare,
 )
-from app.config.settings import get_settings
+from app.config.settings import get_settings, normalise_database_url
 from domain.approvals.models import ApprovalState
 from domain.errors import AlethicError, StorageNotInitializedError
 from domain.integrations.specs import spec_for
@@ -36,6 +38,8 @@ from domain.policies.rules import APPROVAL_THRESHOLD
 from domain.validation.failures import FailureKind
 from domain.validation.reliability import Verdict, build_report, reliability_of
 from domain.validation.run import RunStatus
+from domain.workspace.models import WorkspaceId
+from infrastructure.persistence.session import create_engine
 
 app = typer.Typer(
     name="alethic",
@@ -78,7 +82,8 @@ def config() -> None:
     settings = get_settings()
     typer.echo(f"data_dir:      {settings.data_dir}")
     typer.echo(f"database:      {settings.resolved_database_url}")
-    typer.echo(f"workspace:     {settings.resolved_workspace_dir}")
+    typer.echo(f"file root:     {settings.resolved_file_root}  (of the first workspace)")
+    typer.echo(f"workspace:     {_active_workspace_name(settings)}")
     typer.echo(f"approvals:     {settings.approval_mode}")
     typer.echo(f"interface:     http://{settings.ui_host}:{settings.ui_port}  (alethic serve)")
     typer.echo(
@@ -229,7 +234,11 @@ def ask_alethic(
         try:
             await prepare(container)
             manager = build_manager(container)
-            received = await manager.receive(objective)
+            # The workspace the machine is in, not the default one: a request
+            # typed after `alethic workspace-use work` belongs to `work`, and
+            # everything it reads and remembers follows from that.
+            active = await build_workspaces(container).active()
+            received = await manager.receive(objective, workspace_id=active.id)
             result = await manager.handle_objective(received)
             _report_objective(result)
         except AlethicError as error:
@@ -295,10 +304,12 @@ def memory(
                 maintenance = container.memory_maintenance
                 dropped = await maintenance.prune() if maintenance else 0
                 typer.echo(f"Forgot {dropped} expired item(s).")
+            active = await build_workspaces(container).active()
             items = await store.recall(
                 MemoryQuery(
                     text=search,
-                    scopes=frozenset({MemoryScope.WORKSPACE}),
+                    workspace_id=active.id,
+                    scopes=frozenset({MemoryScope.WORKSPACE, MemoryScope.USER}),
                     limit=limit,
                 )
             )
@@ -332,7 +343,8 @@ def run_task(
         try:
             await prepare(container)
             runner = build_task_runner(container)
-            task = await runner.submit_and_run(goal, employee)
+            active = await build_workspaces(container).active()
+            task = await runner.submit_and_run(goal, employee, workspace_id=active.id)
             _report(task)
         except AlethicError as error:
             typer.secho(f"{type(error).__name__}: {error}", fg="red", err=True)
@@ -1226,6 +1238,368 @@ def events(
             await container.aclose()
 
     _guarded(_run)
+
+
+def _active_workspace_name(settings) -> str:
+    """Which workspace this machine is in, read without opening the database.
+
+    `config` is the command somebody runs when nothing works, so it answers off
+    the switch file alone - a database that has no schema yet still has an
+    answer to this.
+    """
+    try:
+        written = settings.active_workspace_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        written = ""
+    return written or settings.active_workspace
+
+
+@app.command()
+def workspaces() -> None:
+    """The contexts of work on this machine, and which one is active."""
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            service = build_workspaces(container)
+            active = await service.active()
+            for item in await service.list():
+                mark = "*" if item.id == active.id else " "
+                typer.secho(f"{mark} {item.name}", fg="cyan", nl=False)
+                typer.echo(f"  ({item.id})")
+                if item.description:
+                    typer.echo(f"    {item.description}")
+                typer.echo(f"    files: {service.root_for(item.id)}")
+        finally:
+            await container.aclose()
+
+    _guarded(_run)
+
+
+@app.command(name="workspace-new")
+def workspace_new(
+    name: str = typer.Argument(..., help="What to call it."),
+    description: str = typer.Option("", "--description", "-d", help="What it is for."),
+    files: str = typer.Option(
+        "", "--files", help="Where its files live. Default: beside the database."
+    ),
+) -> None:
+    """Add a context: its own files, its own memory, its own documents."""
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            created = await build_workspaces(container).create(
+                name, description=description, file_root=files or None
+            )
+            typer.secho(f"{created.name} ({created.id})", fg="green")
+            typer.echo(f"Switch to it with: alethic workspace-use {created.id}")
+        finally:
+            await container.aclose()
+
+    _guarded(_run)
+
+
+@app.command(name="workspace-use")
+def workspace_use(
+    name: str = typer.Argument(..., help="The workspace to work in, by name or id."),
+) -> None:
+    """Switch this machine. A run already going keeps the one it started in."""
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            service = build_workspaces(container)
+            chosen = await service.use_by_name(name)
+            typer.secho(f"Working in {chosen.name} ({chosen.id}).", fg="green")
+            typer.echo(f"files: {service.root_for(chosen.id)}")
+        finally:
+            await container.aclose()
+
+    _guarded(_run)
+
+
+@app.command(name="workspace-remove")
+def workspace_remove(
+    workspace_id: str = typer.Argument(..., help="The workspace id, from `alethic workspaces`."),
+) -> None:
+    """Remove the record. What it owns - history, memory, files - is kept.
+
+    Deliberately: no foreign key points at a workspace (migration 014), so its
+    tasks, plans and audit lines survive it, and the directory the user put
+    files in is theirs. Erasing a person's history is a different act and says
+    so.
+    """
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            removed = await build_workspaces(container).delete(WorkspaceId(workspace_id))
+            if not removed:
+                typer.secho(f"No workspace called {workspace_id}.", fg="yellow")
+                return
+            typer.secho(f"Removed {workspace_id}. Its history and files are untouched.", fg="green")
+        finally:
+            await container.aclose()
+
+    _guarded(_run)
+
+
+@app.command()
+def documents() -> None:
+    """What this workspace knows because somebody put it here."""
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            service = build_knowledge(container)
+            if service is None:
+                typer.echo("Knowledge is switched off (ALETHIC_FLAGS__KNOWLEDGE=false).")
+                return
+            workspaces = build_workspaces(container)
+            active = await workspaces.active()
+            found = await service.list(workspace_id=active.id)
+            if not found:
+                typer.echo(
+                    f"No documents in {active.name}. Add one with:\n"
+                    "  alethic document-add <path>"
+                )
+                return
+            for item in found:
+                colour = {"INDEXED": "green", "FAILED": "red"}.get(item.status.value, "yellow")
+                typer.secho(f"{item.status.value:<10}", fg=colour, nl=False)
+                typer.echo(f"{item.title}  ({item.chunk_count} passage(s))")
+                typer.echo(f"           {item.id}  {item.source}")
+                if item.error:
+                    typer.secho(f"           {item.error}", fg="red")
+        finally:
+            await container.aclose()
+
+    _guarded(_run)
+
+
+#: Declared once, for the reason `_INPUT_OPTION` is: ruff will not have a call
+#: in a default, and typer needs one.
+_DOCUMENT_PATH = typer.Argument(..., help="The file to read, on this machine.")
+
+
+@app.command(name="document-add")
+def document_add(
+    path: Path = _DOCUMENT_PATH,
+    title: str = typer.Option("", "--title", help="What to call it. Default: the file name."),
+) -> None:
+    """Add a document to the active workspace and index it.
+
+    A machine with no embedding model still gets a searchable document: the text
+    is stored and found lexically, the status says EXTRACTED rather than
+    INDEXED, and `alethic document-reindex` finishes the job once a model is
+    configured.
+    """
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            service = build_knowledge(container)
+            if service is None:
+                typer.secho("Knowledge is switched off.", fg="red", err=True)
+                raise typer.Exit(code=1)
+            active = await build_workspaces(container).active()
+            document = await service.add_file(path, workspace_id=active.id, title=title)
+            colour = "green" if document.status.value == "INDEXED" else "yellow"
+            typer.secho(f"{document.status.value}: {document.title}", fg=colour)
+            typer.echo(f"{document.chunk_count} passage(s) in {active.name}  ({document.id})")
+            if document.status.value == "EXTRACTED":
+                typer.echo(
+                    "Searchable by words but not by meaning: no embedding model "
+                    "answered. Configure one and run `alethic document-reindex`."
+                )
+        finally:
+            await container.aclose()
+
+    _guarded(_run)
+
+
+@app.command(name="document-reindex")
+def document_reindex(
+    document_id: str = typer.Argument(..., help="From `alethic documents`."),
+) -> None:
+    """Cut and embed a document again, with whatever model is configured now."""
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            service = build_knowledge(container)
+            if service is None:
+                typer.secho("Knowledge is switched off.", fg="red", err=True)
+                raise typer.Exit(code=1)
+            document = await service.reindex(UUID(document_id))
+            typer.secho(f"{document.status.value}: {document.title}", fg="green")
+            typer.echo(f"{document.chunk_count} passage(s)")
+        finally:
+            await container.aclose()
+
+    _guarded(_run)
+
+
+@app.command(name="document-remove")
+def document_remove(
+    document_id: str = typer.Argument(..., help="From `alethic documents`."),
+) -> None:
+    """Remove a document and its passages. What was learned while using it stays."""
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            service = build_knowledge(container)
+            if service is None:
+                typer.secho("Knowledge is switched off.", fg="red", err=True)
+                raise typer.Exit(code=1)
+            removed = await service.delete(UUID(document_id))
+            if not removed:
+                typer.secho(f"No document {document_id}.", fg="yellow")
+                return
+            typer.secho(f"Removed {document_id}.", fg="green")
+        finally:
+            await container.aclose()
+
+    _guarded(_run)
+
+
+@app.command()
+def storage() -> None:
+    """Where everything is kept, and how much of it there is."""
+
+    async def _run() -> None:
+        settings = get_settings()
+        typer.echo(f"backend:  {settings.storage_backend}")
+        typer.echo(f"database: {_masked(settings.resolved_database_url)}")
+        from infrastructure.persistence import transfer
+
+        engine = create_engine(settings.resolved_database_url)
+        try:
+            counts = await transfer.row_counts(engine)
+        finally:
+            await engine.dispose()
+        for name, rows in sorted(counts.items()):
+            if rows:
+                typer.echo(f"  {name:<24}{rows}")
+        typer.echo(f"  {'total':<24}{sum(counts.values())}")
+
+    _guarded(_run)
+
+
+@app.command(name="storage-migrate")
+def storage_migrate(
+    to: str = typer.Option(..., "--to", help="Where to move it: a database URL."),
+    erase: bool = typer.Option(
+        False,
+        "--erase",
+        help="Empty the source afterwards. Irreversible; asks first.",
+    ),
+) -> None:
+    """Move the whole store to another backend: copy, verify, then erase.
+
+    The order is the only safe one and each step is separate (ADR 0017). The
+    schema is created on the destination by running the migrations there rather
+    than by copying DDL, because the two backends do not have the same DDL - and
+    the text index is rebuilt for the same reason.
+
+    Erasing the source is a distinct, confirmed act. The state in between - on
+    the destination and still here - is not a defect: it is the point at which
+    the move can still be abandoned.
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    from infrastructure.persistence import transfer
+
+    settings = get_settings()
+    source_url = settings.resolved_database_url
+    destination_url = normalise_database_url(to)
+    if destination_url == source_url:
+        typer.secho("That is where the data already is.", fg="yellow")
+        raise typer.Exit(code=1)
+
+    typer.echo(f"from: {_masked(source_url)}")
+    typer.echo(f"to:   {_masked(destination_url)}")
+
+    # Before the loop starts, not inside it: the migrations run their own
+    # `asyncio.run`, and a second one nested in the first is an error rather
+    # than a wait.
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", destination_url)
+    typer.echo("Creating the schema there...")
+    command.upgrade(config, "head")
+
+    async def _run() -> None:
+        source = create_engine(source_url)
+        destination = create_engine(destination_url)
+        try:
+            typer.echo("Copying...")
+            copied = await transfer.copy(source, destination)
+            for problem in copied.problems:
+                typer.secho(f"  {problem}", fg="red", err=True)
+            typer.echo(f"Copied {copied.copied} row(s). Checking them...")
+
+            checked = await transfer.verify(source, destination)
+            for table in checked.tables:
+                if not table.verified:
+                    typer.secho(
+                        f"  {table.name}: {table.source_rows} here, "
+                        f"{table.destination_rows} there, {table.mismatched} different",
+                        fg="red",
+                    )
+            for problem in checked.problems:
+                typer.secho(f"  {problem}", fg="red", err=True)
+            if not checked.verified:
+                typer.secho(
+                    "The copy does not match. Nothing has been erased; the data is "
+                    "still here.",
+                    fg="red",
+                    err=True,
+                )
+                raise typer.Exit(code=1)
+
+            total = sum(table.source_rows for table in checked.tables)
+            typer.secho(f"Verified {total} row(s), row by row.", fg="green")
+            typer.echo(
+                "Point ALETHIC_DATABASE_URL at the new store to work from it:\n"
+                f"  export ALETHIC_DATABASE_URL='{to}'"
+            )
+            if not erase:
+                typer.echo(
+                    "The source still holds everything. When you are satisfied, "
+                    "run this again with --erase."
+                )
+                return
+
+            # Irreversible, so it says what it is about to destroy and waits for
+            # a person - the same rule every irreversible action here follows.
+            typer.secho(
+                f"\nAbout to erase {total} row(s) from {_masked(source_url)}. "
+                "This cannot be undone.",
+                fg="red",
+            )
+            if not typer.confirm("Erase the source?"):
+                typer.echo("Left alone. The data is on both.")
+                return
+            removed = await transfer.erase(source)
+            typer.secho(f"Erased {sum(removed.values())} row(s).", fg="green")
+        finally:
+            await source.dispose()
+            await destination.dispose()
+
+    _guarded(_run)
+
+
+def _masked(url: str) -> str:
+    """A URL a person can read without a password ending up in a terminal log."""
+    if "@" not in url:
+        return url
+    scheme, _, rest = url.partition("://")
+    credentials, _, host = rest.rpartition("@")
+    user = credentials.split(":")[0]
+    return f"{scheme}://{user}:***@{host}"
 
 
 def _guarded(coroutine_factory) -> None:

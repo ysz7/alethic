@@ -25,7 +25,7 @@ const APPROVAL_POLL_MS = 3000;
 /** How often a thread is re-read while something in it is still running. */
 const THREAD_POLL_MS = 2000;
 
-export interface WorkspaceState {
+export interface ChatState {
   ready: boolean;
   problem: string;
   thread: Thread | null;
@@ -39,7 +39,7 @@ export interface WorkspaceState {
   decide: (approvalId: string, approved: boolean) => Promise<void>;
 }
 
-export function useWorkspace(client: RuntimeClient): WorkspaceState {
+export function useChat(client: RuntimeClient): ChatState {
   const [ready, setReady] = useState(false);
   const [problem, setProblem] = useState("");
   const [thread, setThread] = useState<Thread | null>(null);

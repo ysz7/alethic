@@ -35,6 +35,8 @@ from uuid import UUID
 
 import structlog
 
+from application.knowledge.service import KnowledgeService
+from application.workspaces.service import WorkspaceService
 from domain.approvals.models import ApprovalState
 from domain.approvals.protocols import ApprovalRepository
 from domain.audit.protocols import AuditRecord, AuditTrail
@@ -80,6 +82,8 @@ class ValidationHarness:
         audit: AuditTrail | None = None,
         approvals: ApprovalRepository | None = None,
         memory: Memory | None = None,
+        knowledge: KnowledgeService | None = None,
+        workspaces: WorkspaceService | None = None,
     ) -> None:
         self._scenarios = scenarios
         self._runs = runs
@@ -93,6 +97,11 @@ class ValidationHarness:
         self._audit = audit
         self._approvals = approvals
         self._memory = memory
+        # Both optional, both only used to *prepare* a scenario: a workspace
+        # that has to exist, and documents that have to be in it. Neither can
+        # do work, which is the restraint the whole harness rests on.
+        self._knowledge = knowledge
+        self._workspaces = workspaces
 
     # --- Running --------------------------------------------------------------
 
@@ -121,11 +130,21 @@ class ValidationHarness:
                 )
             )
 
+        # A scenario may say which workspace the request is made in - that is
+        # the whole of Phase 15's Definition of Done: the document is over
+        # there and the question is asked here. The *record* stays in the
+        # workspace the harness was called for: a validation run is the
+        # platform's account of itself, and one filed under the workspace a
+        # scenario happened to name would vanish from the report for this
+        # machine, which is where it was first noticed.
+        asked_in = WorkspaceId(scenario.workspace) if scenario.workspace else workspace_id
+
         started = datetime.now(UTC)
         clock = time.monotonic()
         self._prepare(scenario)
+        await self._prepare_knowledge(scenario)
         before = self._fingerprint(scenario)
-        recalled = await self._recalled(scenario, workspace_id)
+        recalled = await self._recalled(scenario, asked_in)
 
         error: Exception | None = None
         summary = ""
@@ -135,7 +154,7 @@ class ValidationHarness:
         cost = 0.0
         try:
             summary, succeeded, missing_from_run, task_ids, cost = await self._ask(
-                scenario, workspace_id
+                scenario, asked_in
             )
         except Exception as caught:  # a scenario that raises is a finding, not a crash
             error = caught
@@ -278,6 +297,30 @@ class ValidationHarness:
             path = self._workspace / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text, encoding="utf-8")
+
+    async def _prepare_knowledge(self, scenario: Scenario) -> None:
+        """Create the workspaces a scenario names and put its documents in them.
+
+        Adding the same text twice is one document (the checksum decides), so a
+        scenario re-run does not accumulate copies of its own fixture - which is
+        the knowledge equivalent of `reset`, and comes free from how documents
+        are stored rather than needing a rule here.
+
+        Guarded: a machine with knowledge switched off runs the scenario without
+        the documents and fails its expectations honestly, which is a truer
+        report than a skip that hides the configuration.
+        """
+        if not scenario.knowledge:
+            return
+        if self._knowledge is None or self._workspaces is None:
+            log.warning("validation.knowledge_unavailable", scenario=scenario.name)
+            return
+        for workspace, documents in scenario.knowledge.items():
+            target = WorkspaceId(workspace)
+            if await self._workspaces.get(target) is None:
+                await self._workspaces.create(workspace)
+            for title, text in documents.items():
+                await self._knowledge.add_text(text, title=title, workspace_id=target)
 
     async def _recalled(self, scenario: Scenario, workspace_id: WorkspaceId) -> int:
         """How much memory has to offer this request, asked before it runs.

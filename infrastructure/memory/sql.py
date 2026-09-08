@@ -1,6 +1,12 @@
-"""Memory on the local SQLite file. SQL does not leave this package.
+"""Memory in a SQL database. SQL does not leave this package.
 
-The text search is FTS5, and it is the only part of the system that knows that.
+One adapter for both backends. What differs between them is the text search -
+FTS5 on SQLite, `tsvector` on PostgreSQL - and that difference is written twice
+here rather than abstracted into something that is neither. Two adapters would
+have been two things to keep true, and the second one would fall behind
+(ADR 0017).
+
+The text search is the only part of the system that knows which index it is.
 It is used the way an index should be used - to narrow, not to decide: the index
 answers *which items mention this*, and `domain.memory.ranking` answers *which
 of those are worth reading now*. Ranking by BM25 alone would return the best
@@ -20,16 +26,22 @@ from datetime import UTC, datetime
 from re import findall
 from uuid import UUID
 
-from sqlalchemy import delete, select, text
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy import and_, delete, or_, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from domain.errors import StorageError, StorageNotInitializedError
 from domain.memory.access import visible
-from domain.memory.models import MemoryItem, MemoryKind, MemoryQuery, MemoryScope
+from domain.memory.models import (
+    WORKSPACE_BOUND,
+    MemoryItem,
+    MemoryKind,
+    MemoryQuery,
+    MemoryScope,
+)
 from domain.memory.ranking import CUTOFF_RATIO, best_of, score
 from domain.workspace.models import DEFAULT_WORKSPACE_ID, WorkspaceId
+from infrastructure.persistence.dialect import is_postgres, upsert
 from infrastructure.persistence.models import MemoryItemRow
 from infrastructure.persistence.session import session_scope
 
@@ -39,16 +51,11 @@ from infrastructure.persistence.session import session_scope
 CANDIDATE_FACTOR = 5
 
 
-def _match_expression(query_text: str) -> str:
-    """The user's words as something FTS5 will accept.
-
-    A goal is prose, and prose contains quotes, colons and hyphens - all of
-    which are operators in FTS5's query language, and any one of which turns a
-    search into a syntax error. So the words are extracted and quoted, and the
-    query language is never handed text it could be injected through.
-    """
-    words = findall(r"\w+", query_text)
-    return " OR ".join(f'"{word}"' for word in words if len(word) > 1)
+#: A goal is prose, and prose contains quotes, colons and hyphens - operators in
+#: FTS5's query language and in `tsquery` alike, any one of which turns a search
+#: into a syntax error. So both backends are handed extracted words rather than
+#: the sentence, and neither query language is ever given text it could be
+#: injected through.
 
 
 def _to_row(item: MemoryItem) -> dict[str, object]:
@@ -89,7 +96,7 @@ def _aware(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
-class SqliteMemory:
+class SqlMemory:
     """Implements `domain.memory.protocols.Memory` and `MemoryMaintenance`."""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -114,7 +121,7 @@ class SqliteMemory:
             # Against the table rather than the mapped class: the JSON column is
             # called `metadata`, which a declarative class cannot use as an
             # attribute name, and the insert is by column name either way.
-            statement = sqlite_insert(MemoryItemRow.__table__).values(**values)
+            statement = upsert(session, MemoryItemRow.__table__).values(**values)
             # Upsert on the id: consolidation rewrites an item's content, and a
             # second row saying the same thing under a new id would make the
             # thing it replaced un-findable rather than replaced.
@@ -134,9 +141,24 @@ class SqliteMemory:
             if ranked is not None and not ranked:
                 return []  # the search ran and nothing mentioned it
 
+            # The workspace narrows the scopes it owns and not the two above
+            # it: a stated preference and what is known about this machine were
+            # written in some workspace and are not about it. The rule itself is
+            # `domain/memory/access.py`; this is the index agreeing with it.
+            bound = [
+                scope.value for scope in query.scopes if scope in WORKSPACE_BOUND
+            ]
+            unbound = [
+                scope.value for scope in query.scopes if scope not in WORKSPACE_BOUND
+            ]
             statement = select(MemoryItemRow).where(
-                MemoryItemRow.workspace_id == str(query.workspace_id),
-                MemoryItemRow.scope.in_([scope.value for scope in query.scopes]),
+                or_(
+                    and_(
+                        MemoryItemRow.workspace_id == str(query.workspace_id),
+                        MemoryItemRow.scope.in_(bound),
+                    ),
+                    MemoryItemRow.scope.in_(unbound),
+                )
             )
             if query.kinds:
                 statement = statement.where(
@@ -199,16 +221,20 @@ class SqliteMemory:
         `None` means no text was asked for, which is a listing rather than a
         search and must not be confused with a search that found nothing.
         """
-        expression = _match_expression(query.text)
-        if not expression:
+        words = findall(r"\w+", query.text)
+        words = [word for word in words if len(word) > 1]
+        if not words:
             return None
+        limit = max(query.limit * CANDIDATE_FACTOR, 20)
+        if is_postgres(session):
+            return await self._postgres_matching(session, words, limit)
         rows = await session.execute(
             text(
                 "SELECT item_id, rank FROM memory_items_fts "
                 "WHERE memory_items_fts MATCH :expression "
                 "ORDER BY rank LIMIT :limit"
             ),
-            {"expression": expression, "limit": max(query.limit * CANDIDATE_FACTOR, 20)},
+            {"expression": " OR ".join(f'"{word}"' for word in words), "limit": limit},
         )
         hits = rows.all()
         if not hits:
@@ -218,6 +244,34 @@ class SqliteMemory:
         # the best scores half as much whatever the absolute numbers are - and
         # the domain's cutoff means the same thing on every backend.
         best = min(float(rank) for _, rank in hits)
+        return {
+            str(item_id): min(max(float(rank) / best, 0.0), 1.0) if best else 1.0
+            for item_id, rank in hits
+        }
+
+    async def _postgres_matching(
+        self, session: AsyncSession, words: list[str], limit: int
+    ) -> dict[str, float]:
+        """The same question asked of `tsvector`, and the same answer shape.
+
+        `ts_rank` is positive and larger-is-better, the opposite of FTS5's rank,
+        so it is normalised the other way round - and what leaves this method is
+        a fraction of the best hit either way, which is what makes the domain's
+        cutoff mean the same thing on both backends (ADR 0016).
+        """
+        rows = await session.execute(
+            text(
+                "SELECT id, ts_rank(to_tsvector('simple', content), query) AS rank "
+                "FROM memory_items, plainto_tsquery('simple', :words) AS query "
+                "WHERE to_tsvector('simple', content) @@ query "
+                "ORDER BY rank DESC LIMIT :limit"
+            ),
+            {"words": " ".join(words), "limit": limit},
+        )
+        hits = rows.all()
+        if not hits:
+            return {}
+        best = max(float(rank) for _, rank in hits)
         return {
             str(item_id): min(max(float(rank) / best, 0.0), 1.0) if best else 1.0
             for item_id, rank in hits

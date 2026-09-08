@@ -24,21 +24,21 @@ from infrastructure.tools.filesystem import (
     FileListTool,
     FileMoveTool,
     FileReadTool,
+    FileRoot,
     FileWriteTool,
-    Workspace,
 )
 from infrastructure.tools.registry import InMemoryToolRegistry
 from infrastructure.tools.web import BrowserExtractTool, BrowserOpenTool, WebSearchTool
 
 
-def filesystem_tools(root: Path) -> list[Tool]:
-    workspace = Workspace(root)
-    workspace.ensure()
+def filesystem_tools(root: Path | Callable[[], Path]) -> list[Tool]:
+    file_root = FileRoot(root)
+    file_root.ensure()
     return [
-        FileListTool(workspace),
-        FileReadTool(workspace),
-        FileWriteTool(workspace),
-        FileMoveTool(workspace),
+        FileListTool(file_root),
+        FileReadTool(file_root),
+        FileWriteTool(file_root),
+        FileMoveTool(file_root),
     ]
 
 
@@ -60,7 +60,7 @@ def screen_tools(computer: Computer, reader: Callable[[], ScreenReader]) -> list
 
 def build_registry(
     *,
-    workspace_root: Path,
+    file_root: Path | Callable[[], Path],
     search_engine: Callable[[], SearchEngine] | None = None,
     browser: Callable[[], Browser] | None = None,
     code_execution: bool = True,
@@ -68,7 +68,7 @@ def build_registry(
     computers: Callable[[], list[tuple[Computer, Callable[[], ScreenReader]]]] | None = None,
 ) -> InMemoryToolRegistry:
     """Everything this machine can do, before any employee's rights are applied."""
-    tools: list[Tool] = list(filesystem_tools(workspace_root))
+    tools: list[Tool] = list(filesystem_tools(file_root))
     if search_engine is not None:
         tools += search_tools(search_engine())
     if browser is not None:

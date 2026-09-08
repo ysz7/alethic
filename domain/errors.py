@@ -62,6 +62,15 @@ class IntegrationNotFoundError(NotFoundError):
     """
 
 
+class WorkspaceNotFoundError(NotFoundError):
+    """Named a workspace this machine does not have.
+
+    Beside the other not-founds for the same reason `IntegrationNotFoundError`
+    is: a transport turns it into a 404 without reaching past the interface
+    boundary for the class.
+    """
+
+
 class ToolNotFoundError(NotFoundError):
     def __init__(self, name: str) -> None:
         super().__init__(f"Unknown tool: {name}")
@@ -87,6 +96,24 @@ class DuplicateIntegrationError(DomainError):
 
     `gmail.send_message` has to name exactly one action, and an employee
     declaration granting `gmail` has to mean exactly one service.
+    """
+
+
+class DuplicateWorkspaceError(DomainError):
+    """Two workspaces of one name would resolve to one id.
+
+    The id is a slug of the name and is written on every row the workspace
+    owns, so two names that slug the same way are two contexts sharing one
+    boundary - which is the one thing a boundary may not do.
+    """
+
+
+class ProtectedWorkspaceError(DomainError):
+    """Asked to remove the workspace everything else falls back to.
+
+    The first workspace holds every row written before there were others, and
+    is where a machine lands when the active one is gone. Removing it would
+    orphan the first and leave nowhere to do the second.
     """
 
 

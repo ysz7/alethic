@@ -9,7 +9,15 @@ from infrastructure.persistence.models import Base, EmployeeRow, TaskRow
 #: one join table. `plan_task_dependencies` holds nothing but three foreign
 #: keys; its workspace is whatever the plan's is, and a copy of that column
 #: would be a second answer to a question the plan already answers.
-NON_USER_TABLES = {"task_events", "llm_calls", "tool_calls", "plan_task_dependencies"}
+#: `workspaces` is the one table the column names rather than carries: its own
+#: id *is* the workspace, and a `workspace_id` on it would be that id twice.
+NON_USER_TABLES = {
+    "task_events",
+    "llm_calls",
+    "tool_calls",
+    "plan_task_dependencies",
+    "workspaces",
+}
 
 
 def test_every_user_table_carries_a_workspace_id() -> None:

@@ -168,6 +168,7 @@ class EmployeeRuntime:
         await self._announce(task, ProgressKind.STAGE, "Planning the work.")
         assembled = await self._context(task, definition, assignment)
         recalled = assembled.recollections()
+        quoted = assembled.quotations()
         try:
             plan = await self._deps.planner.plan(
                 task,
@@ -175,6 +176,7 @@ class EmployeeRuntime:
                 tools=self._deps.tools.list_specs(definition),
                 context=assignment.context if assignment else None,
                 recalled=recalled,
+                knowledge=quoted,
             )
         except PlanningError as error:
             # A task with no plan is still worth attempting: the executor can
@@ -193,6 +195,7 @@ class EmployeeRuntime:
                     spec.interface_level for spec in self._deps.tools.list_specs(definition)
                 ),
                 recalled=recalled,
+                knowledge=quoted,
             ),
             cost_usd=state.transcript.cost_usd,
         )

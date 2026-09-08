@@ -17,9 +17,9 @@ from domain.audit.protocols import AuditRecord
 from domain.policies.models import ActorKind
 from domain.workflows.definition import WorkflowTrigger
 from domain.workflows.run import RunStatus, StepOutcome, WorkflowRun
-from infrastructure.persistence.approval_repository import SqliteApprovalRepository
-from infrastructure.persistence.audit_repository import SqliteAuditLog
-from infrastructure.persistence.workflow_repository import SqliteWorkflowRunRepository
+from infrastructure.persistence.approval_repository import SqlApprovalRepository
+from infrastructure.persistence.audit_repository import SqlAuditLog
+from infrastructure.persistence.workflow_repository import SqlWorkflowRunRepository
 
 
 def record(**extra) -> AuditRecord:
@@ -37,7 +37,7 @@ def record(**extra) -> AuditRecord:
 async def test_an_action_survives_the_process_that_took_it(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    audit = SqliteAuditLog(session_factory)
+    audit = SqlAuditLog(session_factory)
     task_id = uuid4()
 
     await audit.record(record(actor_id="researcher", task_id=task_id, tool="fs.write"))
@@ -53,7 +53,7 @@ async def test_the_refusals_are_in_the_same_place_as_the_actions(
 ) -> None:
     """The point of the table: a denied action has no tool call anywhere, so if
     it is not here it is nowhere."""
-    audit = SqliteAuditLog(session_factory)
+    audit = SqlAuditLog(session_factory)
 
     await audit.record(record(result="SUCCESS", action="fs.read(path='a')"))
     await audit.record(
@@ -69,7 +69,7 @@ async def test_the_refusals_are_in_the_same_place_as_the_actions(
 async def test_one_task_can_be_read_out_of_a_busy_log(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    audit = SqliteAuditLog(session_factory)
+    audit = SqlAuditLog(session_factory)
     wanted, other = uuid4(), uuid4()
 
     await audit.record(record(task_id=wanted))
@@ -86,7 +86,7 @@ async def test_a_broken_store_does_not_stop_the_work_it_was_recording(
     from infrastructure.persistence.session import create_engine, create_session_factory
 
     engine = create_engine(f"sqlite+aiosqlite:///{tmp_path / 'no-schema.db'}")
-    audit = SqliteAuditLog(create_session_factory(engine))
+    audit = SqlAuditLog(create_session_factory(engine))
 
     await audit.record(record())  # the table does not exist; this must not raise
 
@@ -99,7 +99,7 @@ async def test_a_broken_store_does_not_stop_the_work_it_was_recording(
 async def test_a_workflow_run_round_trips_with_what_each_step_produced(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    runs = SqliteWorkflowRunRepository(session_factory)
+    runs = SqlWorkflowRunRepository(session_factory)
     task_id = uuid4()
     run = WorkflowRun.create(
         "weekly-report", trigger=WorkflowTrigger.MANUAL, inputs={"folder": "sales"}
@@ -119,7 +119,7 @@ async def test_a_workflow_run_round_trips_with_what_each_step_produced(
 async def test_recent_runs_come_back_newest_first(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    runs = SqliteWorkflowRunRepository(session_factory)
+    runs = SqlWorkflowRunRepository(session_factory)
     older = WorkflowRun.create("a", started_at=datetime.now(UTC) - timedelta(hours=1))
     newer = WorkflowRun.create("b")
 
@@ -137,12 +137,12 @@ async def test_a_question_nobody_answered_is_closed_in_the_store(
 ) -> None:
     """The process that asked is gone. The row is the only thing left."""
     from domain.tasks.task import Task
-    from infrastructure.persistence.task_repository import SqliteTaskRepository
+    from infrastructure.persistence.task_repository import SqlTaskRepository
 
     task = Task.create("do something")
-    await SqliteTaskRepository(session_factory).save(task)
+    await SqlTaskRepository(session_factory).save(task)
 
-    approvals = SqliteApprovalRepository(session_factory)
+    approvals = SqlApprovalRepository(session_factory)
     asked = ApprovalRequest.create(task_id=task.id, action="code.run(...)").expiring_in(60)
     await approvals.save(Approval(request=asked))
 

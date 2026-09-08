@@ -12,6 +12,7 @@ from domain.llm.protocols import LLM
 from domain.llm.telemetry import LLMCallLog
 from infrastructure.llm.anthropic import AnthropicProvider
 from infrastructure.llm.catalog import ModelCatalog
+from infrastructure.llm.embeddings import OpenAICompatibleEmbeddings
 from infrastructure.llm.gemini import GeminiProvider
 from infrastructure.llm.local import BASE_URL as LOCAL_BASE_URL
 from infrastructure.llm.local import LocalProvider
@@ -90,6 +91,29 @@ class ProviderFactory:
         raise ConfigurationError(
             f"Unknown provider '{choice.provider}'. Providers are registered in "
             "infrastructure/llm/factory.py and their models in models.toml."
+        )
+
+    def for_embeddings(self, choice: ModelChoice) -> OpenAICompatibleEmbeddings:
+        """A client for the embedding model the router chose.
+
+        Not metered: `MeteredLLM` prices prompt and output tokens against a
+        catalog entry, and an embedding call has neither. What it costs is
+        visible where it is decided - the catalog entry, which is local and
+        therefore zero unless somebody points it elsewhere.
+        """
+        entry = self._catalog.find(choice.provider, choice.model)
+        local = choice.provider == "local"
+        if choice.provider not in ("local", "openai"):
+            raise ConfigurationError(
+                f"'{choice.provider}' does not serve embeddings. Point the "
+                "`embedding` default in the model catalog at a provider that "
+                "does - a local model runner needs no key and no network."
+            )
+        return OpenAICompatibleEmbeddings(
+            base_url=self._local_base_url if local else self._base_url,
+            model=choice.model,
+            api_key=None if local else self._require_key(choice.provider),
+            dimensions=entry.dimensions if entry else 0,
         )
 
     def _timeout_kwargs(self) -> dict[str, float]:

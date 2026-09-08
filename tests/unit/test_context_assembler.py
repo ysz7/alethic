@@ -1,4 +1,4 @@
-"""What a run is told, and where each part of it came from (§9.6)."""
+"""What a run is told, and where each part of it came from (§9.6, §15.6)."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from application.employee_runtime.verifier import Verifier
 from application.memory.assembler import ContextAssembler
 from application.memory.recorder import MemoryRecorder
 from domain.employees.limits import ExecutionLimits
+from domain.knowledge.models import Chunk, Document, Passage
 from domain.memory.models import MemoryItem, MemoryKind, MemoryQuery, MemoryScope
 from domain.tasks.task import Task, TaskStatus
 from domain.workforce.assignment import SharedContext
@@ -25,7 +26,7 @@ PLAN = reply('{"steps": [{"description": "Answer it", "expected_outcome": "an an
 PASS = reply('{"passed": true, "reason": "good enough"}')
 
 
-def build(script, memory=None, employee=None):
+def build(script, memory=None, employee=None, retriever=None):
     llm = FakeLLM(script)
     registry = InMemoryToolRegistry([])
     tasks = InMemoryTaskRepository()
@@ -37,7 +38,11 @@ def build(script, memory=None, employee=None):
         tasks=tasks,
         tools=registry,
         limits=ExecutionLimits(),
-        context=ContextAssembler(memory) if memory else None,
+        context=(
+            ContextAssembler(memory, retriever=retriever)
+            if (memory or retriever)
+            else None
+        ),
         recorder=MemoryRecorder(memory) if memory else None,
     )
     return EmployeeRuntime(who, deps), tasks, llm
@@ -87,6 +92,75 @@ async def test_what_is_remembered_reaches_the_model_as_recollection() -> None:
     prompt = "\n".join(message.content for message in execution.messages)
     assert "reports/q3.md" in prompt
     assert "may be out of date" in prompt or "confirm" in prompt
+
+
+class OnePassage:
+    """Implements `domain.knowledge.protocols.Retriever` with a fixed answer."""
+
+    def __init__(self, content: str, *, title: str = "Delivery policy") -> None:
+        self._content = content
+        self._title = title
+        self.asked: list[str] = []
+
+    async def retrieve(self, query):
+        self.asked.append(query.text)
+        document = Document.create("d", workspace_id=query.workspace_id)
+        return [
+            Passage(
+                chunk=Chunk.create(document, 0, self._content),
+                title=self._title,
+                source="policies/delivery.md",
+                score=1.0,
+                semantic=1.0,
+            )
+        ]
+
+
+async def test_a_document_reaches_the_model_as_a_quotation_with_its_source() -> None:
+    """The fourth source, and the one that is cited rather than recalled (ADR 0016)."""
+    retriever = OnePassage("Express delivery arrives the next working day.")
+    runtime, tasks, llm = build([PLAN, reply("Next day."), PASS], retriever=retriever)
+    task = Task.create("How fast is express delivery?")
+    await tasks.save(task)
+
+    await runtime.run(task)
+
+    prompt = "\n".join(message.content for message in llm.requests[1].messages)
+    assert "Express delivery arrives the next working day." in prompt
+    assert "Delivery policy" in prompt, "a quotation carries where it came from"
+    assert "EXTERNAL_CONTENT" in prompt, "and is framed as somebody else's words (§25)"
+    assert retriever.asked == [task.goal]
+
+
+async def test_a_document_is_not_offered_as_something_the_employee_remembers() -> None:
+    memory = InMemoryMemory()
+    await memory.remember(
+        MemoryItem.create(
+            "You wrote the delivery page last week",
+            scope=MemoryScope.WORKSPACE,
+            kind=MemoryKind.SEMANTIC,
+        )
+    )
+    assembled = await ContextAssembler(
+        memory, retriever=OnePassage("Returns run for thirty days.")
+    ).assemble(Task.create("What is the returns window?"), definition())
+
+    assert assembled.recollections() == ("You wrote the delivery page last week",)
+    assert "Returns run for thirty days." in "".join(assembled.quotations())
+    assert not any("Returns run" in line for line in assembled.recollections())
+
+
+async def test_a_retrieval_that_fails_costs_the_run_its_citations_and_nothing_else() -> None:
+    class Broken:
+        async def retrieve(self, query):
+            raise RuntimeError("the store is not answering")
+
+    assembled = await ContextAssembler(None, retriever=Broken()).assemble(
+        Task.create("Anything"), definition(), SharedContext(facts=("Told this",))
+    )
+
+    assert assembled.quotations() == ()
+    assert assembled.facts == ("Told this",)
 
 
 async def test_a_runtime_without_memory_is_the_runtime_it_was_before() -> None:

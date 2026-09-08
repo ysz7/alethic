@@ -30,7 +30,7 @@ def client(tmp_path: Path):
     settings = Settings(
         data_dir=tmp_path,
         database_url=f"sqlite+aiosqlite:///{tmp_path / 'alethic.db'}",
-        workspace_dir=tmp_path / "workspace",
+        file_root=tmp_path / "workspace",
     )
     _create_schema(settings)
     # No model is called by any of this - connecting a server is not work - but

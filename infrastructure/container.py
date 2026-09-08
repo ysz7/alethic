@@ -25,7 +25,9 @@ from domain.computer.protocols import Computer, ScreenReader, StopSignal
 from domain.conversations.repository import ConversationRepository
 from domain.employees.protocols import EmployeeRegistry
 from domain.employees.validation import Issue, check_all
+from domain.errors import AlethicError
 from domain.integrations.repository import IntegrationRepository
+from domain.knowledge.protocols import EmbeddingProvider, KnowledgeStore, Retriever
 from domain.llm.models import RoutingHints, TaskKind
 from domain.llm.protocols import LLM, ModelRouter
 from domain.llm.telemetry import LLMCallLog
@@ -47,6 +49,9 @@ from domain.workforce.repository import (
     ObjectiveRepository,
     PlanRepository,
 )
+from domain.workspace.models import WorkspaceId
+from domain.workspace.protocols import WorkspaceContext
+from domain.workspace.repository import WorkspaceRepository
 from infrastructure.employees.yaml_registry import YamlEmployeeRegistry
 from infrastructure.llm.catalog import ModelCatalog
 from infrastructure.llm.factory import ProviderFactory
@@ -59,6 +64,7 @@ from infrastructure.progress.broadcaster import InMemoryProgressBroadcaster
 from infrastructure.secrets.env import EnvSecretResolver
 from infrastructure.settings import RuntimeSettings
 from infrastructure.tools.builtin import build_registry
+from infrastructure.workspace.context import LocalWorkspaceContext
 
 
 class Container:
@@ -132,9 +138,9 @@ class Container:
         if self._in_memory:
             return InMemoryTaskRepository()
         # Imported here so an in-memory container never pulls in the SQL adapter.
-        from infrastructure.persistence.task_repository import SqliteTaskRepository
+        from infrastructure.persistence.task_repository import SqlTaskRepository
 
-        return SqliteTaskRepository(self.session_factory)
+        return SqlTaskRepository(self.session_factory)
 
     @cached_property
     def llm_call_log(self) -> LLMCallLog:
@@ -142,9 +148,9 @@ class Container:
             from infrastructure.persistence.llm_call_repository import InMemoryLLMCallLog
 
             return InMemoryLLMCallLog()
-        from infrastructure.persistence.llm_call_repository import SqliteLLMCallLog
+        from infrastructure.persistence.llm_call_repository import SqlLLMCallLog
 
-        return SqliteLLMCallLog(self.session_factory)
+        return SqlLLMCallLog(self.session_factory)
 
     # --- Models ---------------------------------------------------------------
 
@@ -381,7 +387,7 @@ class Container:
         """
         self.configure()
         return build_registry(
-            workspace_root=self.settings.ensure_workspace_dir(),
+            file_root=self.workspaces.current_root,
             search_engine=(
                 (lambda: self.search_engine) if self.settings.browser_tools_enabled else None
             ),
@@ -402,9 +408,41 @@ class Container:
             from infrastructure.persistence.tool_call_repository import InMemoryToolCallLog
 
             return InMemoryToolCallLog()
-        from infrastructure.persistence.tool_call_repository import SqliteToolCallLog
+        from infrastructure.persistence.tool_call_repository import SqlToolCallLog
 
-        return SqliteToolCallLog(self.session_factory)
+        return SqlToolCallLog(self.session_factory)
+
+    # --- Workspaces ---------------------------------------------------------
+
+    @cached_property
+    def workspace_repository(self) -> WorkspaceRepository:
+        if self._in_memory:
+            from infrastructure.persistence.workspace_repository import (
+                InMemoryWorkspaceRepository,
+            )
+
+            return InMemoryWorkspaceRepository()
+        from infrastructure.persistence.workspace_repository import (
+            SqlWorkspaceRepository,
+        )
+
+        return SqlWorkspaceRepository(self.session_factory)
+
+    @cached_property
+    def workspaces(self) -> WorkspaceContext:
+        """Which workspace this process is in, and where its files are.
+
+        Built without touching the database: the filesystem tools ask it for a
+        root on every call, and a call cannot wait on a query. What exists is
+        declared into it by whoever has just read the store.
+        """
+        self.configure()
+        return LocalWorkspaceContext(
+            path=self.settings.active_workspace_path,
+            default_root=self.settings.resolved_file_root,
+            roots_base=self.settings.workspace_roots_dir,
+            configured=WorkspaceId(self.settings.active_workspace),
+        )
 
     # --- Integrations -------------------------------------------------------
 
@@ -417,10 +455,10 @@ class Container:
 
             return InMemoryIntegrationRepository()
         from infrastructure.persistence.integration_repository import (
-            SqliteIntegrationRepository,
+            SqlIntegrationRepository,
         )
 
-        return SqliteIntegrationRepository(self.session_factory)
+        return SqlIntegrationRepository(self.session_factory)
 
     def use_integrations(self, factory: Callable[[], object]) -> None:
         """Supply the lifecycle of connected services.
@@ -456,6 +494,59 @@ class Container:
         if hasattr(registry, "refresh"):
             registry.refresh(integrations)
 
+    # --- Knowledge ----------------------------------------------------------
+
+    @cached_property
+    def knowledge_store(self) -> KnowledgeStore | None:
+        """Where the user's own documents are kept, or None if that is off.
+
+        A different store from memory, on purpose: memory decays and is pruned
+        by age, and a specification somebody uploaded does not stop being true
+        because nobody opened it for a fortnight (ADR 0016).
+        """
+        if not self.settings.knowledge_enabled:
+            return None
+        if self._in_memory:
+            from infrastructure.knowledge.store import InMemoryKnowledgeStore
+
+            return InMemoryKnowledgeStore()
+        from infrastructure.knowledge.store import SqlKnowledgeStore
+
+        return SqlKnowledgeStore(self.session_factory)
+
+    @cached_property
+    def embeddings(self) -> EmbeddingProvider | None:
+        """A model that turns text into vectors, if the catalog offers one.
+
+        Asked for by capability like everything else - nothing here names a
+        model - and None where the catalog has no entry that can do it. None is
+        not a failure: retrieval falls back to the text index and says so, which
+        is what keeps `clone && run` working on a machine with no model server
+        at all.
+        """
+        if not self.settings.knowledge_enabled:
+            return None
+        try:
+            choice = self.model_router.select(
+                TaskKind.EMBEDDING,
+                CapabilityRequirement(required=frozenset({Capability.EMBEDDING})),
+                RoutingHints(),
+            )
+            return self.llm_factory.for_embeddings(choice)
+        except AlethicError as error:
+            self.logger.info("knowledge.no_embedding_model", reason=str(error))
+            return None
+
+    @cached_property
+    def retriever(self) -> Retriever | None:
+        """The half of knowledge that goes into a run: search, never delete."""
+        store = self.knowledge_store
+        if store is None:
+            return None
+        from infrastructure.knowledge.retriever import HybridRetriever
+
+        return HybridRetriever(store, embeddings=self.embeddings)
+
     # --- Memory -----------------------------------------------------------------
 
     @cached_property
@@ -473,9 +564,9 @@ class Container:
             from infrastructure.memory.in_memory import InMemoryMemory
 
             return InMemoryMemory()
-        from infrastructure.memory.sqlite import SqliteMemory
+        from infrastructure.memory.sql import SqlMemory
 
-        return SqliteMemory(self.session_factory)
+        return SqlMemory(self.session_factory)
 
     @property
     def memory_maintenance(self) -> MemoryMaintenance | None:
@@ -492,9 +583,9 @@ class Container:
             )
 
             return InMemoryApprovalRepository()
-        from infrastructure.persistence.approval_repository import SqliteApprovalRepository
+        from infrastructure.persistence.approval_repository import SqlApprovalRepository
 
-        return SqliteApprovalRepository(self.session_factory)
+        return SqlApprovalRepository(self.session_factory)
 
     def use_approval_confirmer(self, confirmer: Callable[..., object]) -> None:
         """Have approvals asked somewhere other than the terminal.
@@ -556,10 +647,10 @@ class Container:
 
             return InMemoryWorkflowRunRepository()
         from infrastructure.persistence.workflow_repository import (
-            SqliteWorkflowRunRepository,
+            SqlWorkflowRunRepository,
         )
 
-        return SqliteWorkflowRunRepository(self.session_factory)
+        return SqlWorkflowRunRepository(self.session_factory)
 
     # --- Validation ---------------------------------------------------------------
 
@@ -578,10 +669,10 @@ class Container:
 
             return InMemoryValidationRunRepository()
         from infrastructure.persistence.validation_run_repository import (
-            SqliteValidationRunRepository,
+            SqlValidationRunRepository,
         )
 
-        return SqliteValidationRunRepository(self.session_factory)
+        return SqlValidationRunRepository(self.session_factory)
 
     def available_requirements(self) -> frozenset[Requirement]:
         """What this machine can actually do, as a scenario would name it.
@@ -623,9 +714,9 @@ class Container:
             from infrastructure.persistence.audit_repository import InMemoryAuditLog
 
             return InMemoryAuditLog()
-        from infrastructure.persistence.audit_repository import SqliteAuditLog
+        from infrastructure.persistence.audit_repository import SqlAuditLog
 
-        return SqliteAuditLog(self.session_factory)
+        return SqlAuditLog(self.session_factory)
 
     @cached_property
     def employee_repository(self):
@@ -635,9 +726,9 @@ class Container:
             )
 
             return InMemoryEmployeeRepository()
-        from infrastructure.persistence.employee_repository import SqliteEmployeeRepository
+        from infrastructure.persistence.employee_repository import SqlEmployeeRepository
 
-        return SqliteEmployeeRepository(self.session_factory)
+        return SqlEmployeeRepository(self.session_factory)
 
     async def sync_employees(self) -> int:
         """Persist the declared employees so tasks can reference them.
@@ -668,10 +759,10 @@ class Container:
 
             return InMemoryAssignmentRepository()
         from infrastructure.persistence.assignment_repository import (
-            SqliteAssignmentRepository,
+            SqlAssignmentRepository,
         )
 
-        return SqliteAssignmentRepository(self.session_factory)
+        return SqlAssignmentRepository(self.session_factory)
 
     # --- The manager's own record ---------------------------------------------
 
@@ -690,10 +781,10 @@ class Container:
 
             return InMemoryConversationRepository()
         from infrastructure.persistence.conversation_repository import (
-            SqliteConversationRepository,
+            SqlConversationRepository,
         )
 
-        return SqliteConversationRepository(self.session_factory)
+        return SqlConversationRepository(self.session_factory)
 
     @cached_property
     def objective_repository(self) -> ObjectiveRepository:
@@ -703,9 +794,9 @@ class Container:
             )
 
             return InMemoryObjectiveRepository()
-        from infrastructure.persistence.objective_repository import SqliteObjectiveRepository
+        from infrastructure.persistence.objective_repository import SqlObjectiveRepository
 
-        return SqliteObjectiveRepository(self.session_factory)
+        return SqlObjectiveRepository(self.session_factory)
 
     @cached_property
     def plan_repository(self) -> PlanRepository:
@@ -715,9 +806,9 @@ class Container:
             # Paired with the task repository so an in-memory run reads a
             # plan's task states from the same place a SQLite one does.
             return InMemoryPlanRepository(self.task_repository)
-        from infrastructure.persistence.plan_repository import SqlitePlanRepository
+        from infrastructure.persistence.plan_repository import SqlPlanRepository
 
-        return SqlitePlanRepository(self.session_factory)
+        return SqlPlanRepository(self.session_factory)
 
     # --- Work that starts on its own ------------------------------------------
 
@@ -729,9 +820,9 @@ class Container:
             )
 
             return InMemoryScheduleRepository()
-        from infrastructure.persistence.schedule_repository import SqliteScheduleRepository
+        from infrastructure.persistence.schedule_repository import SqlScheduleRepository
 
-        return SqliteScheduleRepository(self.session_factory)
+        return SqlScheduleRepository(self.session_factory)
 
     @cached_property
     def event_log(self) -> EventLog:
@@ -741,9 +832,9 @@ class Container:
             from infrastructure.persistence.schedule_repository import InMemoryEventLog
 
             return InMemoryEventLog()
-        from infrastructure.persistence.schedule_repository import SqliteEventLog
+        from infrastructure.persistence.schedule_repository import SqlEventLog
 
-        return SqliteEventLog(self.session_factory)
+        return SqlEventLog(self.session_factory)
 
     async def aclose(self) -> None:
         if "llm_factory" in self.__dict__:

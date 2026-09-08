@@ -72,7 +72,7 @@ async def test_an_employee_sorts_a_folder_with_the_tools_it_declares(tmp_path: P
 
     outcome = await Executor(
         llm,
-        build_registry(workspace_root=workspace, code_execution=False),
+        build_registry(file_root=workspace, code_execution=False),
         approvals=ApprovalGate(ScriptedApprovalService.rejecting()),
         call_log=log,
     ).run(task, employee, opening(task, employee))
@@ -106,7 +106,7 @@ async def test_overwriting_needs_a_yes_and_stops_without_one(tmp_path: Path) -> 
 
     await Executor(
         llm,
-        build_registry(workspace_root=workspace, code_execution=False),
+        build_registry(file_root=workspace, code_execution=False),
         approvals=ApprovalGate(service),
     ).run(task, employee, opening(task, employee))
 
@@ -134,7 +134,7 @@ async def test_the_same_write_goes_through_once_the_user_agrees(tmp_path: Path) 
 
     await Executor(
         llm,
-        build_registry(workspace_root=workspace, code_execution=False),
+        build_registry(file_root=workspace, code_execution=False),
         approvals=ApprovalGate(ScriptedApprovalService.approving()),
     ).run(task, employee, opening(task, employee))
 
@@ -148,7 +148,7 @@ async def test_an_employee_is_shown_only_the_tools_it_may_use(tmp_path: Path) ->
     llm = FakeLLM([reply("Nothing to do.")])
 
     await Executor(
-        llm, build_registry(workspace_root=workspace, code_execution=True)
+        llm, build_registry(file_root=workspace, code_execution=True)
     ).run(task, employee, opening(task, employee))
 
     offered = {spec.name for spec in llm.last_request.tools}
@@ -172,7 +172,7 @@ async def test_a_tool_outside_the_declaration_is_refused_at_the_registry(tmp_pat
 
     outcome = await Executor(
         llm,
-        build_registry(workspace_root=workspace),
+        build_registry(file_root=workspace),
         approvals=ApprovalGate(ScriptedApprovalService.approving()),
     ).run(task, employee, opening(task, employee))
 
@@ -201,7 +201,7 @@ async def test_the_workspace_is_the_boundary_even_when_the_model_asks_nicely(
 
     outcome = await Executor(
         llm,
-        build_registry(workspace_root=workspace, code_execution=False),
+        build_registry(file_root=workspace, code_execution=False),
         approvals=ApprovalGate(ScriptedApprovalService.approving()),
     ).run(task, employee, opening(task, employee))
 

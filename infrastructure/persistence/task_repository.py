@@ -7,19 +7,19 @@ from contextlib import asynccontextmanager
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from domain.errors import StorageError, StorageNotInitializedError
 from domain.tasks.task import RESUMABLE_STATUSES, Task, TaskEvent
 from domain.workspace.models import DEFAULT_WORKSPACE_ID, WorkspaceId
+from infrastructure.persistence.dialect import upsert
 from infrastructure.persistence.mappers import event_to_row, row_to_event, row_to_task, task_to_row
 from infrastructure.persistence.models import TaskEventRow, TaskRow
 from infrastructure.persistence.session import session_scope
 
 
-class SqliteTaskRepository:
+class SqlTaskRepository:
     """Implements `domain.tasks.repository.TaskRepository`."""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -47,7 +47,7 @@ class SqliteTaskRepository:
         async with self._session() as session:
             # Upsert: the runtime saves after every step, and a resumed task is
             # written back under the id it already has.
-            statement = sqlite_insert(TaskRow).values(**values)
+            statement = upsert(session, TaskRow).values(**values)
             statement = statement.on_conflict_do_update(
                 index_elements=[TaskRow.id],
                 set_={k: v for k, v in values.items() if k not in ("id", "created_at")},

@@ -25,3 +25,8 @@ class FeatureFlags(BaseModel):
     # the empty list, not this. It exists to turn off a capability that is
     # not wanted on a given machine, which is what every flag here is for.
     integrations: bool = True
+    # Phase 15. On by default and, like integrations, harmless with nothing
+    # added: knowledge is documents a person brought, so the empty list is the
+    # real switch. Off, `Container.knowledge` is None and the runtime assembles
+    # the Phase 14 context - the same arrangement memory has.
+    knowledge: bool = True

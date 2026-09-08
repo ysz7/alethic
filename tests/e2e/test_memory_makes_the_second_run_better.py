@@ -29,7 +29,7 @@ from domain.llm.models import ToolCallRequest
 from domain.memory.models import MemoryQuery
 from domain.tasks.task import Task, TaskStatus
 from domain.tools.models import ToolResult
-from infrastructure.memory.sqlite import SqliteMemory
+from infrastructure.memory.sql import SqlMemory
 from infrastructure.persistence.in_memory_task_repository import InMemoryTaskRepository
 from infrastructure.persistence.models import Base
 from infrastructure.persistence.session import create_engine, create_session_factory
@@ -81,7 +81,7 @@ def build(script, memory, tool):
 async def test_the_second_run_starts_from_what_the_first_learned(
     store: async_sessionmaker[AsyncSession],
 ) -> None:
-    memory = SqliteMemory(store)
+    memory = SqlMemory(store)
     tool = FakeTool("fs.read", result=ToolResult.ok(value="412,000"))
 
     # --- The first run: it has to go and look --------------------------------
@@ -106,7 +106,7 @@ async def test_the_second_run_starts_from_what_the_first_learned(
     # A second adapter over the same file, and a second runtime that shares
     # nothing with the first but the database.
     second, later_tasks, second_llm = build(
-        [PLAN, reply(ANSWER), PASS], SqliteMemory(store), FakeTool("fs.read")
+        [PLAN, reply(ANSWER), PASS], SqlMemory(store), FakeTool("fs.read")
     )
     repeat = Task.create(GOAL)
     await later_tasks.save(repeat)
@@ -128,7 +128,7 @@ async def test_what_is_remembered_is_the_outcome_not_the_transcript(
     store: async_sessionmaker[AsyncSession],
 ) -> None:
     """Memory is a pointer to what happened; the task row holds the whole of it."""
-    memory = SqliteMemory(store)
+    memory = SqlMemory(store)
     tool = FakeTool("fs.read", result=ToolResult.ok(value="412,000"))
     runtime, tasks, _ = build(
         [

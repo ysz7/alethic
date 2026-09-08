@@ -99,6 +99,9 @@ class TaskKind(StrEnum):
     SYNTHESIS = "SYNTHESIS"
     EXTRACTION = "EXTRACTION"
     CONVERSATION = "CONVERSATION"
+    #: Turning text into a vector. A kind of work rather than a kind of model,
+    #: for the same reason the others are: the catalog says which entry does it.
+    EMBEDDING = "EMBEDDING"
 
 
 @dataclass(frozen=True, slots=True)

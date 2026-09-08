@@ -57,7 +57,7 @@ def _to_record(row: AuditRow) -> AuditRecord:
     )
 
 
-class SqliteAuditLog:
+class SqlAuditLog:
     """Implements `domain.audit.protocols.AuditLog` and `AuditTrail`."""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:

@@ -64,9 +64,14 @@ from application.interface.service import AlethicService, ApprovalsDisabledError
 from application.scheduling.scheduler import Scheduler
 from domain.errors import (
     AlethicError,
+    DuplicateWorkspaceError,
     IntegrationNotFoundError,
+    NotFoundError,
+    ProtectedWorkspaceError,
     StorageNotInitializedError,
+    WorkspaceNotFoundError,
 )
+from domain.workspace.models import DEFAULT_WORKSPACE_ID, WorkspaceId
 from infrastructure.approvals.waiting import WaitingConfirmer
 from infrastructure.container import Container
 
@@ -108,6 +113,10 @@ class NewObjective(BaseModel):
     #: `application/interface/contracts.py`.
     source: RequestSource = RequestSource.WEB
     input_type: InputType = InputType.TEXT
+    #: Which context the request belongs to. Absent means the workspace this
+    #: machine is working in, which is what a surface without a selector wants
+    #: and what every request meant before there was more than one.
+    workspace_id: str | None = None
 
 
 class NewConversation(BaseModel):
@@ -128,6 +137,33 @@ class NewIntegration(BaseModel):
     capabilities: tuple[str, ...] = ()
     #: Names only. A value is sent to `/api/credentials` and never lands here.
     secret_names: tuple[str, ...] = ()
+
+
+class NewDocument(BaseModel):
+    """A file on this machine, by path.
+
+    Not an upload. The platform is local-first and the file is already here;
+    a multipart body would make the interface a second copy of it, and the
+    desktop window has the path the moment somebody drops one on it.
+    """
+
+    path: str = Field(min_length=1)
+    title: str = ""
+    media_type: str = ""
+
+
+class NewWorkspace(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str = ""
+    #: Where its files live. Absent means beside the database, under the
+    #: workspace's own id - never inside another workspace's root.
+    file_root: str | None = None
+
+
+class WorkspaceEdit(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    file_root: str | None = None
 
 
 class Classification(BaseModel):
@@ -331,6 +367,82 @@ def _routes(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail=str(error)) from error
 
 
+    @app.get("/api/memory")
+    async def memory(request: Request, q: str = "", limit: int = 20) -> dict[str, Any]:
+        """What this workspace remembers. Read-only, deliberately (ADR 0009)."""
+        return {"items": await _guarded(_service(request).list_memory(search=q, limit=limit))}
+
+    # --- Documents ------------------------------------------------------------
+
+    @app.get("/api/documents")
+    async def documents(request: Request) -> dict[str, Any]:
+        service = _service(request)
+        return {
+            "available": service.knowledge_available,
+            "documents": await _guarded(service.list_documents()),
+        }
+
+    @app.post("/api/documents", status_code=201)
+    async def add_document(request: Request, body: NewDocument) -> dict[str, Any]:
+        return await _knowledge(
+            _service(request).add_document(
+                body.path, title=body.title, media_type=body.media_type
+            )
+        )
+
+    @app.post("/api/documents/{document_id}/reindex")
+    async def reindex_document(request: Request, document_id: UUID) -> dict[str, Any]:
+        return await _knowledge(_service(request).reindex_document(document_id))
+
+    @app.delete("/api/documents/{document_id}")
+    async def remove_document(request: Request, document_id: UUID) -> dict[str, Any]:
+        removed = await _knowledge(_service(request).delete_document(document_id))
+        return {"removed": removed}
+
+    @app.get("/api/documents/search")
+    async def search_documents(request: Request, q: str, limit: int = 5) -> dict[str, Any]:
+        """What an employee would be given for this question, shown to a person."""
+        return {"passages": await _guarded(_service(request).search_documents(q, limit=limit))}
+
+    # --- Workspaces -----------------------------------------------------------
+
+    @app.get("/api/workspaces")
+    async def workspaces(request: Request) -> dict[str, Any]:
+        return {"workspaces": await _guarded(_service(request).list_workspaces())}
+
+    @app.post("/api/workspaces", status_code=201)
+    async def add_workspace(request: Request, body: NewWorkspace) -> dict[str, Any]:
+        return await _workspace(
+            _service(request).create_workspace(
+                body.name, description=body.description, file_root=body.file_root
+            )
+        )
+
+    @app.patch("/api/workspaces/{workspace_id}")
+    async def edit_workspace(
+        request: Request, workspace_id: str, body: WorkspaceEdit
+    ) -> dict[str, Any]:
+        return await _workspace(
+            _service(request).update_workspace(
+                WorkspaceId(workspace_id),
+                name=body.name,
+                description=body.description,
+                file_root=body.file_root,
+            )
+        )
+
+    @app.post("/api/workspaces/{workspace_id}/use")
+    async def use_workspace(request: Request, workspace_id: str) -> dict[str, Any]:
+        """Switch the machine. Work already running keeps the workspace it began in."""
+        return await _workspace(_service(request).use_workspace(WorkspaceId(workspace_id)))
+
+    @app.delete("/api/workspaces/{workspace_id}")
+    async def remove_workspace(request: Request, workspace_id: str) -> dict[str, Any]:
+        removed = await _workspace(
+            _service(request).delete_workspace(WorkspaceId(workspace_id))
+        )
+        return {"removed": removed}
+
     # --- Integrations ---------------------------------------------------------
 
     @app.get("/api/integrations")
@@ -467,19 +579,72 @@ def _found(value: dict[str, Any] | None, missing: str) -> dict[str, Any]:
 async def _ask(
     request: Request, body: NewObjective, *, conversation_id: UUID | None
 ) -> dict[str, Any]:
+    """Submit a request, in the workspace it names or the one this machine is in.
+
+    Resolving the default here rather than inside the core keeps `UserRequest`
+    what it is: everything the platform needs, stated by the adapter. A surface
+    with no workspace selector - the CLI, a schedule, a bot - says nothing and
+    gets the active one, exactly as a person at the terminal would expect.
+    """
+    service = _service(request)
+    named = body.workspace_id
+    if named is None:
+        active = await _guarded(service.active_workspace())
+        named = active["id"] if active else str(DEFAULT_WORKSPACE_ID)
     try:
         return await _guarded(
-            _service(request).submit(
+            service.submit(
                 UserRequest(
                     content=body.request,
                     source=body.source,
                     input_type=body.input_type,
                     conversation_id=conversation_id,
+                    workspace_id=WorkspaceId(named),
                 )
             )
         )
     except AlethicError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+async def _knowledge(awaitable):
+    """One document operation, with its refusals turned into answers.
+
+    A file that is not there, or a format nothing here reads, is a 400: the
+    request was understood and cannot be carried out, and the message says
+    which of the two it was. Knowledge switched off is a 409, like every other
+    capability a machine is configured without.
+    """
+    from application.interface.service import KnowledgeDisabledError
+
+    try:
+        return await _guarded(awaitable)
+    except KnowledgeDisabledError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except NotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except AlethicError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+async def _workspace(awaitable):
+    """One workspace operation, with its refusals turned into answers.
+
+    An unknown workspace is a 404 - a window left open across a removal is an
+    ordinary thing - and the two ways of asking for something impossible (a
+    name already taken, the first workspace) are 409s: the request was well
+    formed and the platform will not do it.
+    """
+    from application.interface.service import WorkspacesDisabledError
+
+    try:
+        return await _guarded(awaitable)
+    except WorkspaceNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (DuplicateWorkspaceError, ProtectedWorkspaceError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except WorkspacesDisabledError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 async def _integration(awaitable):

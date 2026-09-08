@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -36,6 +37,8 @@ from application.interface import views
 from application.interface.activity import Activity, ActivityEvent
 from application.interface.contracts import RequestSource, UserRequest
 from application.interface.runs import Runs
+from application.knowledge.service import KnowledgeService
+from application.workspaces.service import WorkspaceService
 from domain.approvals.models import ApprovalState
 from domain.approvals.protocols import (
     ApprovalRepository,
@@ -48,13 +51,17 @@ from domain.conversations.repository import ConversationRepository
 from domain.employees.protocols import EmployeeRegistry
 from domain.errors import AlethicError, IntegrationNotFoundError
 from domain.integrations.models import IntegrationKind
+from domain.knowledge.models import KnowledgeQuery
+from domain.knowledge.protocols import Retriever
 from domain.llm.telemetry import LLMCallLog
+from domain.memory.models import MemoryQuery, MemoryScope
+from domain.memory.protocols import Memory
 from domain.policies.risk import Effect
 from domain.secrets.protocols import CredentialStore
 from domain.tasks.repository import TaskRepository
 from domain.tools.telemetry import ToolCallLog
 from domain.workforce.repository import ObjectiveRepository, PlanRepository
-from domain.workspace.models import DEFAULT_WORKSPACE_ID
+from domain.workspace.models import DEFAULT_WORKSPACE_ID, WorkspaceId
 
 log = structlog.get_logger(__name__)
 
@@ -70,6 +77,14 @@ class ApprovalsDisabledError(AlethicError):
 
 class IntegrationsDisabledError(AlethicError):
     """Asked about connected services on a machine where they are switched off."""
+
+
+class WorkspacesDisabledError(AlethicError):
+    """Asked to switch context on an interface built without workspaces."""
+
+
+class KnowledgeDisabledError(AlethicError):
+    """Asked about documents on a machine where knowledge is switched off."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +116,19 @@ class ServiceDependencies:
     #: the resolver every tool holds, so that reading one does not imply
     #: being able to write one.
     credentials: CredentialStore | None = None
+    #: How contexts are separated on this machine. None only where an
+    #: interface was built without one - the workspace of a request is then
+    #: whatever it says, and nothing can be switched.
+    workspaces: WorkspaceService | None = None
+    #: The user's own documents, and the search over them. None where
+    #: knowledge is switched off - the methods below then say so rather than
+    #: answering with an empty list, which would invite somebody to add one.
+    knowledge: KnowledgeService | None = None
+    retriever: Retriever | None = None
+    #: Read-only. The facade shows what is remembered and cannot forget it:
+    #: `MemoryMaintenance` is a separate contract for exactly that reason, and
+    #: an interface that held both would make "show me" one click from "delete".
+    memory: Memory | None = None
     history_limit: int = DEFAULT_LIMIT
 
 
@@ -112,10 +140,23 @@ class AlethicService:
 
     # --- Conversations --------------------------------------------------------
 
+    async def _here(self) -> WorkspaceId:
+        """The workspace a listing is about: the one this machine is working in.
+
+        A listing that ignored it would show a person their other context's
+        history the moment they switched, which is the whole thing a workspace
+        is for. Where nothing separates contexts - an interface built without
+        workspaces - it is the first one, which is what every listing meant
+        before Phase 15.
+        """
+        if self._d.workspaces is None:
+            return DEFAULT_WORKSPACE_ID
+        return (await self._d.workspaces.active()).id
+
     async def create_conversation(self, title: str = "", *, workspace_id=None) -> dict[str, Any]:
+        """Open a thread, in the workspace this machine is in unless told which."""
         conversation = Conversation.create(
-            title,
-            **({"workspace_id": workspace_id} if workspace_id is not None else {}),
+            title, workspace_id=workspace_id or await self._here()
         )
         await self._d.conversations.save(conversation)
         log.info("interface.conversation_created", conversation_id=str(conversation.id))
@@ -123,7 +164,7 @@ class AlethicService:
 
     async def list_conversations(self, *, limit: int | None = None) -> list[dict[str, Any]]:
         found = await self._d.conversations.list_recent(
-            limit=limit or self._d.history_limit
+            await self._here(), limit=limit or self._d.history_limit
         )
         return [views.conversation(item) for item in found]
 
@@ -145,6 +186,150 @@ class AlethicService:
             ],
         }
 
+    # --- Workspaces -----------------------------------------------------------
+
+    async def list_workspaces(self) -> list[dict[str, Any]]:
+        """What contexts exist here, and which one this machine is working in."""
+        if self._d.workspaces is None:
+            return []
+        active = await self._d.workspaces.active()
+        return [
+            views.workspace(
+                item,
+                active=item.id == active.id,
+                file_root=str(self._d.workspaces.root_for(item.id)),
+            )
+            for item in await self._d.workspaces.list()
+        ]
+
+    async def active_workspace(self) -> dict[str, Any] | None:
+        if self._d.workspaces is None:
+            return None
+        item = await self._d.workspaces.active()
+        return views.workspace(
+            item, active=True, file_root=str(self._d.workspaces.root_for(item.id))
+        )
+
+    async def create_workspace(
+        self, name: str, *, description: str = "", file_root: str | None = None
+    ) -> dict[str, Any]:
+        if self._d.workspaces is None:
+            raise WorkspacesDisabledError("This interface has no workspaces behind it.")
+        item = await self._d.workspaces.create(
+            name, description=description, file_root=file_root
+        )
+        return views.workspace(item, file_root=str(self._d.workspaces.root_for(item.id)))
+
+    async def update_workspace(
+        self,
+        workspace_id: WorkspaceId,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        file_root: str | None = None,
+    ) -> dict[str, Any]:
+        if self._d.workspaces is None:
+            raise WorkspacesDisabledError("This interface has no workspaces behind it.")
+        item = await self._d.workspaces.update(
+            workspace_id, name=name, description=description, file_root=file_root
+        )
+        return views.workspace(item, file_root=str(self._d.workspaces.root_for(item.id)))
+
+    async def use_workspace(self, workspace_id: WorkspaceId) -> dict[str, Any]:
+        """Switch this machine. What it moves is the default for the next request.
+
+        A run already going keeps the workspace it started in - that is
+        `WorkspaceContext.enter`, applied by the task runner - so switching
+        never reaches inside work that is already happening.
+        """
+        if self._d.workspaces is None:
+            raise WorkspacesDisabledError("This interface has no workspaces behind it.")
+        item = await self._d.workspaces.use(workspace_id)
+        return views.workspace(
+            item, active=True, file_root=str(self._d.workspaces.root_for(item.id))
+        )
+
+    async def delete_workspace(self, workspace_id: WorkspaceId) -> bool:
+        """Remove the record. History and files stay, deliberately (§15.1)."""
+        if self._d.workspaces is None:
+            raise WorkspacesDisabledError("This interface has no workspaces behind it.")
+        return await self._d.workspaces.delete(workspace_id)
+
+    # --- Memory ---------------------------------------------------------------
+
+    async def list_memory(self, *, search: str = "", limit: int = 20) -> list[dict[str, Any]]:
+        """What this workspace remembers, through the one contract memory has.
+
+        The same scopes a run reads - this workspace's, and the person's own -
+        and deliberately not an employee's private notes: the facade has no more
+        access to the store than a running task does (ADR 0009).
+        """
+        if self._d.memory is None:
+            return []
+        items = await self._d.memory.recall(
+            MemoryQuery(
+                text=search,
+                workspace_id=await self._here(),
+                scopes=frozenset({MemoryScope.WORKSPACE, MemoryScope.USER}),
+                limit=limit,
+            )
+        )
+        return [views.memory_item(item) for item in items]
+
+    # --- Knowledge ------------------------------------------------------------
+
+    @property
+    def knowledge_available(self) -> bool:
+        return self._d.knowledge is not None
+
+    async def list_documents(self) -> list[dict[str, Any]]:
+        """What the active workspace knows because somebody put it there."""
+        if self._d.knowledge is None:
+            return []
+        found = await self._d.knowledge.list(workspace_id=await self._here())
+        return [views.document(item) for item in found]
+
+    async def add_document(
+        self, path: str, *, title: str = "", media_type: str = ""
+    ) -> dict[str, Any]:
+        """Read a file on this machine into the active workspace.
+
+        By path, not by bytes: the file the person dropped on the window is
+        already on this machine, and carrying it through the request would make
+        the interface a second file store - the same reasoning as `Attachment`.
+        """
+        if self._d.knowledge is None:
+            raise KnowledgeDisabledError("Documents are switched off on this machine.")
+        document = await self._d.knowledge.add_file(
+            Path(path), workspace_id=await self._here(), title=title, media_type=media_type
+        )
+        return views.document(document)
+
+    async def reindex_document(self, document_id: UUID) -> dict[str, Any]:
+        if self._d.knowledge is None:
+            raise KnowledgeDisabledError("Documents are switched off on this machine.")
+        return views.document(await self._d.knowledge.reindex(document_id))
+
+    async def delete_document(self, document_id: UUID) -> bool:
+        """Remove the document and its passages. Memory is left alone (ADR 0016)."""
+        if self._d.knowledge is None:
+            raise KnowledgeDisabledError("Documents are switched off on this machine.")
+        return await self._d.knowledge.delete(document_id)
+
+    async def search_documents(self, question: str, *, limit: int = 5) -> list[dict[str, Any]]:
+        """What the documents say about a question, as passages with their source.
+
+        The same retrieval a run gets, asked directly. It is here so a person
+        can see what an employee would have been given, which is the difference
+        between "the answer was wrong" and "the answer was not in there".
+        """
+        if self._d.retriever is None:
+            return []
+        found = await self._d.retriever.retrieve(
+            KnowledgeQuery(text=question, workspace_id=await self._here(), limit=limit)
+        )
+        return [views.passage(item) for item in found]
+
     # --- Asking for work ------------------------------------------------------
 
     async def submit(self, request: UserRequest) -> dict[str, Any]:
@@ -162,12 +347,15 @@ class AlethicService:
 
         conversation = await self._thread_for(request)
         objective = await self._d.runs.ask(
-            text, conversation_id=conversation.id if conversation else None
+            text,
+            conversation_id=conversation.id if conversation else None,
+            workspace_id=request.workspace_id,
         )
         log.info(
             "interface.request_submitted",
             objective_id=str(objective.id),
             source=request.source.value,
+            workspace_id=str(request.workspace_id),
             input_type=request.input_type.value,
             attachments=len(request.attachments),
             conversation_id=str(conversation.id) if conversation else None,
@@ -207,7 +395,9 @@ class AlethicService:
     # --- Watching -------------------------------------------------------------
 
     async def list_objectives(self, *, limit: int | None = None) -> list[dict[str, Any]]:
-        found = await self._d.objectives.list_recent(limit=limit or self._d.history_limit)
+        found = await self._d.objectives.list_recent(
+            await self._here(), limit=limit or self._d.history_limit
+        )
         return [
             views.objective_summary(item, thinking=self._d.runs.is_thinking(item.id))
             for item in found
@@ -224,7 +414,9 @@ class AlethicService:
         )
 
     async def list_tasks(self, *, limit: int | None = None) -> list[dict[str, Any]]:
-        found = await self._d.tasks.list_recent(limit=limit or self._d.history_limit)
+        found = await self._d.tasks.list_recent(
+            await self._here(), limit=limit or self._d.history_limit
+        )
         return [
             views.task_summary(task, running=self._d.runs.is_running(task.id))
             for task in found

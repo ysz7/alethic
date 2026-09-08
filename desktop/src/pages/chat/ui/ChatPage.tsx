@@ -2,9 +2,12 @@
  * One screen: a conversation with Alethic, and what it is doing about it.
  *
  * Not a dashboard. It shows the thing the person came to do - say what they
- * need - and shows the work only while there is work. There is no settings
- * screen, because everything configurable is a file on this machine that the
- * runtime already reads.
+ * need - and shows the work only while there is work.
+ *
+ * Called `chat` since Phase 15, when the word "workspace" stopped meaning three
+ * things at once. It is the conversation; a workspace is the context the
+ * conversation happens in, and there is a selector for that in the frame
+ * around this.
  */
 
 import { ApprovalCard } from "../../../entities/approval";
@@ -14,12 +17,12 @@ import { StopButton } from "../../../features/stop-run";
 import { ConversationView } from "../../../widgets/conversation";
 import { WorkforcePanel } from "../../../widgets/workforce";
 import { useRuntime } from "../../../shared/api";
-import { useWorkspace } from "../model/useWorkspace";
+import { useChat } from "../model/useChat";
 
-export function WorkspacePage() {
+export function ChatPage() {
   const client = useRuntime();
   const { ready, problem, messages, activity, approvals, employees, busy, send, stop, decide } =
-    useWorkspace(client);
+    useChat(client);
 
   return (
     <div className="window">

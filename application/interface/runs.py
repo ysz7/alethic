@@ -47,6 +47,7 @@ from domain.tasks.cancellation import Cancellations
 from domain.tasks.repository import TaskRepository
 from domain.tasks.task import Task, TaskResult, TaskStatus
 from domain.workforce.protocols import Objective, ObjectiveResult
+from domain.workspace.models import DEFAULT_WORKSPACE_ID, WorkspaceId
 
 log = structlog.get_logger(__name__)
 
@@ -88,9 +89,23 @@ class Runs:
         run.add_done_callback(lambda _: self._finished(task.id))
         return task
 
-    async def ask(self, request: str, *, conversation_id: UUID | None = None) -> Objective:
-        """Record the objective, schedule Alethic, and hand the objective back."""
-        objective = await self._manager.receive(request, conversation_id=conversation_id)
+    async def ask(
+        self,
+        request: str,
+        *,
+        conversation_id: UUID | None = None,
+        workspace_id: WorkspaceId = DEFAULT_WORKSPACE_ID,
+    ) -> Objective:
+        """Record the objective, schedule Alethic, and hand the objective back.
+
+        The workspace is passed through rather than defaulted here. It was
+        declared on `UserRequest` in Phase 13 and dropped on this line, which
+        was invisible while there was one workspace and would have made
+        switching between two look like it worked (§15.2).
+        """
+        objective = await self._manager.receive(
+            request, workspace_id=workspace_id, conversation_id=conversation_id
+        )
         work = asyncio.create_task(
             self._manager.handle_objective(objective), name=f"alethic-objective-{objective.id}"
         )

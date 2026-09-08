@@ -66,7 +66,7 @@ def test_every_employee_declares_tools_that_exist(tmp_path) -> None:
     from tests.fakes.computer import FakeComputer, FakeScreenReader
 
     registry = build_registry(
-        workspace_root=tmp_path / "workspace",
+        file_root=tmp_path / "workspace",
         search_engine=FakeSearchEngine,
         browser=FakeBrowser,
         # Both surfaces, so a declaration naming a desktop tool is checked too.

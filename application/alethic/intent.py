@@ -46,6 +46,7 @@ class IntentReader:
         workforce: list[EmployeeDefinition],
         *,
         remembered: tuple[str, ...] = (),
+        documents: tuple[str, ...] = (),
     ) -> Intent:
         prompt = render(
             "alethic_intent",
@@ -55,6 +56,12 @@ class IntentReader:
             # What this workspace already knows is what makes it a request
             # rather than a fragment.
             remembered=_remembered(remembered),
+            # Separate from what is remembered, and not by accident. A
+            # recollection is a lead that may be stale; a passage of the user's
+            # own document is evidence with a source on it, and a question whose
+            # answer is in one can be answered here rather than decomposed into
+            # a plan to go and find what is already in front of us.
+            documents=_documents(documents),
         )
         response = await self._llm.generate(
             LLMRequest(
@@ -122,6 +129,16 @@ def _remembered(lines: tuple[str, ...]) -> str:
         "From earlier work here, and possibly out of date. Use it to understand "
         "what they mean, not to decide what they want.\n"
         + "\n".join(f"- {line}" for line in lines)
+    )
+
+
+def _documents(passages: tuple[str, ...]) -> str:
+    if not passages:
+        return ""
+    return (
+        "# From the user's own documents\n\n"
+        "Quoted, with the document each came from. You may answer from these "
+        "directly, saying which document you used.\n\n" + "\n\n".join(passages)
     )
 
 

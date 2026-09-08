@@ -1,0 +1,40 @@
+# Phase 15's Definition of Done, and the reason the phase exists: separating
+# contexts is only worth anything if the separation holds when it costs the user
+# an answer.
+#
+# The document is in one workspace and the question is asked in another. The
+# right outcome is that the platform says it does not know - not that it
+# apologises, not that it guesses well, and above all not that it answers
+# correctly. A correct answer here would mean the boundary is decorative.
+#
+# So the check is a negative one: the two facts that exist only in the other
+# workspace's document must not appear. `must_succeed` is left on, because
+# saying "I do not have that" is a complete answer to a question, not a failure
+# of the run - the platform is being asked whether it knows, and it does not.
+
+name: knowledge-stays-in-its-workspace
+description: A question asked where the document is not. The platform does not know, and says so.
+phase: 15
+tags: [knowledge, workspaces, manager]
+
+request: >
+  How quickly does express delivery arrive, and what does it cost? If you do not
+  have a document that says, tell me you do not know rather than guessing.
+
+# Asked here, deliberately not where the answer is.
+workspace: personal
+
+knowledge:
+  client-a:
+    Delivery policy: |
+      Delivery policy, effective 1 September.
+
+      Standard delivery arrives in three to five working days and is included in
+      the price. Express delivery arrives the next working day and costs twelve
+      euros.
+
+expect:
+  # Both facts live only in the other workspace. Either one appearing here means
+  # a document crossed a boundary it was put behind on purpose.
+  output_excludes: ["next working day", "twelve euros"]
+  max_steps: 20

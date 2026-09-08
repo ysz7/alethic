@@ -6,7 +6,7 @@ from dataclasses import replace
 
 from sqlalchemy import select
 
-from infrastructure.persistence.employee_repository import SqliteEmployeeRepository
+from infrastructure.persistence.employee_repository import SqlEmployeeRepository
 from infrastructure.persistence.models import EmployeeRow
 from infrastructure.persistence.session import session_scope
 from tests.fakes.employees import definition
@@ -18,7 +18,7 @@ async def rows(session_factory) -> list[EmployeeRow]:
 
 
 async def test_declarations_are_written_in(session_factory) -> None:
-    repository = SqliteEmployeeRepository(session_factory)
+    repository = SqlEmployeeRepository(session_factory)
     changed = await repository.sync([definition("researcher"), definition("analyst")])
 
     assert changed == 2
@@ -26,7 +26,7 @@ async def test_declarations_are_written_in(session_factory) -> None:
 
 
 async def test_syncing_again_changes_nothing(session_factory) -> None:
-    repository = SqliteEmployeeRepository(session_factory)
+    repository = SqlEmployeeRepository(session_factory)
     declared = [definition("researcher")]
 
     await repository.sync(declared)
@@ -38,7 +38,7 @@ async def test_an_edited_declaration_is_written_back_under_the_same_id(
 ) -> None:
     # The id is stable so that history keeps pointing at the right employee;
     # the hash is what makes the edit visible.
-    repository = SqliteEmployeeRepository(session_factory)
+    repository = SqlEmployeeRepository(session_factory)
     original = definition("researcher")
     await repository.sync([original])
 
@@ -52,7 +52,7 @@ async def test_an_edited_declaration_is_written_back_under_the_same_id(
 
 
 async def test_the_stored_copy_carries_what_history_needs(session_factory) -> None:
-    await SqliteEmployeeRepository(session_factory).sync([definition("researcher")])
+    await SqlEmployeeRepository(session_factory).sync([definition("researcher")])
     stored = (await rows(session_factory))[0]
 
     assert stored.role == "Research Specialist"

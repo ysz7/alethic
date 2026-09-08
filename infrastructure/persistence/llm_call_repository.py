@@ -16,7 +16,7 @@ from infrastructure.persistence.models import LLMCallRow
 from infrastructure.persistence.session import session_scope
 
 
-class SqliteLLMCallLog:
+class SqlLLMCallLog:
     """Implements `domain.llm.telemetry.LLMCallLog`."""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:

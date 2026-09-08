@@ -1,19 +1,23 @@
 import { useState } from "react";
 
+import { ChatPage } from "../pages/chat";
 import { SettingsPage } from "../pages/settings";
-import { WorkspacePage } from "../pages/workspace";
 import { RuntimeProvider, type RuntimeClient } from "../shared/api";
+import { WorkspaceBar } from "../widgets/workspace-bar";
 
 /**
- * The application: one provider, two screens.
+ * The application: one provider, two screens, and which workspace they are of.
  *
- * The second screen is settings, and the switch between them is the only state
- * the app layer holds - a page is either shown or it is not, which is as much
- * as this layer is allowed to know. Everything a person can do is still a
- * feature, and everything a feature does is still one call into the runtime.
+ * The app layer holds two pieces of state and no rules: which page is shown,
+ * and a number that changes when the workspace does. The second one remounts
+ * the page, because everything on it - the thread, the history, the documents -
+ * belongs to a workspace, and a screen left over from the previous one would be
+ * showing another context's work under the new context's name.
  */
 export function App({ client, baseUrl }: { client?: RuntimeClient; baseUrl?: string }) {
   const [showing, setShowing] = useState<"work" | "settings">("work");
+  const [workspace, setWorkspace] = useState(0);
+  const switched = () => setWorkspace((count) => count + 1);
   return (
     <RuntimeProvider client={client} baseUrl={baseUrl}>
       <nav className="places">
@@ -31,8 +35,13 @@ export function App({ client, baseUrl }: { client?: RuntimeClient; baseUrl?: str
         >
           Settings
         </button>
+        <WorkspaceBar onSwitched={switched} />
       </nav>
-      {showing === "work" ? <WorkspacePage /> : <SettingsPage />}
+      {showing === "work" ? (
+        <ChatPage key={workspace} />
+      ) : (
+        <SettingsPage key={workspace} onSwitched={switched} />
+      )}
     </RuntimeProvider>
   );
 }

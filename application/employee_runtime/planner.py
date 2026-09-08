@@ -43,6 +43,7 @@ class Planner:
         tools: list[ToolSpec] | None = None,
         context: SharedContext | None = None,
         recalled: tuple[str, ...] = (),
+        knowledge: tuple[str, ...] = (),
     ) -> TaskPlan:
         prompt = render(
             "planner",
@@ -50,7 +51,7 @@ class Planner:
             role_description=definition.role.description,
             goals="\n".join(f"- {goal.text}" for goal in definition.goals) or "- none stated",
             goal=task.goal,
-            context=_context_block(context, recalled),
+            context=_context_block(context, recalled, knowledge),
             max_steps=self._max_steps,
             tools=", ".join(spec.name for spec in tools or ()) or "none",
         )
@@ -95,7 +96,11 @@ class Planner:
         )
 
 
-def _context_block(context: SharedContext | None, recalled: tuple[str, ...] = ()) -> str:
+def _context_block(
+    context: SharedContext | None,
+    recalled: tuple[str, ...] = (),
+    knowledge: tuple[str, ...] = (),
+) -> str:
     parts: list[str] = []
     if context is not None and context.facts:
         parts.append("# What you were told\n" + "\n".join(f"- {f}" for f in context.facts))
@@ -108,4 +113,9 @@ def _context_block(context: SharedContext | None, recalled: tuple[str, ...] = ()
             "# What you remember from before (may be out of date)\n"
             + "\n".join(f"- {line}" for line in recalled)
         )
+    # Documents last and framed: they are the user's own material and the most
+    # specific thing here, but they are also text somebody else wrote, and an
+    # instruction inside one is not an instruction to the platform (§25).
+    if knowledge:
+        parts.append("# From the user's documents\n" + "\n\n".join(knowledge))
     return "\n\n".join(parts)

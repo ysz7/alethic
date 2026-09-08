@@ -8,14 +8,14 @@ import pytest
 
 from domain.llm.models import Usage
 from domain.llm.telemetry import LLMCallRecord
-from infrastructure.persistence.llm_call_repository import InMemoryLLMCallLog, SqliteLLMCallLog
+from infrastructure.persistence.llm_call_repository import InMemoryLLMCallLog, SqlLLMCallLog
 
 
 @pytest.fixture(params=["in_memory", "sqlite"])
 def call_log(request: pytest.FixtureRequest):
     if request.param == "in_memory":
         return InMemoryLLMCallLog()
-    return SqliteLLMCallLog(request.getfixturevalue("session_factory"))
+    return SqlLLMCallLog(request.getfixturevalue("session_factory"))
 
 
 def call(cost: float, *, task_id=None, success: bool = True) -> LLMCallRecord:

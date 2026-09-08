@@ -23,13 +23,13 @@ from domain.workspace.models import WorkspaceId
 from infrastructure.persistence.in_memory_task_repository import InMemoryTaskRepository
 from infrastructure.persistence.objective_repository import (
     InMemoryObjectiveRepository,
-    SqliteObjectiveRepository,
+    SqlObjectiveRepository,
 )
 from infrastructure.persistence.plan_repository import (
     InMemoryPlanRepository,
-    SqlitePlanRepository,
+    SqlPlanRepository,
 )
-from infrastructure.persistence.task_repository import SqliteTaskRepository
+from infrastructure.persistence.task_repository import SqlTaskRepository
 
 
 @pytest.fixture(params=["in_memory", "sqlite"])
@@ -45,9 +45,9 @@ def store(request: pytest.FixtureRequest):
         return InMemoryObjectiveRepository(), InMemoryPlanRepository(tasks), tasks
     factory = request.getfixturevalue("session_factory")
     return (
-        SqliteObjectiveRepository(factory),
-        SqlitePlanRepository(factory),
-        SqliteTaskRepository(factory),
+        SqlObjectiveRepository(factory),
+        SqlPlanRepository(factory),
+        SqlTaskRepository(factory),
     )
 
 

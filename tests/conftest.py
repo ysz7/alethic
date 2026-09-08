@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from infrastructure.persistence.models import Base
 from infrastructure.persistence.session import create_engine, create_session_factory
-from infrastructure.persistence.task_repository import SqliteTaskRepository
+from infrastructure.persistence.task_repository import SqlTaskRepository
 
 
 @pytest_asyncio.fixture
@@ -27,8 +27,8 @@ async def session_factory(tmp_path: Path) -> AsyncIterator[async_sessionmaker[As
 
 
 @pytest.fixture
-def sqlite_repository(session_factory: async_sessionmaker[AsyncSession]) -> SqliteTaskRepository:
-    return SqliteTaskRepository(session_factory)
+def sqlite_repository(session_factory: async_sessionmaker[AsyncSession]) -> SqlTaskRepository:
+    return SqlTaskRepository(session_factory)
 
 
 @pytest.fixture(autouse=True)

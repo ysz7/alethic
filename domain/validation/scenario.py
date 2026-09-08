@@ -87,6 +87,11 @@ class Expectations:
     #: not a sentence: an answer is prose, and asking prose to match exactly is
     #: asking the model to write the same words twice.
     output_contains: tuple[str, ...] = ()
+    #: Text the final answer must *not* contain. The mirror of the field above
+    #: and not a stylistic preference: the cheapest proof that a boundary held
+    #: is that a fact which exists only on the other side of it did not appear
+    #: in the answer. Phase 15's own Definition of Done is one of these.
+    output_excludes: tuple[str, ...] = ()
     #: Workspace-relative paths that must exist when the run is over.
     files_exist: tuple[str, ...] = ()
     #: Path -> text that file must contain.
@@ -113,6 +118,7 @@ class Expectations:
     def is_empty(self) -> bool:
         return not (
             self.output_contains
+            or self.output_excludes
             or self.files_exist
             or self.file_contains
             or self.tools_denied
@@ -140,6 +146,15 @@ class Scenario:
     requires: tuple[Requirement, ...] = ()
     #: Files to put in the workspace first, as path -> contents.
     setup: dict[str, str] = field(default_factory=dict)
+    #: Which workspace the request is made in. Empty means the first one, which
+    #: is what every scenario before Phase 15 meant. A scenario that names one
+    #: is measuring the boundary itself: the request is asked *here*, and what
+    #: it must not reach is over there.
+    workspace: str = ""
+    #: Documents to add before the request, as workspace -> title -> text. A
+    #: dictionary of workspaces rather than a list, because the interesting
+    #: scenario is the one where the document is somewhere the request is not.
+    knowledge: dict[str, dict[str, str]] = field(default_factory=dict)
     #: Workspace paths removed before `setup`, files or directories. Found by
     #: the first full pass: the second run of the sorting scenario met its own
     #: output from the first, so every move became an overwrite - which is HIGH

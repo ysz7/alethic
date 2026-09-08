@@ -32,10 +32,21 @@ LAYERS = ("domain", "application", "app", "employees", "prompts")
 
 #: The two files that are allowed to know, and the one that declares the index.
 ALLOWED = {
-    "infrastructure/memory/sqlite.py",
+    "infrastructure/memory/sql.py",
     "infrastructure/persistence/memory_fts.py",
     "infrastructure/persistence/models.py",
     "infrastructure/persistence/migrations/versions/007_memory_items.py",
+    # A migration is the schema, and the schema is where the table's name
+    # belongs. Every file here is one of the four that build it.
+    "infrastructure/persistence/migrations/versions/015_memory_above_the_workspace.py",
+    # Knowledge is a different store with a contract of its own (ADR 0016), and
+    # this rule is about reaching *memory* around its. Its index is declared and
+    # queried in these three files and named nowhere else - the same shape of
+    # confinement, checked by `test_nothing_above_infrastructure_names_the_store`
+    # above, which covers both.
+    "infrastructure/knowledge/store.py",
+    "infrastructure/persistence/knowledge_fts.py",
+    "infrastructure/persistence/migrations/versions/016_documents_and_chunks.py",
 }
 
 

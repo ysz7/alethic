@@ -1,0 +1,115 @@
+"""Turning text into vectors, over the embeddings wire format.
+
+The same shape as `chat_completions`: several services - a local model runner, a
+hosted provider - expose one `POST /embeddings`, so the module is named after
+the format rather than after a vendor, and which model answers is the router's
+decision like every other model choice (ADR 0003).
+
+Three things it has to get right.
+
+**A batch is one call.** Indexing a document is hundreds of passages, and a call
+per passage over a local server is minutes instead of seconds. The order that
+comes back is the order that went out, checked rather than assumed: an answer
+whose vectors are shuffled would attach every passage to its neighbour's
+meaning, which nothing downstream could ever notice.
+
+**The dimension is what came back**, not what the catalog claimed. The catalog
+entry says what to expect so that a store can be planned; this reports what was
+actually produced, because that is what gets written onto the chunk and what a
+later query is compared against.
+
+**A server that is not there is a configuration problem with a clear fix**, and
+the error says so - the same rule the local chat provider follows. Retrieval
+above catches it and falls back to the text index rather than failing a run.
+"""
+
+from __future__ import annotations
+
+import httpx
+
+from domain.errors import ProviderError
+from domain.knowledge.models import Vector
+from infrastructure.llm.errors import translate_status, translate_transport_error
+from infrastructure.observability.logging import get_logger
+
+log = get_logger(__name__)
+
+#: Embedding a batch is fast even locally; a minute means something is wrong.
+DEFAULT_TIMEOUT_SECONDS = 120.0
+
+
+class OpenAICompatibleEmbeddings:
+    """Implements `domain.knowledge.protocols.EmbeddingProvider`."""
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        model: str,
+        api_key: str | None = None,
+        dimensions: int = 0,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._model = model
+        self._api_key = api_key
+        self._declared = dimensions
+        self._seen = 0
+        self._timeout = timeout_seconds
+        self._client = client
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    @property
+    def dimension(self) -> int:
+        """What this model actually produces, once it has produced anything."""
+        return self._seen or self._declared
+
+    async def embed(self, texts) -> list[Vector]:
+        wanted = [text for text in texts]
+        if not wanted:
+            return []
+        payload: dict[str, object] = {"model": self._model, "input": wanted}
+        headers = {"Authorization": f"Bearer {self._api_key}"} if self._api_key else {}
+        client = self._client or httpx.AsyncClient(timeout=self._timeout)
+        try:
+            response = await client.post(
+                f"{self._base_url}/embeddings", json=payload, headers=headers
+            )
+        except httpx.HTTPError as error:
+            raise translate_transport_error(error, provider="embeddings") from error
+        finally:
+            if self._client is None:
+                await client.aclose()
+        if response.status_code >= 400:
+            raise translate_status(
+                response.status_code, response.text, provider="embeddings"
+            )
+
+        data = response.json().get("data")
+        if not isinstance(data, list) or len(data) != len(wanted):
+            raise ProviderError(
+                f"The embedding server answered with {len(data or ())} vectors for "
+                f"{len(wanted)} passages."
+            )
+        # Ordered by the index the server reports rather than by arrival: the
+        # format allows either, and pairing a passage with its neighbour's
+        # meaning is a wrong answer nothing downstream could detect.
+        ordered = sorted(data, key=lambda item: int(item.get("index", 0)))
+        vectors = [tuple(float(number) for number in item["embedding"]) for item in ordered]
+        if vectors:
+            self._seen = len(vectors[0])
+            if self._declared and self._seen != self._declared:
+                # Not fatal - what is written on the chunk is what came back -
+                # but the catalog is now wrong about a number a person may be
+                # sizing a store on.
+                log.warning(
+                    "embeddings.dimension_differs_from_catalog",
+                    model=self._model,
+                    declared=self._declared,
+                    actual=self._seen,
+                )
+        return vectors
