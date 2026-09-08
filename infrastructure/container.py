@@ -34,6 +34,9 @@ from domain.tasks.cancellation import Cancellations
 from domain.tasks.repository import TaskRepository
 from domain.tools.protocols import ToolRegistry
 from domain.tools.telemetry import ToolCallLog
+from domain.validation.protocols import ScenarioRegistry
+from domain.validation.run import ValidationRunRepository
+from domain.validation.scenario import Requirement
 from domain.workflows.protocols import WorkflowRegistry
 from domain.workflows.run import WorkflowRunRepository
 from domain.workforce.repository import (
@@ -447,6 +450,52 @@ class Container:
         )
 
         return SqliteWorkflowRunRepository(self.session_factory)
+
+    # --- Validation ---------------------------------------------------------------
+
+    @cached_property
+    def scenario_registry(self) -> ScenarioRegistry:
+        from infrastructure.validation.yaml_registry import YamlScenarioRegistry
+
+        return YamlScenarioRegistry(self.settings.scenarios_dir)
+
+    @cached_property
+    def validation_runs(self) -> ValidationRunRepository:
+        if self._in_memory:
+            from infrastructure.persistence.validation_run_repository import (
+                InMemoryValidationRunRepository,
+            )
+
+            return InMemoryValidationRunRepository()
+        from infrastructure.persistence.validation_run_repository import (
+            SqliteValidationRunRepository,
+        )
+
+        return SqliteValidationRunRepository(self.session_factory)
+
+    def available_requirements(self) -> frozenset[Requirement]:
+        """What this machine can actually do, as a scenario would name it.
+
+        Read off the same switches everything else reads, so a scenario is
+        skipped for exactly the reason a tool would have been missing. Asking
+        the settings twice - once here and once where the capability is built -
+        is what would let the suite claim a browser that is not there.
+        """
+        settings = self.settings
+        available = set()
+        if settings.browser_tools_enabled:
+            available.add(Requirement.BROWSER)
+        if settings.code_execution_enabled:
+            available.add(Requirement.CODE_EXECUTION)
+        if settings.computer_use_enabled:
+            available.add(Requirement.COMPUTER_USE)
+        if settings.memory_enabled:
+            available.add(Requirement.MEMORY)
+        if settings.workflows_enabled:
+            available.add(Requirement.WORKFLOWS)
+        if settings.approvals_enabled:
+            available.add(Requirement.APPROVALS)
+        return frozenset(available)
 
     # --- Audit ------------------------------------------------------------------
 

@@ -1,0 +1,30 @@
+# Validation set §8, task 9: "do the same as last week, with the updates". The
+# request deliberately does not say what "the same" was - that is the whole test.
+# Run `sort-a-folder` first, then this: with nothing recalled, the second request
+# is unanswerable, and the harness records MEMORY rather than blaming the plan.
+
+name: remember-what-was-learned
+description: A follow-up that only makes sense to a platform that remembers the request before it.
+phase: 9
+tags: [memory, manager]
+requires: [MEMORY]
+
+request: >
+  Do the same thing you did with the loose files earlier, for the two files that
+  have turned up since. Put them where the others went and add them to the same
+  index.
+
+setup:
+  unsorted/invoice-4418.txt: |
+    INVOICE 4418
+    Northwind Supplies Ltd
+    Amount due: $95.00
+    Due date: 2026-10-07
+  unsorted/gym-membership.txt: |
+    Membership renewal
+    Annual, $540.00, renews 1 November.
+
+expect:
+  file_contains:
+    sorted/INDEX.md: invoice-4418
+  max_steps: 40

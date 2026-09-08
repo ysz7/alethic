@@ -1,0 +1,51 @@
+# Validation set §8, task 2: "sort these documents into folders by meaning".
+# Files only, one employee named, so what is being measured is the execute-verify
+# loop rather than the manager's routing.
+
+name: sort-a-folder
+description: Five loose files put into folders by what they are, with an index of what moved where.
+phase: 4
+tags: [files, employee]
+employee: organizer
+
+request: >
+  Every file in "unsorted/" belongs in a folder. Read enough of each one to know
+  what it is, move it under "sorted/<category>/" where the category is a short
+  lower-case word of your choosing, and keep every file - sorting is moving,
+  never discarding. When they are all moved, write "sorted/INDEX.md" listing one
+  line per file: the file name, and the folder it went to.
+
+# The second run met the first one's output and every move became an
+# overwrite - which is HIGH and waits for a person. A scenario has to be able
+# to say what must not be there.
+reset: [sorted]
+
+setup:
+  unsorted/invoice-4417.txt: |
+    INVOICE 4417
+    Northwind Supplies Ltd
+    Amount due: $420.00
+    Due date: 2026-09-30
+  unsorted/team-offsite.txt: |
+    Subject: team offsite, 14 October
+    Two days in Utrecht. Travel booked, hotel not yet.
+    Bring the roadmap deck.
+  unsorted/rent-receipt.txt: |
+    RECEIPT
+    Rent, September 2026
+    Paid: $1,850.00
+    Method: bank transfer
+  unsorted/pasta-recipe.txt: |
+    Cacio e pepe
+    Pecorino, black pepper, bucatini, pasta water. Nothing else.
+    Toast the pepper first.
+  unsorted/server-notes.txt: |
+    Deploy notes
+    The staging box runs out of disk every fortnight; the log rotation is wrong.
+    Fix before the next release.
+
+expect:
+  files_exist: [sorted/INDEX.md]
+  file_contains:
+    sorted/INDEX.md: invoice-4417
+  max_steps: 40

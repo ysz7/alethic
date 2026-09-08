@@ -1,0 +1,154 @@
+"""A real task, written down so the same request can be made twice.
+
+The validation tasks under `validation/` were prose until now: what was asked,
+what came back, what broke. Prose is the right form for the reasoning and the
+wrong form for the request - a sentence in a report cannot be re-run, and a
+capability that worked in July is only known to still work if the July request
+can be made again in September (§11.5).
+
+So a scenario is a declaration, discovered the way an employee or a workflow is,
+and it states three things and no more:
+
+* **what is asked**, in one of the three ways this platform can be asked - a
+  goal for Alethic, a goal for a named employee, or a workflow by name. There is
+  deliberately no fourth: a scenario that needed its own way of running work
+  would be measuring something the user cannot do.
+* **what the machine must have** for the request to mean anything. A scenario
+  that drives a screen says so, and is skipped rather than failed where the
+  desktop is switched off. A suite that fails on a correctly configured machine
+  teaches people to ignore it.
+* **what would count as done** - the same discipline Alethic applies to an
+  objective, applied to the scenario: written before the run, so the standard
+  cannot be adjusted after seeing the output.
+
+What a scenario does *not* carry is a way to fix the world it needs. `reset`
+removes paths inside the workspace and `setup` writes files into it, and that is
+the whole of it. Anything more - a fixture process, a stubbed provider - would
+make the run a test again, and the point of the phase is that it is not one.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from enum import StrEnum
+from typing import Any
+
+
+class Entry(StrEnum):
+    """Which of the platform's three doors this request goes through."""
+
+    #: `alethic ask-alethic` - the manager reads it and decides everything else.
+    #: The default, because it is how the platform is normally used.
+    OBJECTIVE = "OBJECTIVE"
+    #: `alethic run-task --employee <name>` - the employee is named, so the
+    #: manager's routing is not part of what is being measured.
+    TASK = "TASK"
+    #: `alethic run-workflow <name>` - the decomposition was written by hand.
+    WORKFLOW = "WORKFLOW"
+
+
+class Requirement(StrEnum):
+    """A capability of the machine, not of the platform.
+
+    Each one is a switch the user owns. A scenario naming one it does not have
+    is skipped with the reason, which is the difference between a suite that
+    reports the truth about this machine and one that reports the truth about
+    somebody else's.
+    """
+
+    BROWSER = "BROWSER"
+    CODE_EXECUTION = "CODE_EXECUTION"
+    COMPUTER_USE = "COMPUTER_USE"
+    MEMORY = "MEMORY"
+    WORKFLOWS = "WORKFLOWS"
+    APPROVALS = "APPROVALS"
+
+
+@dataclass(frozen=True, slots=True)
+class Expectations:
+    """What would count as done, stated before the run.
+
+    Every field is optional and an empty `Expectations` passes anything that
+    finished - which is a real and useful scenario: some requests are being
+    watched for whether they complete at all, and inventing criteria for them
+    would only make the record less honest.
+
+    Two of these are about what must *not* have happened. That asymmetry is the
+    Phase 10 lesson kept: a run that produced a good answer by sending an email
+    nobody approved has failed, and no check on the output would notice.
+    """
+
+    #: Text the final answer must contain, matched case-insensitively. A phrase,
+    #: not a sentence: an answer is prose, and asking prose to match exactly is
+    #: asking the model to write the same words twice.
+    output_contains: tuple[str, ...] = ()
+    #: Workspace-relative paths that must exist when the run is over.
+    files_exist: tuple[str, ...] = ()
+    #: Path -> text that file must contain.
+    file_contains: dict[str, str] = field(default_factory=dict)
+    #: Tools the run must have been refused. The check that the brake held.
+    tools_denied: tuple[str, ...] = ()
+    #: Tools that must not have run successfully, whoever allowed them.
+    tools_forbidden: tuple[str, ...] = ()
+    #: Ceilings, not targets. A run that answers correctly and costs ten times
+    #: what it should is a failure of a kind no output check can see.
+    max_cost_usd: float | None = None
+    max_steps: int | None = None
+    #: The run has to finish in the affirmative - the objective DONE, the task
+    #: COMPLETED, the workflow COMPLETED. Off for a scenario whose whole point
+    #: is that the platform refuses.
+    must_succeed: bool = True
+
+    @property
+    def named_files(self) -> tuple[str, ...]:
+        """Every path this cares about, so a runner knows what to read."""
+        return tuple(dict.fromkeys((*self.files_exist, *self.file_contains)))
+
+    @property
+    def is_empty(self) -> bool:
+        return not (
+            self.output_contains
+            or self.files_exist
+            or self.file_contains
+            or self.tools_denied
+            or self.tools_forbidden
+            or self.max_cost_usd is not None
+            or self.max_steps is not None
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class Scenario:
+    """One real request, and what it would take to call it done."""
+
+    name: str
+    request: str = ""
+    entry: Entry = Entry.OBJECTIVE
+    #: Who the request goes to, for `Entry.TASK`; which process, for
+    #: `Entry.WORKFLOW`. Empty for an objective, where choosing is the point.
+    target: str = ""
+    description: str = ""
+    #: The phase whose capability this exercises. Kept because the interesting
+    #: question after a bad run is which capability regressed, not which file.
+    phase: int = 0
+    tags: tuple[str, ...] = ()
+    requires: tuple[Requirement, ...] = ()
+    #: Files to put in the workspace first, as path -> contents.
+    setup: dict[str, str] = field(default_factory=dict)
+    #: Workspace paths removed before `setup`, files or directories. Found by
+    #: the first full pass: the second run of the sorting scenario met its own
+    #: output from the first, so every move became an overwrite - which is HIGH
+    #: and waits for a person - and the scenario failed for a reason that had
+    #: nothing to do with sorting. A scenario has to be able to say what must
+    #: *not* be there, or the second attempt measures the first one's leftovers.
+    reset: tuple[str, ...] = ()
+    inputs: dict[str, Any] = field(default_factory=dict)
+    expect: Expectations = field(default_factory=Expectations)
+    #: Force this into the regression set on a machine with no history of it.
+    #: Normally membership is earned - a scenario that has passed here once is
+    #: expected to keep passing - and this is for a fresh clone, where nothing
+    #: has passed yet and the set would otherwise be empty.
+    regression: bool = False
+
+    def missing_requirements(self, available: frozenset[Requirement]) -> tuple[Requirement, ...]:
+        return tuple(item for item in self.requires if item not in available)

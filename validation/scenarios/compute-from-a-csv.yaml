@@ -1,0 +1,42 @@
+# Validation set §8, task 3: "analyse this CSV and produce a report". The number
+# in `expect` is arithmetic, not judgement - which is the point. An employee that
+# estimates from reading a few rows gets it wrong, and an employee that computes
+# gets it right, and nothing in between passes.
+
+name: compute-from-a-csv
+description: A total that has to be computed rather than estimated, written to a file.
+phase: 8
+tags: [data, code, employee]
+employee: analyst
+requires: [CODE_EXECUTION]
+
+request: >
+  "data/sales.csv" has one row per order. Work out, by running code rather than
+  by reading rows, the total revenue across every row - quantity times
+  unit_price, summed. Then write "reports/sales.md" containing that total,
+  formatted as a number with two decimal places, and one sentence saying how you
+  arrived at it.
+
+reset: [reports]
+
+setup:
+  data/sales.csv: |
+    order_id,region,quantity,unit_price
+    1001,north,3,19.99
+    1002,south,1,249.00
+    1003,north,12,4.50
+    1004,east,7,31.25
+    1005,west,2,99.95
+    1006,south,5,12.40
+    1007,north,1,1499.00
+    1008,east,9,8.75
+    1009,west,4,62.10
+    1010,south,6,15.00
+
+expect:
+  files_exist: [reports/sales.md]
+  file_contains:
+    # 59.97 + 249.00 + 54.00 + 218.75 + 199.90 + 62.00 + 1499.00 + 78.75
+    # + 248.40 + 90.00
+    reports/sales.md: "2759.77"
+  max_steps: 16

@@ -37,6 +37,16 @@ class ApprovalRepository(Protocol):
         self, workspace_id: WorkspaceId = DEFAULT_WORKSPACE_ID
     ) -> list[Approval]: ...
 
+    async def for_task(self, task_id: UUID) -> list[Approval]:
+        """Every question this task raised, answered or not.
+
+        Reading the whole history of one task rather than what is outstanding.
+        How often a person had to step in is a property of a finished run, and
+        `list_pending` - which is about what still needs someone - cannot answer
+        it: by the time anyone asks, nothing is pending.
+        """
+        ...
+
     async def expire_overdue(self, now: datetime | None = None) -> int:
         """Close the questions nobody came back to, and say how many.
 

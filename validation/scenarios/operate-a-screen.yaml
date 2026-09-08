@@ -1,0 +1,20 @@
+# Validation set §8, task 5. It needs a desktop this platform is allowed to touch,
+# so on almost every machine it is skipped - and a skip is recorded as a skip
+# rather than a failure, because a switched-off desktop says nothing about
+# whether the platform can drive one.
+
+name: operate-a-screen
+description: A page driven by looking at it rather than by reading its markup.
+phase: 5
+tags: [computer-use, network]
+employee: operator
+requires: [COMPUTER_USE, BROWSER]
+
+request: >
+  Open "https://example.com", look at the page rather than its markup, and tell
+  me the heading and the text of the one link on it. Say which interface you
+  used and why.
+
+expect:
+  output_contains: ["example domain"]
+  max_steps: 40

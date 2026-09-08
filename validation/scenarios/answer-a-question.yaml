@@ -1,0 +1,20 @@
+# The cheapest thing the platform can be asked, and the one that catches the
+# most expensive mistake: a request that needs no work should get an answer, not
+# a plan. When this scenario starts costing steps, decomposition has stopped
+# being a means.
+
+name: answer-a-question
+description: A question with an answer, asked of the manager. No plan, no employee, no tools.
+phase: 7
+tags: [manager, cheap]
+
+request: >
+  What is the capital of Australia? Answer in one sentence.
+
+expect:
+  output_contains: [Canberra]
+  # Zero would be the truthful number and one is the honest ceiling: an
+  # objective answered directly runs no task, and a task that ran at all here
+  # means the request was decomposed when it should not have been.
+  max_steps: 1
+  tools_forbidden: [web.search, browser.open, fs.write]

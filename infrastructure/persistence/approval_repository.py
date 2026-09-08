@@ -122,6 +122,15 @@ class SqliteApprovalRepository:
             )
             return int(result.rowcount or 0)
 
+    async def for_task(self, task_id: UUID) -> list[Approval]:
+        async with self._session() as session:
+            rows = await session.scalars(
+                select(ApprovalRow)
+                .where(ApprovalRow.task_id == str(task_id))
+                .order_by(ApprovalRow.requested_at)
+            )
+            return [_to_approval(row) for row in rows]
+
     async def list_pending(
         self, workspace_id: WorkspaceId = DEFAULT_WORKSPACE_ID
     ) -> list[Approval]:
@@ -156,6 +165,16 @@ class InMemoryApprovalRepository:
         for approval in overdue:
             self._approvals[approval.id] = approval.expire(moment)
         return len(overdue)
+
+    async def for_task(self, task_id: UUID) -> list[Approval]:
+        return sorted(
+            (
+                approval
+                for approval in self._approvals.values()
+                if approval.request.task_id == task_id
+            ),
+            key=lambda approval: approval.request.requested_at,
+        )
 
     async def list_pending(
         self, workspace_id: WorkspaceId = DEFAULT_WORKSPACE_ID

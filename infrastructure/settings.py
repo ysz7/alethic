@@ -22,6 +22,7 @@ class RuntimeSettings(Protocol):
     model_catalog_path: Path | None
     employees_dir: Path | None
     workflows_dir: Path | None
+    scenarios_dir: Path | None
     llm_timeout_seconds: float | None
     llm_retry_attempts: int
     local_llm_base_url: str

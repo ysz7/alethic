@@ -11,12 +11,14 @@ from __future__ import annotations
 import asyncio
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as package_version
+from pathlib import Path
 from uuid import UUID
 
 import typer
 
 from app.config.container import (
     build_container,
+    build_harness,
     build_manager,
     build_task_runner,
     build_workflow_engine,
@@ -26,6 +28,9 @@ from domain.approvals.models import ApprovalState
 from domain.errors import AlethicError, StorageNotInitializedError
 from domain.llm.models import LLMRequest, Message, RoutingHints, TaskKind
 from domain.policies.models import ActorKind, SimpleActor
+from domain.validation.failures import FailureKind
+from domain.validation.reliability import Verdict, build_report, reliability_of
+from domain.validation.run import RunStatus
 
 app = typer.Typer(
     name="alethic",
@@ -704,6 +709,223 @@ def run_workflow(
             await container.aclose()
 
     asyncio.run(_run())
+
+
+@app.command()
+def scenarios() -> None:
+    """The real tasks the platform is measured on, and how each has gone here.
+
+    A scenario is a request somebody actually wanted made, declared so it can be
+    made again. The verdict beside each one comes from the runs recorded on this
+    machine - not from a promise in a document.
+    """
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            declared = container.scenario_registry.list_all()
+            if not declared:
+                typer.echo("No scenarios are declared here. Add one under `validation/scenarios/`.")
+                return
+            available = container.available_requirements()
+            history = await _history(container)
+            for scenario in declared:
+                entry = reliability_of(scenario.name, history)
+                missing = scenario.missing_requirements(available)
+                typer.secho(f"{scenario.name:<30}", fg="cyan", nl=False)
+                typer.secho(
+                    f"{entry.verdict.value:<12}",
+                    fg=_VERDICT_COLOURS.get(entry.verdict, "white"),
+                    nl=False,
+                )
+                door = scenario.entry.value.lower()
+                target = f" {scenario.target}" if scenario.target else ""
+                typer.echo(f"phase {scenario.phase:<3}{door}{target}")
+                if scenario.description:
+                    typer.echo(f"  {scenario.description.splitlines()[0]}")
+                if entry.attempts:
+                    typer.echo(
+                        f"  {entry.passes}/{entry.attempts} passed"
+                        + (
+                            f", usually {entry.common_failure.value}"
+                            if entry.common_failure is not FailureKind.NONE
+                            else ""
+                        )
+                    )
+                if missing:
+                    typer.secho(
+                        "  needs " + ", ".join(item.value.lower() for item in missing)
+                        + ", which is off here.",
+                        fg="yellow",
+                    )
+        except StorageNotInitializedError as error:
+            typer.secho(f"{error} Run: uv run alembic upgrade head", fg="red", err=True)
+            raise typer.Exit(code=1) from error
+        finally:
+            await container.aclose()
+
+    asyncio.run(_run())
+
+
+@app.command()
+def validate(
+    name: str = typer.Argument("", help="One scenario. Omit to run the whole set."),
+    regression: bool = typer.Option(
+        False,
+        "--regression",
+        "-r",
+        help="Only the scenarios that have passed here before (§11.5).",
+    ),
+    tag: str = typer.Option("", "--tag", "-t", help="Only scenarios carrying this tag."),
+    phase: int = typer.Option(0, "--phase", "-p", help="Only scenarios for this phase."),
+) -> None:
+    """Give the platform real work and record what happened.
+
+    This is not the test suite. `uv run pytest` says the platform still does
+    what it was built to do; this says whether that is worth anything on a
+    request somebody actually made. It costs money and takes minutes, which is
+    why it is a command rather than something CI runs.
+    """
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            await container.sync_employees()
+            chosen = await _chosen(container, name, regression=regression, tag=tag, phase=phase)
+            if not chosen:
+                typer.echo("Nothing matched. `alethic scenarios` lists what is declared.")
+                raise typer.Exit(code=1)
+
+            harness = build_harness(container)
+            failures = 0
+            for scenario in chosen:
+                typer.secho(f"\n> {scenario.name}", fg="cyan")
+                # A workflow scenario has no request of its own - the process
+                # is the request - so there is not always a first line to show.
+                first = next(iter(scenario.request.splitlines()), scenario.target)
+                typer.echo(f"  {first[:96]}")
+                run = await harness.run_scenario(scenario)
+                _report_validation(run)
+                if run.status is RunStatus.FAILED:
+                    failures += 1
+
+            typer.echo("")
+            typer.secho(
+                f"{len(chosen) - failures}/{len(chosen)} passed.",
+                fg="green" if not failures else "yellow",
+            )
+            if failures:
+                raise typer.Exit(code=1)
+        except StorageNotInitializedError as error:
+            typer.secho(f"{error} Run: uv run alembic upgrade head", fg="red", err=True)
+            raise typer.Exit(code=1) from error
+        except AlethicError as error:
+            typer.secho(f"{type(error).__name__}: {error}", fg="red", err=True)
+            raise typer.Exit(code=1) from error
+        finally:
+            await container.aclose()
+
+    asyncio.run(_run())
+
+
+@app.command(name="validation-report")
+def validation_report(
+    write: str = typer.Option(
+        "", "--write", "-w", help="Also write the Markdown to this file."
+    ),
+) -> None:
+    """What works reliably here, what works sometimes, and what does not work.
+
+    Phase 11's Definition of Done, computed from the recorded runs rather than
+    asserted. A capability that has succeeded once is not reliable, and this
+    says so.
+    """
+    from application.validation.report import render
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            history = await _history(container)
+            declared = [scenario.name for scenario in container.scenario_registry.list_all()]
+            text = render(build_report(declared, history))
+            typer.echo(text)
+            if write:
+                Path(write).expanduser().write_text(text, encoding="utf-8")
+                typer.secho(f"\nWritten to {write}", fg="green")
+        except StorageNotInitializedError as error:
+            typer.secho(f"{error} Run: uv run alembic upgrade head", fg="red", err=True)
+            raise typer.Exit(code=1) from error
+        finally:
+            await container.aclose()
+
+    asyncio.run(_run())
+
+
+async def _history(container) -> list:
+    """Every recorded validation run on this machine, newest first."""
+    return await container.validation_runs.recent(limit=500)
+
+
+async def _chosen(
+    container, name: str, *, regression: bool, tag: str, phase: int
+) -> list:
+    """Which scenarios this invocation is about.
+
+    The regression set is derived from history rather than declared: a scenario
+    that has passed here has earned its place in it, and one that never has
+    would only report the same failure every time. The file's own `regression`
+    flag is the exception, for a fresh clone where nothing has passed yet.
+    """
+    registry = container.scenario_registry
+    if name:
+        return [registry.get(name)]
+
+    chosen = registry.list_all()
+    if tag:
+        chosen = [scenario for scenario in chosen if tag in scenario.tags]
+    if phase:
+        chosen = [scenario for scenario in chosen if scenario.phase == phase]
+    if regression:
+        history = await _history(container)
+        passed = {
+            entry.scenario
+            for entry in (reliability_of(s.name, history) for s in chosen)
+            if entry.in_regression_set
+        }
+        chosen = [s for s in chosen if s.name in passed or s.regression]
+    return chosen
+
+
+_VERDICT_COLOURS = {
+    Verdict.RELIABLE: "green",
+    Verdict.SOMETIMES: "yellow",
+    Verdict.NEVER: "red",
+    Verdict.UNTRIED: "white",
+    Verdict.UNAVAILABLE: "white",
+}
+
+
+def _report_validation(run) -> None:
+    colour = {
+        RunStatus.PASSED: "green",
+        RunStatus.FAILED: "red",
+        RunStatus.SKIPPED: "yellow",
+    }[run.status]
+    typer.secho(f"  [{run.status.value}]", fg=colour, nl=False)
+    if run.failure is not FailureKind.NONE:
+        typer.echo(f" {run.failure.value}", nl=False)
+    metrics = run.metrics
+    typer.echo(
+        f"  {metrics.steps} step(s), ${metrics.cost_usd:.6f},"
+        f" {metrics.duration_seconds:.0f}s,"
+        f" {metrics.tool_calls} tool call(s)"
+    )
+    for check in run.checks:
+        mark = "ok " if check.passed else "no "
+        detail = f"  ({check.detail})" if check.detail and not check.passed else ""
+        typer.echo(f"    {mark}{check.check}{detail}")
+    if run.status is RunStatus.SKIPPED and run.summary:
+        typer.echo(f"    {run.summary}")
 
 
 def _resolve(approval_id: str, decision: ApprovalState, comment: str) -> None:

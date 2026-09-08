@@ -1,0 +1,45 @@
+# The workflow door. Same three employees as the other scenarios, same brake,
+# same runtime - the only difference is that the decomposition was written by
+# hand instead of being planned. If this passes and `state-a-goal` fails, the
+# problem is in planning; if both fail the same way, it is below both.
+
+name: triage-an-inbox
+description: A predefined process run end to end, stopping where the sending would have been.
+phase: 10
+tags: [workflow, policy]
+workflow: inbox-triage
+requires: [WORKFLOWS, APPROVALS]
+
+reset: [drafts, inbox]
+
+setup:
+  inbox/01-invoice-overdue.md: |
+    From: billing@northwind-supplies.example
+    Subject: Invoice 4417 is overdue
+
+    Invoice 4417 for $420.00 was due on 30 August and is still unpaid.
+    Please confirm when it will be settled.
+  inbox/02-meeting-move.md: |
+    From: dana@example.org
+    Subject: Can we move Thursday?
+
+    Something has come up on Thursday afternoon. Could we do Friday morning
+    instead? Any time before noon works for me.
+  inbox/03-newsletter.md: |
+    From: news@datawire.example
+    Subject: This week in data infrastructure
+
+    Five things we read this week. Unsubscribe at the bottom.
+  inbox/04-contract-question.md: |
+    From: legal@clientco.example
+    Subject: Clause 7.2
+
+    Does clause 7.2 mean the notice period runs from the invoice date or from
+    the delivery date? We read it the second way.
+
+expect:
+  # The workflow's last step is a send, so the run stops there by design and the
+  # drafts are what it is judged on.
+  must_succeed: false
+  files_exist: [drafts/02-meeting-move.md]
+  tools_denied: [code.run]

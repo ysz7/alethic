@@ -1,0 +1,34 @@
+# Validation set §8, task 6 in miniature, and Phase 7's claim as a scenario: the
+# user states what they want and names nobody. Whether the right employee was
+# chosen is not asserted directly - it is asserted by the file existing, which
+# only an employee holding the file tools could have produced.
+
+name: state-a-goal
+description: A goal with no employee named, carried to a file on disk by whoever Alethic picks.
+phase: 7
+tags: [manager, files]
+
+request: >
+  There are meeting notes in "notes/". Read them and leave me a file called
+  "notes/summary.md" with the decisions and who owns each one, as a short
+  Markdown list. Do not change the notes themselves.
+
+reset: [notes/summary.md]
+
+setup:
+  notes/2026-09-01-planning.md: |
+    Planning, 1 September
+    - Ship the export feature before the end of the month. Priya owns it.
+    - Drop the second dashboard from this release; nobody uses the first one.
+    - Marc to talk to Legal about the retention wording by Friday.
+  notes/2026-09-04-standup.md: |
+    Standup, 4 September
+    - Export is behind by two days. Priya says the CSV writer is the problem.
+    - Legal came back: retention stays at 90 days. Marc closed it.
+    - Hiring: one more backend interview on the 11th, Ines runs it.
+
+expect:
+  files_exist: [notes/summary.md]
+  file_contains:
+    notes/summary.md: Priya
+  max_steps: 40

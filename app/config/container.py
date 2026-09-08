@@ -28,6 +28,7 @@ from application.memory.distiller import OutcomeDistiller
 from application.memory.recorder import MemoryRecorder
 from application.memory.workspace import WorkspaceMemory
 from application.task_runner import TaskRunner
+from application.validation.harness import ValidationHarness
 from application.workflows.engine import WorkflowEngine
 from domain.employees.definition import EmployeeDefinition
 from infrastructure.container import Container
@@ -167,4 +168,28 @@ def build_workflow_engine(container: Container) -> WorkflowEngine:
         container.workflow_registry,
         build_task_runner(container),
         container.workflow_runs,
+    )
+
+
+def build_harness(container: Container) -> ValidationHarness:
+    """Assemble the validation harness with all three of the platform's doors.
+
+    It gets the manager, the task runner and the workflow engine - the same
+    three objects the CLI builds for `ask-alethic`, `run-task` and
+    `run-workflow` - and nothing else that can do work. Everything else handed
+    in here is a way of reading what happened afterwards.
+    """
+    return ValidationHarness(
+        scenarios=container.scenario_registry,
+        runs=container.validation_runs,
+        tasks=container.task_repository,
+        workspace=container.settings.ensure_workspace_dir(),
+        available=container.available_requirements(),
+        objectives=build_manager(container),
+        employees=build_task_runner(container),
+        workflows=build_workflow_engine(container),
+        tool_calls=container.tool_call_log,
+        audit=container.audit,  # type: ignore[arg-type]
+        approvals=container.approval_repository,
+        memory=container.memory,
     )

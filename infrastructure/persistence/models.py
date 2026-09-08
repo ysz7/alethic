@@ -29,6 +29,7 @@ from domain.approvals.models import ApprovalState
 from domain.memory.models import MemoryKind, MemoryScope
 from domain.policies.models import ActorKind
 from domain.tasks.task import TaskStatus
+from domain.validation.run import RunStatus as ValidationStatus
 from domain.workflows.definition import WorkflowTrigger
 from domain.workforce.protocols import ObjectiveStatus, PlanStatus
 from infrastructure.persistence import memory_fts
@@ -43,6 +44,7 @@ ACTOR_KIND_VALUES = tuple(kind.value for kind in ActorKind)
 AUDIT_RESULT_VALUES = ("SUCCESS", "FAILURE", "DENIED")
 WORKFLOW_TRIGGER_VALUES = tuple(trigger.value for trigger in WorkflowTrigger)
 WORKFLOW_STATUS_VALUES = ("RUNNING", "COMPLETED", "FAILED", "CANCELLED")
+VALIDATION_STATUS_VALUES = tuple(status.value for status in ValidationStatus)
 
 
 class Base(DeclarativeBase):
@@ -445,6 +447,40 @@ class WorkflowRunRow(Base):
     input: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+class ValidationRunRow(Base):
+    """One attempt at one declared scenario.
+
+    No foreign keys, and no column pointing at the tasks the run produced. The
+    record has to outlive them: the question it answers - did this capability
+    work here, and how often - is asked months later, by which time the tasks
+    may well have been cleared. Same reasoning as `audit_log`.
+
+    `failure` is a plain string rather than a constrained enum. The taxonomy is
+    a working hypothesis about what goes wrong with this platform (§11.3) and is
+    expected to gain a category the first time something goes wrong in a way
+    nobody had a name for; a CHECK constraint would make that a migration, and a
+    migration is exactly the wrong amount of friction for a finding.
+    """
+
+    __tablename__ = "validation_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('" + "','".join(VALIDATION_STATUS_VALUES) + "')",
+            name="ck_validation_runs_status",
+        ),
+        Index("ix_validation_runs_scenario", "workspace_id", "scenario", "started_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    scenario: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    failure: Mapped[str] = mapped_column(String(32), nullable=False, default="NONE")
+    result: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     started_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(nullable=True)
 

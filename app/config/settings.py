@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     #: Where workflow declarations are read from. None means the ones that
     #: ship with the platform, the same way employees are found.
     workflows_dir: Path | None = None
+    #: Where validation scenarios are read from. Same rule again: the real work
+    #: the platform is measured on is a directory of files, not a fixture.
+    scenarios_dir: Path | None = None
     #: prompt | deny | allow. What happens when an irreversible action comes up:
     #: ask the person at the terminal, refuse, or - only if explicitly set -
     #: proceed. A run with nobody watching refuses whatever this says.

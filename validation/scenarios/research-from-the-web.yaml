@@ -1,0 +1,19 @@
+# Validation set §8, task 1, cut down to something that can be re-run daily
+# without spending an afternoon. It is the only scenario here that depends on the
+# open internet, which is why it is tagged: a failure of this one is as likely to
+# be a search engine having a bad morning as it is to be the platform.
+
+name: research-from-the-web
+description: A question the machine cannot answer from itself, answered with a named source.
+phase: 4
+tags: [web, network, employee]
+employee: researcher
+requires: [BROWSER]
+
+request: >
+  Find out which organisation maintains the SQLite source code and how it is
+  licensed. Answer in three sentences and name the page you took it from.
+
+expect:
+  output_contains: [sqlite]
+  max_steps: 12
