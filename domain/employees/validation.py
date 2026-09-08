@@ -66,10 +66,15 @@ class Issue:
         return f"{self.severity.value}: {self.employee}: {self.message}"
 
 
-def check(definition: EmployeeDefinition, offered: ToolCapabilities) -> tuple[Issue, ...]:
+def check(
+    definition: EmployeeDefinition,
+    offered: ToolCapabilities,
+    integrations: Iterable[str] = (),
+) -> tuple[Issue, ...]:
     """Everything wrong with one declaration, worst first."""
     issues = [
         *_missing_tools(definition, offered),
+        *_missing_integrations(definition, frozenset(integrations)),
         *_unbacked_capabilities(definition, offered),
         *_undeclared_capabilities(definition, offered),
         *_unknown_policies(definition),
@@ -79,9 +84,12 @@ def check(definition: EmployeeDefinition, offered: ToolCapabilities) -> tuple[Is
 
 
 def check_all(
-    definitions: Iterable[EmployeeDefinition], offered: ToolCapabilities
+    definitions: Iterable[EmployeeDefinition],
+    offered: ToolCapabilities,
+    integrations: Iterable[str] = (),
 ) -> tuple[Issue, ...]:
-    return tuple(issue for d in definitions for issue in check(d, offered))
+    connected = frozenset(integrations)
+    return tuple(issue for d in definitions for issue in check(d, offered, connected))
 
 
 def errors(issues: Iterable[Issue]) -> tuple[Issue, ...]:
@@ -118,6 +126,31 @@ def _missing_tools(
     ]
 
 
+def _missing_integrations(
+    definition: EmployeeDefinition, connected: frozenset[str]
+) -> list[Issue]:
+    """An integration it is granted that is not connected on this machine.
+
+    A warning for the same reason a missing tool is one, and the reason is worth
+    stating because the two look different and are not: an integration is
+    something the *user* connects, so a declaration naming one is right or wrong
+    depending on a machine rather than on itself. The employee loses those tools
+    silently at runtime, which is why it is said at all.
+    """
+    absent = sorted(definition.integrations - connected)
+    if not absent:
+        return []
+    known = ", ".join(sorted(connected)) or "none"
+    return [
+        Issue(
+            employee=definition.name,
+            message=(
+                f"is granted {', '.join(absent)}, which is not connected here. "
+                f"Its tools will not be available. Connected: {known}."
+            ),
+            severity=Severity.WARNING,
+        )
+    ]
 def _unbacked_capabilities(
     definition: EmployeeDefinition, offered: ToolCapabilities
 ) -> list[Issue]:

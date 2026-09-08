@@ -176,3 +176,52 @@ def test_the_http_adapter_reaches_the_platform_only_through_the_boundary() -> No
         if reached:
             offenders[str(path.relative_to(REPO_ROOT))] = reached
     assert not offenders, f"the HTTP adapter must go through AlethicService: {offenders}"
+
+
+def test_nothing_above_the_tool_boundary_knows_what_mcp_is() -> None:
+    """Phase 14: MCP is an extension mechanism, not part of the architecture.
+
+    The rule ADR 0015 rests on. `domain/`, `application/` and the employee
+    declarations ask for a capability and get a `Tool`; the protocol, its
+    transport and the lifetime of a server live in `infrastructure/mcp/`, and
+    `app/config/container.py` is the one place allowed to wire the two together
+    - the composition root, exactly as it is for the screen reader.
+
+    If this ever fails, the planner has grown a branch for where a tool came
+    from, which is the thing the whole phase exists to prevent.
+    """
+    allowed = {
+        REPO_ROOT / "app" / "config" / "container.py",
+        REPO_ROOT / "infrastructure" / "mcp",
+        REPO_ROOT / "infrastructure" / "tools" / "mcp.py",
+    }
+    offenders: dict[str, list[str]] = {}
+    for package in ("domain", "application", "app"):
+        for path in python_files(package):
+            if any(path == entry or entry in path.parents for entry in allowed):
+                continue
+            text = path.read_text(encoding="utf-8")
+            found = sorted(
+                {line.strip() for line in text.splitlines() if "infrastructure.mcp" in line}
+            )
+            if found:
+                offenders[str(path.relative_to(REPO_ROOT))] = found
+    assert not offenders, f"MCP leaked above the tool boundary: {offenders}"
+
+
+def test_an_integration_is_reached_through_the_same_registry_as_every_tool() -> None:
+    """There is one tool system, and a discovered tool is in it.
+
+    Asserted by absence: no second registry, no second executor, no parallel
+    contract. A file whose name says otherwise is the first sign that the
+    answer to "how does a tool run" has become two answers.
+    """
+    forbidden = {"MCPToolRegistry", "MCPExecutor", "MCPTaskExecutor", "IntegrationRegistry"}
+    offenders: dict[str, list[str]] = {}
+    for package in ("domain", "application", "infrastructure", "app"):
+        for path in python_files(package):
+            text = path.read_text(encoding="utf-8")
+            found = sorted(name for name in forbidden if f"class {name}" in text)
+            if found:
+                offenders[str(path.relative_to(REPO_ROOT))] = found
+    assert not offenders, f"a second tool system appeared: {offenders}"

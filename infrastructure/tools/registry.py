@@ -25,6 +25,17 @@ class InMemoryToolRegistry:
     def register(self, tool: Tool) -> None:
         self._tools[tool.spec.name] = tool
 
+    def unregister(self, name: str) -> bool:
+        """Take a tool away again. False if it was not there.
+
+        Needed because a capability can now be *removed* while the process runs:
+        an integration the user disconnected must stop being offered, and a
+        registry that could only grow would keep handing out a tool whose server
+        is gone. Absent is not an error - removing something twice is what a
+        retry of a removal looks like.
+        """
+        return self._tools.pop(name, None) is not None
+
     def get(self, name: str, actor: Actor) -> Tool:
         tool = self._tools.get(name)
         if tool is None:

@@ -27,6 +27,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import JSON
 
 from domain.approvals.models import ApprovalState
+from domain.integrations.models import IntegrationKind, IntegrationStatus
 from domain.memory.models import MemoryKind, MemoryScope
 from domain.policies.models import ActorKind
 from domain.tasks.task import TaskStatus
@@ -46,6 +47,8 @@ AUDIT_RESULT_VALUES = ("SUCCESS", "FAILURE", "DENIED")
 WORKFLOW_TRIGGER_VALUES = tuple(trigger.value for trigger in WorkflowTrigger)
 WORKFLOW_STATUS_VALUES = ("RUNNING", "COMPLETED", "FAILED", "CANCELLED")
 VALIDATION_STATUS_VALUES = tuple(status.value for status in ValidationStatus)
+INTEGRATION_KIND_VALUES = tuple(kind.value for kind in IntegrationKind)
+INTEGRATION_STATUS_VALUES = tuple(status.value for status in IntegrationStatus)
 
 
 class Base(DeclarativeBase):
@@ -572,6 +575,54 @@ class EventRow(Base):
     created_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
     consumed_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
+
+class IntegrationRow(Base):
+    """An external service the user connected.
+
+    Three of these columns are the trust boundary, and all three are written on
+    this machine rather than by the service (ADR 0015).
+
+    `effects` maps a tool's own name to what it does to the world, and it is the
+    only thing the policy layer reads - a server does not get a vote on whether
+    its own actions need approval. `capabilities` is what an employee granted
+    this integration can thereby be asked to do, in the platform's own closed
+    vocabulary. `discovered` is what the server last said it offers, cached so
+    that listing tools or checking a declaration never has to start it.
+
+    `configuration` holds how to reach it and never holds a credential:
+    `secret_names` says which secrets are needed, and the values are resolved at
+    the moment of a call from wherever secrets actually live.
+
+    Unique on (workspace, name) because the name is what an employee's
+    declaration says and what every tool is prefixed with. Two integrations
+    called gmail would make `gmail.send_message` ambiguous, which is a thing
+    that must be impossible rather than merely discouraged.
+    """
+
+    __tablename__ = "integrations"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "name", name="uq_integrations_name"),
+        CheckConstraint(
+            "kind IN " + str(INTEGRATION_KIND_VALUES), name="ck_integrations_kind"
+        ),
+        CheckConstraint(
+            "status IN " + str(INTEGRATION_STATUS_VALUES), name="ck_integrations_status"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False, default="MCP")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="DISCONNECTED")
+    configuration: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    effects: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    capabilities: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    secret_names: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    discovered: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
 
 # The search index is part of the schema, not of the adapter: a database built
 # by `create_all` - which is what the test suite does - has to be searchable the

@@ -25,13 +25,14 @@ from domain.computer.protocols import Computer, ScreenReader, StopSignal
 from domain.conversations.repository import ConversationRepository
 from domain.employees.protocols import EmployeeRegistry
 from domain.employees.validation import Issue, check_all
+from domain.integrations.repository import IntegrationRepository
 from domain.llm.models import RoutingHints, TaskKind
 from domain.llm.protocols import LLM, ModelRouter
 from domain.llm.telemetry import LLMCallLog
 from domain.memory.protocols import Memory, MemoryMaintenance
 from domain.scheduling.protocols import EventLog, ScheduleRepository
 from domain.search.protocols import SearchEngine
-from domain.secrets.protocols import SecretResolver
+from domain.secrets.protocols import CredentialStore, SecretResolver
 from domain.tasks.cancellation import Cancellations
 from domain.tasks.repository import TaskRepository
 from domain.tools.protocols import ToolRegistry
@@ -79,6 +80,9 @@ class Container:
         #: Set by an interface that answers approvals itself, before anything
         #: builds the approval service. None means the terminal answers them.
         self._confirmer: Callable[..., object] | None = None
+        #: Set by the composition root, which is the only place allowed to
+        #: build an application component (ADR 0001).
+        self._integrations: Callable[[], object] | None = None
 
     # --- Cross-cutting --------------------------------------------------------
 
@@ -185,7 +189,20 @@ class Container:
 
     @cached_property
     def employee_registry(self) -> EmployeeRegistry:
-        return YamlEmployeeRegistry(self.settings.employees_dir)
+        """The declarations, with any integration grants already applied.
+
+        Wrapped rather than changed: reading a YAML file is a property of the
+        repository, and whether `gmail` is connected on this machine right now
+        is a property of the machine. The wrapper holds a snapshot that
+        `IntegrationService` refreshes when a person changes something, so
+        `list()` stays synchronous and never reaches a database.
+        """
+        registry = YamlEmployeeRegistry(self.settings.employees_dir)
+        if not self.settings.integrations_enabled:
+            return registry
+        from infrastructure.employees.granting import GrantingEmployeeRegistry
+
+        return GrantingEmployeeRegistry(registry)
 
     def tool_capabilities(self) -> dict[str, frozenset[Capability]]:
         """What each tool on this machine lets an employee do.
@@ -206,13 +223,54 @@ class Container:
         never offered, a capability that is never searched. So it is checked
         where both halves are known, which is here.
         """
-        return check_all(self.employee_registry.list(), self.tool_capabilities())
+        return check_all(
+            self.employee_registry.list(),
+            self.tool_capabilities(),
+            self.connected_integrations(),
+        )
+
+    def connected_integrations(self) -> frozenset[str]:
+        """The names an employee declaration may be granted, as known right now.
+
+        Read off the same snapshot the grants come from rather than from the
+        database, because this is called where a declaration is checked - at
+        start-up and from `alethic employees` - and both already have it.
+        """
+        registry = self.employee_registry
+        integrations = getattr(registry, "integrations", ())
+        return frozenset(item.name for item in integrations)
 
     # --- Tools ----------------------------------------------------------------
 
     @cached_property
+    def credential_store(self) -> CredentialStore:
+        """Where a credential the user typed into the interface is kept.
+
+        A separate contract from reading, so that holding the resolver - which
+        every tool does - is not the same as being able to write one.
+        """
+
+        return self._credentials
+
+    @cached_property
+    def _credentials(self):
+        from infrastructure.secrets.local import LocalCredentialStore
+
+        return LocalCredentialStore(
+            self.settings.data_dir / "credentials.json", fallback=EnvSecretResolver()
+        )
+
+    @cached_property
     def secret_resolver(self) -> SecretResolver:
-        return EnvSecretResolver()
+        """The environment first, then anything the interface stored.
+
+        One object serves both halves, like the memory adapter: separate
+        contracts so that reading does not imply writing, one implementation
+        because they are the same file.
+        """
+        if not self.settings.integrations_enabled:
+            return EnvSecretResolver()
+        return self._credentials
 
     @cached_property
     def search_engine(self) -> SearchEngine:
@@ -347,6 +405,56 @@ class Container:
         from infrastructure.persistence.tool_call_repository import SqliteToolCallLog
 
         return SqliteToolCallLog(self.session_factory)
+
+    # --- Integrations -------------------------------------------------------
+
+    @cached_property
+    def integration_repository(self) -> IntegrationRepository:
+        if self._in_memory:
+            from infrastructure.persistence.integration_repository import (
+                InMemoryIntegrationRepository,
+            )
+
+            return InMemoryIntegrationRepository()
+        from infrastructure.persistence.integration_repository import (
+            SqliteIntegrationRepository,
+        )
+
+        return SqliteIntegrationRepository(self.session_factory)
+
+    def use_integrations(self, factory: Callable[[], object]) -> None:
+        """Supply the lifecycle of connected services.
+
+        Handed in for the same reason the screen reader is: `IntegrationService`
+        is an application component and this container may not import one
+        (ADR 0001). The composition root owns the wire, and this container owns
+        the repository, the registry and the connector it is built from.
+        """
+        self._integrations = factory
+
+    @cached_property
+    def integrations(self):
+        """The lifecycle of connected services, or None if there is none.
+
+        None means either the feature is switched off or the composition root
+        did not supply one - a CLI command that only prints the version, say.
+        Callers treat both the same way, because both mean the same thing:
+        nothing here can connect a service.
+        """
+        if not self.settings.integrations_enabled or self._integrations is None:
+            return None
+        return self._integrations()
+
+    def refresh_grants(self, integrations) -> None:
+        """Have the employee registry see the current set of integrations.
+
+        The snapshot follows the store rather than polling it: connecting or
+        removing a service is a person-sized event, and a grant has to be right
+        on the very next run rather than after a cache expires.
+        """
+        registry = self.employee_registry
+        if hasattr(registry, "refresh"):
+            registry.refresh(integrations)
 
     # --- Memory -----------------------------------------------------------------
 
@@ -497,6 +605,8 @@ class Container:
             available.add(Requirement.WORKFLOWS)
         if settings.approvals_enabled:
             available.add(Requirement.APPROVALS)
+        if settings.integrations_enabled:
+            available.add(Requirement.INTEGRATIONS)
         return frozenset(available)
 
     # --- Audit ------------------------------------------------------------------
@@ -640,9 +750,12 @@ class Container:
             await self.llm_factory.aclose()
         # Only what was actually built: a run that never searched has no client
         # to close, and asking for one here would create it in order to do so.
-        for name in ("browser", "search_engine"):
+        for name in ("browser", "search_engine", "integrations"):
             resource = self.__dict__.get(name)
             if resource is not None:
+                # Integrations join the list because a connected server is a
+                # subprocess this runtime started, and a process that exits
+                # without stopping them leaves them running against nothing.
                 await resource.aclose()
         if "engine" in self.__dict__:
             await self.engine.dispose()

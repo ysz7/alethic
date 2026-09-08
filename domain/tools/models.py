@@ -7,7 +7,7 @@ from domain.capabilities.models import Capability
 from domain.computer.interfaces import InterfaceLevel
 from domain.policies.models import RiskLevel
 from domain.policies.risk import Effect, highest, risk_of
-from domain.tools.schema import Param, ParameterSet
+from domain.tools.schema import Param, ParameterSet, parameters_from_json_schema
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +63,48 @@ class ToolSpec:
             parameters=parameter_set,
         )
 
+
+    @classmethod
+    def from_json_schema(
+        cls,
+        name: str,
+        description: str,
+        schema: dict[str, Any] | None,
+        *,
+        effect: Effect = Effect.EXECUTE,
+        risk_level: RiskLevel = RiskLevel.LOW,
+        capabilities: frozenset[Capability] = frozenset(),
+        reversible: bool = True,
+        interface_level: InterfaceLevel = InterfaceLevel.INTEGRATION,
+    ) -> ToolSpec:
+        """Declare a tool whose shape was written elsewhere.
+
+        Used for a capability discovered at runtime - an integration's tool -
+        where the schema arrives from the other side instead of from a `Param`
+        declaration here. The parameters are parsed out of it so validation,
+        coercion and unknown-argument reporting apply exactly as they do to a
+        tool written in this repository, and the schema the model is shown is
+        then rendered back from them: what is described and what is enforced
+        must be the same thing, and the way to guarantee that is to have one
+        source for both.
+
+        `effect` defaults to EXECUTE, which is HIGH, which asks. A discovered
+        tool nobody has classified could be anything, and the cost of being
+        wrong the other way is an action the user never approved (ADR 0015).
+        `interface_level` defaults to INTEGRATION for the same reason it is not
+        API: this reaches the world through something the platform speaks to on
+        the user's behalf, and a trace should say so.
+        """
+        return cls.of(
+            name,
+            description,
+            *parameters_from_json_schema(schema).params,
+            effect=effect,
+            risk_level=risk_level,
+            capabilities=capabilities,
+            reversible=reversible,
+            interface_level=interface_level,
+        )
 
 @dataclass(frozen=True, slots=True)
 class ToolCall:

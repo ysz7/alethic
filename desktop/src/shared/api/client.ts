@@ -51,6 +51,10 @@ export class RuntimeClient {
     });
   }
 
+  async del<T>(path: string): Promise<T> {
+    return this.call<T>(path, { method: "DELETE" });
+  }
+
   private async call<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await this.fetch(`${this.baseUrl}${path}`, {
       headers: { "Content-Type": "application/json" },

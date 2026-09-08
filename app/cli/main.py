@@ -22,12 +22,17 @@ from app.config.container import (
     build_manager,
     build_task_runner,
     build_workflow_engine,
+    load_grants,
+    prepare,
 )
 from app.config.settings import get_settings
 from domain.approvals.models import ApprovalState
 from domain.errors import AlethicError, StorageNotInitializedError
+from domain.integrations.specs import spec_for
 from domain.llm.models import LLMRequest, Message, RoutingHints, TaskKind
 from domain.policies.models import ActorKind, SimpleActor
+from domain.policies.risk import at_least
+from domain.policies.rules import APPROVAL_THRESHOLD
 from domain.validation.failures import FailureKind
 from domain.validation.reliability import Verdict, build_report, reliability_of
 from domain.validation.run import RunStatus
@@ -222,7 +227,7 @@ def ask_alethic(
     async def _run() -> None:
         container = build_container()
         try:
-            await container.sync_employees()
+            await prepare(container)
             manager = build_manager(container)
             received = await manager.receive(objective)
             result = await manager.handle_objective(received)
@@ -325,7 +330,7 @@ def run_task(
     async def _run() -> None:
         container = build_container()
         try:
-            await container.sync_employees()
+            await prepare(container)
             runner = build_task_runner(container)
             task = await runner.submit_and_run(goal, employee)
             _report(task)
@@ -345,7 +350,7 @@ def resume() -> None:
     async def _run() -> None:
         container = build_container()
         try:
-            await container.sync_employees()
+            await prepare(container)
             runner = build_task_runner(container)
             pending = await runner.resumable()
             if not pending:
@@ -380,6 +385,10 @@ def employees(
     for a reason nobody can see - so they are printed where somebody will look.
     """
     container = build_container()
+    # Grants are part of a declaration's meaning: an employee given an
+    # integration holds its tools, and a listing that showed the file without
+    # them would be describing an employee that does not exist on this machine.
+    asyncio.run(load_grants(container))
     declared = container.employee_registry.list()
     if not declared:
         typer.echo("No employees declared.")
@@ -662,6 +671,82 @@ def workflows() -> None:
             )
 
 
+@app.command()
+def integrations() -> None:
+    """The external services connected here, and what each one offers.
+
+    Shows what the platform will *do* about every capability, not just that it
+    exists: an unclassified tool asks before it runs, and reading that here is
+    how somebody notices they have not classified one yet.
+    """
+    settings = get_settings()
+    if not settings.integrations_enabled:
+        typer.echo("Integrations are switched off (ALETHIC_FLAGS__INTEGRATIONS=false).")
+        return
+    container = build_container()
+    service = container.integrations
+    if service is None:  # pragma: no cover - the flag above is the only way here
+        typer.echo("Integrations are not configured on this machine.")
+        return
+
+    async def _run() -> None:
+        try:
+            await _print_integrations(container, service)
+        except StorageNotInitializedError as error:
+            typer.secho(f"{error} Run: uv run alembic upgrade head", fg="red", err=True)
+            raise typer.Exit(code=1) from error
+        finally:
+            await container.aclose()
+
+    asyncio.run(_run())
+
+
+async def _print_integrations(container, service) -> None:
+    connected = await service.list()
+    if not connected:
+        typer.echo(
+            "Nothing is connected. Add one in Settings, or with:\n"
+            "  POST /api/integrations {\"name\": ..., \"configuration\": ...}"
+        )
+        return
+    granted = _grants(container)
+    for item in connected:
+        state = item.status.value.lower().replace("_", " ")
+        colour = "green" if item.is_usable and item.discovered else "yellow"
+        typer.secho(f"{item.name}", fg="cyan", nl=False)
+        typer.secho(f"  {state}", fg=colour, nl=False)
+        typer.echo(f", {len(item.discovered)} capability(ies)")
+        if item.granted_capabilities:
+            typer.echo(
+                f"  offers {', '.join(sorted(str(c) for c in item.granted_capabilities))}"
+            )
+        for tool in item.discovered:
+            spec = spec_for(item, tool)
+            asks = at_least(spec.risk_level, APPROVAL_THRESHOLD)
+            mark = "!" if asks else " "
+            classified = "" if tool.name in item.effects else "  (unclassified)"
+            typer.echo(
+                f"   {mark} {tool.name:<24}{spec.effect.value:<8}"
+                f"{spec.risk_level.value}{classified}"
+            )
+        holders = sorted(granted.get(item.name, ()))
+        typer.echo(f"  granted to {', '.join(holders) if holders else 'nobody'}")
+    typer.echo("\n  ! waits for you before it runs.")
+
+
+def _grants(container) -> dict[str, list[str]]:
+    """Who holds what, read off the declarations rather than the integrations.
+
+    Printed because it is the question that follows immediately from seeing a
+    service connected - a connected integration nobody was granted is work that
+    will never reach it - and it is not visible anywhere else.
+    """
+    holders: dict[str, list[str]] = {}
+    for employee in container.employee_registry.list():
+        for name in employee.integrations:
+            holders.setdefault(name, []).append(employee.name)
+    return holders
+
 #: Declared once, because ruff will not have a call in a default and typer
 #: needs one. The same shape every other repeatable option would take.
 _INPUT_OPTION = typer.Option(
@@ -683,7 +768,7 @@ def run_workflow(
     async def _run() -> None:
         container = build_container()
         try:
-            await container.sync_employees()
+            await prepare(container)
             values: dict[str, object] = {}
             for entry in inputs:
                 key, separator, value = entry.partition("=")
@@ -790,7 +875,7 @@ def validate(
     async def _run() -> None:
         container = build_container()
         try:
-            await container.sync_employees()
+            await prepare(container)
             chosen = await _chosen(container, name, regression=regression, tag=tag, phase=phase)
             if not chosen:
                 typer.echo("Nothing matched. `alethic scenarios` lists what is declared.")

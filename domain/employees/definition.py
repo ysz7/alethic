@@ -59,6 +59,15 @@ class EmployeeDefinition:
     #: registry stays a reader of declarations, and checked against them by
     #: `domain.employees.validation` so it cannot quietly claim more than it has.
     capabilities: frozenset[Capability] = field(default_factory=frozenset)
+    #: Integrations this employee is granted, by name. A grant is per
+    #: integration rather than per tool because an integration's tool names are
+    #: not known when this file is written and change when its server is
+    #: updated - a permission that has to be re-typed after every update is a
+    #: permission that stops matching what the employee needs (ADR 0015). It is
+    #: expanded into `allowed_tools` where the two are known, so least privilege
+    #: is still enforced against a list of names and this is still a
+    #: declaration.
+    integrations: frozenset[str] = field(default_factory=frozenset)
     policies: frozenset[str] = field(default_factory=frozenset)
     model_profile: ModelProfile = field(default_factory=ModelProfile)
     memory_scope: MemoryScope = MemoryScope.EMPLOYEE_PRIVATE
@@ -104,6 +113,7 @@ class EmployeeDefinition:
                 "role": [self.role.title, self.role.description],
                 "goals": [[g.text, g.priority] for g in self.goals],
                 "allowed_tools": sorted(self.allowed_tools),
+                "integrations": sorted(self.integrations),
                 "capabilities": sorted(str(c) for c in self.capabilities),
                 "policies": sorted(self.policies),
                 "memory_scope": str(self.memory_scope),

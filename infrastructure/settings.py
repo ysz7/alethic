@@ -32,6 +32,8 @@ class RuntimeSettings(Protocol):
     approval_ttl_seconds: float
     browser_headless: bool
     browser_timeout_seconds: float
+    #: How long an integration's server may take to answer one call.
+    integration_timeout_seconds: float
     code_timeout_seconds: float
     computer_allowed_applications: tuple[str, ...]
     computer_allowed_region: str | None
@@ -61,6 +63,9 @@ class RuntimeSettings(Protocol):
 
     @property
     def computer_use_enabled(self) -> bool: ...
+
+    @property
+    def integrations_enabled(self) -> bool: ...
 
     @property
     def memory_enabled(self) -> bool: ...

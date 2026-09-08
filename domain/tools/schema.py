@@ -107,6 +107,85 @@ class ParameterSet:
         return cleaned
 
 
+def _named_type(raw: Any) -> str | None:
+    """One JSON Schema type name, or None if this is not one we can use."""
+    if isinstance(raw, str) and raw in JSON_TYPES:
+        return raw
+    if isinstance(raw, list):
+        # ["string", "null"] is how a nullable field is usually written.
+        for entry in raw:
+            if isinstance(entry, str) and entry in JSON_TYPES:
+                return entry
+    return None
+
+
+def _type_of(schema: dict[str, Any]) -> str:
+    """The type to validate a property as, from a schema somebody else wrote.
+
+    A discovered tool's schema is richer than `Param` - `anyOf`, `$ref`,
+    composed objects - and the choice here is which way to be wrong. Falling
+    back to "string" keeps the call reaching the tool with the model's own value
+    in it; refusing to parse would drop a whole tool over a field the platform
+    happens not to model.
+    """
+    named = _named_type(schema.get("type"))
+    if named is not None:
+        return named
+    for key in ("anyOf", "oneOf", "allOf"):
+        for entry in schema.get(key, ()):
+            if isinstance(entry, dict) and (named := _named_type(entry.get("type"))):
+                return named
+    if "properties" in schema:
+        return "object"
+    if "enum" in schema:
+        return "string"
+    return "string"
+
+
+def param_from_json_schema(name: str, schema: dict[str, Any], *, required: bool) -> Param:
+    """One parameter, read off a schema this platform did not write."""
+    kind = _type_of(schema)
+    enum = schema.get("enum")
+    items = schema.get("items")
+    return Param(
+        name=name,
+        type=kind,
+        description=str(schema.get("description", "")),
+        required=required,
+        default=schema.get("default"),
+        enum=tuple(str(value) for value in enum) if isinstance(enum, list) else (),
+        item_type=(
+            _type_of(items) if kind == "array" and isinstance(items, dict) else "string"
+        ),
+    )
+
+
+def parameters_from_json_schema(schema: dict[str, Any] | None) -> ParameterSet:
+    """A `ParameterSet` from a foreign JSON Schema object.
+
+    Deliberately lossy, and deliberately not skipped. Keeping the raw schema and
+    an empty `ParameterSet` would mean the coercion and the unknown-argument
+    reporting above stop applying to exactly the tools whose callers this
+    platform did not write - the ones that most need them. Required order is
+    preserved from `required` first so the failure message lists arguments the
+    way the tool's author wrote them.
+    """
+    if not isinstance(schema, dict):
+        return ParameterSet()
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return ParameterSet()
+    required = schema.get("required", ())
+    required_names = {str(name) for name in required} if isinstance(required, list) else set()
+    return ParameterSet(
+        tuple(
+            param_from_json_schema(str(name), prop, required=str(name) in required_names)
+            for name, prop in properties.items()
+            if isinstance(prop, dict)
+        )
+    )
+
+
 def _coerce(param: Param, value: Any) -> Any:
     try:
         coerced = _convert(param, value)

@@ -17,6 +17,7 @@ from domain.errors import (
     AlethicError,
     ConfigurationError,
     ExecutionError,
+    IntegrationError,
     PermissionDeniedError,
     ProviderError,
     StorageError,
@@ -61,6 +62,12 @@ def classify(error: BaseException) -> Failure:
     message = str(error)
 
     if isinstance(error, ProviderError):
+        kind = FailureKind.TRANSIENT if error.transient else FailureKind.PERMANENT
+    elif isinstance(error, IntegrationError):
+        # Same question as a provider failure - is another attempt worth
+        # anything - and the same answer: the type says so, the message never
+        # does. An unreachable server may answer next time; a rejected
+        # credential will not until somebody changes it.
         kind = FailureKind.TRANSIENT if error.transient else FailureKind.PERMANENT
     elif isinstance(error, ConfigurationError):
         kind = FailureKind.CONFIGURATION

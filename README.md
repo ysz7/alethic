@@ -12,7 +12,10 @@ and give Alethic a task.
 
 ## Status
 
-**Phase 13 - Interface layer and the desktop application.** Every surface now
+**Phase 14 - Integrations.** Alethic can be given services it did not ship
+with: an MCP server is added in Settings, its capabilities become ordinary tools,
+and what each one is allowed to do is decided on this machine rather than by the
+server. Before it, **Phase 13 - Interface layer and the desktop application.** Every surface now
 talks to one application-level boundary, and the desktop window is an adapter
 over it rather than a second copy of the platform. Saying hello to it gets a
 reply, in the language you configured, rather than a plan. Underneath it, Phase 10's
@@ -308,6 +311,46 @@ uv run alethic ask "Which city is the capital of Germany?"
 
 That is the same code path - router, adapter, metering, spend log - pointed at a
 different catalog. Local calls are priced at zero because they are.
+
+## Connecting something outside this machine
+
+Alethic can reach services it did not ship with. In the window, Settings →
+Integrations takes a name and a command - any MCP server, nothing about it baked
+in - starts it, and shows what it turned out to offer:
+
+```
+notes  ready, 3 capability(ies)
+  offers EMAIL
+     search_notes            READ    LOW
+   ! send_note               EXECUTE HIGH  (unclassified)
+   ! unclassified_thing      EXECUTE HIGH  (unclassified)
+  granted to nobody
+
+  ! waits for you before it runs.
+```
+
+`alethic integrations` prints the same thing in a terminal.
+
+Three things about that listing are the whole design.
+
+**What each capability does to the world is decided here, not by the server.** A
+server that described its own "send" as harmless would otherwise walk past the
+approval gate, so its claims are a suggestion and the stored classification is
+yours. Anything nobody has classified is treated as the most dangerous thing it
+could be, which is why two of the three above wait for you.
+
+**Nobody can use it until you say who.** Connecting a service does not hand it to
+every employee. An employee is granted the integration by name -
+`integrations: [notes]` in its declaration, or a click in the window - and gets
+whatever that service offers now, including whatever it offers after an update.
+
+**What comes back is quoted, not obeyed.** A mail body or an issue is text
+written by someone who is not you. It reaches the model inside markers that say
+so, and nothing inside it can change a policy, a permission or a credential.
+
+Disabling a service keeps its setup and its credentials; removing it takes its
+capabilities away and leaves every record of what it already did. Credentials go
+in and are never read back out - there is no endpoint that returns one.
 
 ## Running something you already know the shape of
 

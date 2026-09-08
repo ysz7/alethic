@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     approval_ttl_seconds: float = 900.0
     browser_headless: bool = True
     browser_timeout_seconds: float = 30.0
+    #: How long an integration's server may take to answer one call. A local
+    #: subprocess answers in milliseconds; this is where slow has become gone.
+    integration_timeout_seconds: float = 30.0
     code_timeout_seconds: float = 30.0
 
     # --- Computer use --------------------------------------------------------
@@ -177,6 +180,10 @@ class Settings(BaseSettings):
         tools at a different level of the hierarchy.
         """
         return self.flags.computer_use
+
+    @property
+    def integrations_enabled(self) -> bool:
+        return self.flags.integrations
 
     @property
     def memory_enabled(self) -> bool:

@@ -51,13 +51,22 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app.config.container import build_container, build_manager, build_service
+from app.config.container import (
+    build_container,
+    build_manager,
+    build_service,
+    prepare,
+)
 from app.config.settings import Settings, get_settings
 from application.interface.activity import ActivityEvent
 from application.interface.contracts import InputType, RequestSource, UserRequest
 from application.interface.service import AlethicService, ApprovalsDisabledError
 from application.scheduling.scheduler import Scheduler
-from domain.errors import AlethicError, StorageNotInitializedError
+from domain.errors import (
+    AlethicError,
+    IntegrationNotFoundError,
+    StorageNotInitializedError,
+)
 from infrastructure.approvals.waiting import WaitingConfirmer
 from infrastructure.container import Container
 
@@ -105,6 +114,37 @@ class NewConversation(BaseModel):
     title: str = ""
 
 
+class NewIntegration(BaseModel):
+    """What a person typed into "Add MCP Server".
+
+    `configuration` is free-form because its shape belongs to the transport -
+    a command and its arguments for stdio, something else for whatever arrives
+    next - and a schema here would have to be widened for every one of them.
+    """
+
+    name: str = Field(min_length=1, max_length=120)
+    configuration: dict[str, Any] = Field(default_factory=dict)
+    kind: str = "MCP"
+    capabilities: tuple[str, ...] = ()
+    #: Names only. A value is sent to `/api/credentials` and never lands here.
+    secret_names: tuple[str, ...] = ()
+
+
+class Classification(BaseModel):
+    """What a person says an integration's tools do to the world.
+
+    Tool name to effect. Nothing about risk or approval is accepted here: those
+    follow from the effect, and letting an interface send them would be letting
+    it set its own policy.
+    """
+
+    effects: dict[str, str] = Field(default_factory=dict)
+
+
+class NewCredential(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    value: str = Field(min_length=1)
+
 class Decision(BaseModel):
     approved: bool
     comment: str = ""
@@ -138,7 +178,7 @@ def create_app(
             progress=container.progress,
         )
         container.use_approval_confirmer(confirmer)
-        await container.sync_employees()
+        await prepare(container)
 
         app.state.settings = resolved
         app.state.container = container
@@ -290,6 +330,86 @@ def _routes(app: FastAPI) -> None:
         except AlethicError as error:
             raise HTTPException(status_code=404, detail=str(error)) from error
 
+
+    # --- Integrations ---------------------------------------------------------
+
+    @app.get("/api/integrations")
+    async def integrations(request: Request) -> dict[str, Any]:
+        service = _service(request)
+        if not service.integrations_available:
+            # Not an error: a machine with the feature off is a legitimate
+            # configuration, and an interface needs to know the difference
+            # between "none connected" and "cannot connect any".
+            return {"available": False, "integrations": []}
+        return {
+            "available": True,
+            "integrations": await _guarded(service.list_integrations()),
+        }
+
+    @app.post("/api/integrations", status_code=201)
+    async def add_integration(request: Request, body: NewIntegration) -> dict[str, Any]:
+        try:
+            return await _guarded(
+                _service(request).add_integration(
+                    body.name,
+                    body.configuration,
+                    kind=body.kind,
+                    capabilities=body.capabilities,
+                    secret_names=body.secret_names,
+                )
+            )
+        except AlethicError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+    @app.get("/api/integrations/{integration_id}")
+    async def integration_detail(request: Request, integration_id: UUID) -> dict[str, Any]:
+        found = await _guarded(_service(request).get_integration(integration_id))
+        return _found(found, f"Unknown integration: {integration_id}")
+
+    @app.post("/api/integrations/{integration_id}/connect")
+    async def connect_integration(request: Request, integration_id: UUID) -> dict[str, Any]:
+        return await _integration(_service(request).connect_integration(integration_id))
+
+    @app.post("/api/integrations/{integration_id}/enable")
+    async def enable_integration(request: Request, integration_id: UUID) -> dict[str, Any]:
+        return await _integration(_service(request).enable_integration(integration_id))
+
+    @app.post("/api/integrations/{integration_id}/disable")
+    async def disable_integration(request: Request, integration_id: UUID) -> dict[str, Any]:
+        return await _integration(_service(request).disable_integration(integration_id))
+
+    @app.post("/api/integrations/{integration_id}/capabilities")
+    async def classify(
+        request: Request, integration_id: UUID, body: Classification
+    ) -> dict[str, Any]:
+        try:
+            return await _integration(
+                _service(request).classify_capability(integration_id, body.effects)
+            )
+        except AlethicError as error:
+            # An effect this platform does not have is the caller being wrong,
+            # and the message says what the vocabulary actually is.
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+    @app.delete("/api/integrations/{integration_id}")
+    async def remove_integration(request: Request, integration_id: UUID) -> dict[str, Any]:
+        removed = await _integration(_service(request).remove_integration(integration_id))
+        return {"removed": removed}
+
+    @app.post("/api/credentials", status_code=201)
+    async def store_credential(request: Request, body: NewCredential) -> dict[str, Any]:
+        """Keep a credential. The value goes in and never comes back out.
+
+        There is deliberately no route that reads one: a credential is resolved
+        inside the tool that needs it, at the moment of the call, and an
+        endpoint that returned one would be a way to lift every secret on the
+        machine out through a window (§74).
+        """
+        try:
+            return await _guarded(_service(request).store_credential(body.name, body.value))
+        except AlethicError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
     @app.get("/api/spend")
     async def spend(request: Request) -> dict[str, Any]:
         return await _guarded(_service(request).spend())
@@ -360,6 +480,23 @@ async def _ask(
         )
     except AlethicError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+async def _integration(awaitable):
+    """One integration operation, with its two refusals turned into answers.
+
+    An unknown id is a 404 because a window left open across a removal is an
+    ordinary thing; a machine with integrations switched off is a 409, because
+    the request was well formed and the platform is configured not to do it.
+    """
+    from application.interface.service import IntegrationsDisabledError
+
+    try:
+        return await _guarded(awaitable)
+    except IntegrationNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except IntegrationsDisabledError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 async def _guarded(awaitable):

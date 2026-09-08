@@ -62,6 +62,11 @@ class Requirement(StrEnum):
     MEMORY = "MEMORY"
     WORKFLOWS = "WORKFLOWS"
     APPROVALS = "APPROVALS"
+    #: External services can be connected here. Like BROWSER, it says the
+    #: capability exists rather than that any particular service is set up:
+    #: which ones are connected is the user's business, and a scenario that
+    #: needs a specific one says so in its own text.
+    INTEGRATIONS = "INTEGRATIONS"
 
 
 @dataclass(frozen=True, slots=True)

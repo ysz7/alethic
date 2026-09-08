@@ -24,6 +24,10 @@ from typing import Any
 from domain.approvals.models import Approval, ApprovalRequest
 from domain.conversations.models import Conversation
 from domain.employees.definition import EmployeeDefinition
+from domain.integrations.models import Integration
+from domain.integrations.specs import spec_for
+from domain.policies.risk import at_least
+from domain.policies.rules import APPROVAL_THRESHOLD
 from domain.tasks.task import Task, TaskEvent
 from domain.tools.telemetry import ToolCallRecord
 from domain.workforce.protocols import Objective, Plan
@@ -131,11 +135,59 @@ def employee(definition: EmployeeDefinition) -> dict[str, Any]:
         "title": definition.role.title,
         "description": definition.role.description,
         "tools": sorted(definition.allowed_tools),
+        "integrations": sorted(definition.integrations),
+        "capabilities": sorted(str(c) for c in definition.capabilities),
         "limits": {
             "max_steps": definition.limits.max_steps,
             "max_cost_usd": definition.limits.max_cost_usd,
             "max_wall_time_seconds": definition.limits.max_wall_time_seconds,
         },
+    }
+
+
+# --- Integrations -------------------------------------------------------------
+
+
+def integration_capability(item: Integration, tool) -> dict[str, Any]:
+    """One thing an integration offers, with the platform's verdict attached.
+
+    `requires_approval` is computed here and sent, rather than left for an
+    interface to work out from the effect. An interface that decided which
+    actions are dangerous would be a second policy engine - one written in
+    TypeScript, disagreeing silently with the real one, and applied only on the
+    surfaces that remembered to implement it. The rule is the same rule the
+    gate applies, read from the same threshold.
+    """
+    spec = spec_for(item, tool)
+    return {
+        "name": tool.name,
+        "qualified_name": spec.name,
+        "description": tool.description,
+        "effect": spec.effect.value,
+        "risk": spec.risk_level.value,
+        "requires_approval": at_least(spec.risk_level, APPROVAL_THRESHOLD),
+        "classified": tool.name in item.effects,
+    }
+
+
+def integration(item: Integration) -> dict[str, Any]:
+    """One connected service, as a person needs to see it.
+
+    No credential and no part of one. `secrets` is the *names* of what it needs,
+    because a person setting one up has to know which are missing, and a name is
+    not a secret.
+    """
+    return {
+        "id": str(item.id),
+        "name": item.name,
+        "kind": item.kind.value,
+        "status": item.status.value,
+        "enabled": item.enabled,
+        "usable": item.is_usable,
+        "capabilities": sorted(str(c) for c in item.granted_capabilities),
+        "secrets": list(item.secret_names),
+        "tool_count": len(item.discovered),
+        "tools": [integration_capability(item, tool) for tool in item.discovered],
     }
 
 

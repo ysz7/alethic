@@ -8,6 +8,10 @@ from application.orchestrator import FailureKind, classify
 from domain.errors import (
     ConfigurationError,
     EmployeeNotFoundError,
+    IntegrationAuthenticationError,
+    IntegrationProtocolError,
+    IntegrationTimeoutError,
+    IntegrationUnavailableError,
     InvalidRequestError,
     LimitExceededError,
     PermissionDeniedError,
@@ -70,3 +74,14 @@ def test_classification_reads_types_not_messages() -> None:
     # the first time a provider rewrites its copy.
     assert classify(RateLimitError("anything at all")).is_retryable
     assert not classify(InvalidRequestError("rate limit")).is_retryable
+
+
+def test_an_unreachable_integration_is_worth_another_try_and_a_rejected_one_is_not() -> None:
+    # Phase 14. The same question a provider failure answers, and deliberately
+    # the same mechanism: a server that is not answering may answer next time,
+    # while a credential the service rejected will keep being rejected until a
+    # person changes it. Neither is decided by reading the message.
+    assert classify(IntegrationUnavailableError("server is down")).is_retryable
+    assert classify(IntegrationTimeoutError("no answer")).is_retryable
+    assert not classify(IntegrationAuthenticationError("token revoked")).is_retryable
+    assert not classify(IntegrationProtocolError("unreadable frame")).is_retryable

@@ -23,6 +23,14 @@ from infrastructure.persistence.schedule_repository import (
 
 NOON = datetime(2026, 9, 8, 12, 0, tzinfo=UTC)
 
+#: Every schedule these tests fire is stamped with `created_at=NOON`, because an
+#: interval schedule's first due time *is* its `created_at` and the scheduler
+#: here runs on a frozen clock. Left to `datetime.now()`, a schedule created
+#: after noon on the day in the constant is due later than the clock that asks,
+#: and nothing fires - so the suite passed until 12:00 UTC on 2026-09-08 and
+#: could not pass afterwards. A test whose result depends on the wall clock is a
+#: test that reports on the calendar rather than on the code.
+
 
 class RecordingManager:
     """A manager that records what it was asked and answers instantly."""
@@ -103,7 +111,10 @@ async def test_a_due_schedule_becomes_an_objective() -> None:
     schedules, events = InMemoryScheduleRepository(), InMemoryEventLog()
     await schedules.save(
         Schedule.create(
-            "Summarise the notes", name="daily", recurrence=Recurrence(every_seconds=3600)
+            "Summarise the notes",
+            name="daily",
+            recurrence=Recurrence(every_seconds=3600),
+            created_at=NOON,
         )
     )
     manager = RecordingManager()
@@ -132,7 +143,9 @@ async def test_a_paused_schedule_does_not_fire() -> None:
 async def test_a_schedule_still_running_does_not_start_again() -> None:
     """The commonest scheduling failure, and its symptom is slowness, not an error."""
     schedules, events = InMemoryScheduleRepository(), InMemoryEventLog()
-    await schedules.save(Schedule.create("check", recurrence=Recurrence(every_seconds=60)))
+    await schedules.save(
+        Schedule.create("check", recurrence=Recurrence(every_seconds=60), created_at=NOON)
+    )
 
     started = asyncio.Event()
     release = asyncio.Event()
@@ -147,7 +160,11 @@ async def test_a_schedule_still_running_does_not_start_again() -> None:
     loop = scheduler(manager, schedules, events)
 
     first = asyncio.create_task(loop.tick())
-    await started.wait()
+    # Bounded on purpose. If the first pass never reaches the work, this test's
+    # premise is already false, and an unbounded wait would hang the whole suite
+    # instead of failing this one line - which is exactly what it did.
+    async with asyncio.timeout(5):
+        await started.wait()
     await loop.tick()  # a second pass while the first is still in flight
     release.set()
     await first
@@ -184,7 +201,9 @@ async def test_an_event_of_another_kind_is_left_alone() -> None:
 
 async def test_a_failing_objective_does_not_stop_the_loop() -> None:
     schedules, events = InMemoryScheduleRepository(), InMemoryEventLog()
-    await schedules.save(Schedule.create("check", recurrence=Recurrence(every_seconds=3600)))
+    await schedules.save(
+        Schedule.create("check", recurrence=Recurrence(every_seconds=3600), created_at=NOON)
+    )
     manager = RecordingManager(fail=True)
 
     results = await scheduler(manager, schedules, events).tick()
@@ -198,7 +217,9 @@ async def test_a_failing_objective_does_not_stop_the_loop() -> None:
 async def test_what_a_firing_produced_is_itself_an_event() -> None:
     """So one piece of work can follow another without a second kind of edge."""
     schedules, events = InMemoryScheduleRepository(), InMemoryEventLog()
-    await schedules.save(Schedule.create("check", recurrence=Recurrence(every_seconds=3600)))
+    await schedules.save(
+        Schedule.create("check", recurrence=Recurrence(every_seconds=3600), created_at=NOON)
+    )
 
     await scheduler(RecordingManager(), schedules, events).tick()
 

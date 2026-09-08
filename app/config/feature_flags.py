@@ -20,3 +20,8 @@ class FeatureFlags(BaseModel):
     memory: bool = True  # Phase 9
     workflows: bool = True  # Phase 10
     scheduler: bool = False  # Phase 12
+    # Phase 14. On by default and harmless with nothing connected: an
+    # integration is something a person adds, so the switch that matters is
+    # the empty list, not this. It exists to turn off a capability that is
+    # not wanted on a given machine, which is what every flag here is for.
+    integrations: bool = True

@@ -363,3 +363,185 @@ button:disabled {
   color: var(--muted);
   text-align: center;
 }
+
+/* --- Where you are -------------------------------------------------------- */
+
+.places {
+  display: flex;
+  gap: 4px;
+  padding: 8px 16px 0;
+  background: var(--ground);
+}
+
+.places button {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.places button.here {
+  color: var(--ink);
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+/* --- Settings ------------------------------------------------------------- */
+
+.settings {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.settings h2 {
+  font-size: 1.1rem;
+  margin: 0 0 16px;
+}
+
+.integration {
+  background: var(--raised);
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px var(--line);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.integration header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.integration h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.integration .state {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* The status word carries the only colour here, because it is the only thing
+   on the card a person scans for. */
+.integration .state.good { color: #2f7d4f; }
+.integration .state.bad { color: var(--warn); }
+.integration .state.off { color: var(--muted); opacity: 0.7; }
+
+.integration .meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 4px 0 0;
+}
+
+.integration footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.integration footer button,
+.add-integration button {
+  font: inherit;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--raised);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.integration footer button.danger { color: var(--warn); }
+
+.capabilities {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  font-size: 0.9rem;
+}
+
+.capabilities li {
+  display: grid;
+  grid-template-columns: 16px 1fr auto auto auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 0;
+}
+
+.capabilities .mark { color: var(--muted); }
+.capabilities .mark.asks { color: var(--warn); font-weight: 600; }
+.capabilities .effect,
+.capabilities .asks-label,
+.capabilities .unclassified {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.capabilities .asks-label { color: var(--warn); }
+.capabilities .what {
+  grid-column: 2 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.add-integration {
+  background: var(--raised);
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px var(--line);
+  padding: 16px;
+  margin-top: 20px;
+  display: grid;
+  gap: 10px;
+}
+
+.add-integration h3 { margin: 0; font-size: 1rem; }
+
+.add-integration label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.add-integration input[type="text"],
+.add-integration input:not([type]),
+.add-integration input[type="password"] {
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--ground);
+  color: var(--ink);
+}
+
+.capabilities-choice {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.capabilities-choice label {
+  display: inline-flex;
+  gap: 4px;
+  margin-right: 12px;
+  align-items: center;
+}
+
+.confirm {
+  font-size: 0.85rem;
+  display: grid;
+  gap: 8px;
+}
+
+.confirm p { margin: 0; color: var(--muted); }

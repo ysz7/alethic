@@ -53,6 +53,15 @@ class EmployeeNotFoundError(NotFoundError):
         super().__init__(f"Unknown employee: {name}")
 
 
+class IntegrationNotFoundError(NotFoundError):
+    """Asked about an integration that is not connected on this machine.
+
+    Here rather than beside the lifecycle that raises it, next to the other
+    three not-founds: a transport has to be able to turn it into a 404 without
+    reaching past the interface boundary for the class.
+    """
+
+
 class ToolNotFoundError(NotFoundError):
     def __init__(self, name: str) -> None:
         super().__init__(f"Unknown tool: {name}")
@@ -71,6 +80,14 @@ class SecretNotFoundError(ConfigurationError):
 
 
 # --- Permissions --------------------------------------------------------------
+
+
+class DuplicateIntegrationError(DomainError):
+    """Two integrations of one name would make their tools ambiguous.
+
+    `gmail.send_message` has to name exactly one action, and an employee
+    declaration granting `gmail` has to mean exactly one service.
+    """
 
 
 class PermissionDeniedError(DomainError):
@@ -168,3 +185,46 @@ class InvalidRequestError(ProviderError):
 
 class ProviderUnavailableError(ProviderError):
     transient = True
+
+
+# --- Integrations -------------------------------------------------------------
+
+
+class IntegrationError(AlethicError):
+    """An external integration failed.
+
+    Mirrors `ProviderError` rather than inventing a second vocabulary: what the
+    orchestrator needs to know is whether trying again is worth anything, and
+    that is a property of the failure's *type*, never of its message
+    (`application.orchestrator`). A separate retry engine for integrations
+    would be a second answer to a question the platform already answers.
+    """
+
+    transient: bool = False
+
+
+class IntegrationUnavailableError(IntegrationError):
+    """The server is not answering. It may be on the next call."""
+
+    transient = True
+
+
+class IntegrationTimeoutError(IntegrationError):
+    transient = True
+
+
+class IntegrationProtocolError(IntegrationError):
+    """The server answered with something this platform cannot read.
+
+    Not transient: a malformed frame or an unreadable tool schema is what that
+    server does, and the same call will produce the same thing.
+    """
+
+
+class IntegrationAuthenticationError(IntegrationError):
+    """The credential was rejected or is gone.
+
+    Not transient, and deliberately not a `ConfigurationError`: what has to
+    change is a stored secret rather than a setting, and the difference decides
+    whether the user is sent to their settings file or to the integration.
+    """

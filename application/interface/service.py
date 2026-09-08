@@ -31,6 +31,7 @@ from uuid import UUID
 
 import structlog
 
+from application.integrations.service import IntegrationService
 from application.interface import views
 from application.interface.activity import Activity, ActivityEvent
 from application.interface.contracts import RequestSource, UserRequest
@@ -41,11 +42,15 @@ from domain.approvals.protocols import (
     ApprovalService,
     ApprovalWaiter,
 )
+from domain.capabilities.models import Capability
 from domain.conversations.models import Conversation
 from domain.conversations.repository import ConversationRepository
 from domain.employees.protocols import EmployeeRegistry
-from domain.errors import AlethicError
+from domain.errors import AlethicError, IntegrationNotFoundError
+from domain.integrations.models import IntegrationKind
 from domain.llm.telemetry import LLMCallLog
+from domain.policies.risk import Effect
+from domain.secrets.protocols import CredentialStore
 from domain.tasks.repository import TaskRepository
 from domain.tools.telemetry import ToolCallLog
 from domain.workforce.repository import ObjectiveRepository, PlanRepository
@@ -61,6 +66,10 @@ DEFAULT_LIMIT = 50
 
 class ApprovalsDisabledError(AlethicError):
     """Asked to decide something on a configuration with no approvals at all."""
+
+
+class IntegrationsDisabledError(AlethicError):
+    """Asked about connected services on a machine where they are switched off."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +93,14 @@ class ServiceDependencies:
     tool_calls: ToolCallLog
     llm_calls: LLMCallLog
     approval_service: ApprovalService | None = None
+    #: None where integrations are switched off. Every method below then
+    #: says so rather than pretending there are none: an interface showing
+    #: an empty list would invite the user to add one and then fail.
+    integrations: IntegrationService | None = None
+    #: Where a credential typed into an interface is kept. Separate from
+    #: the resolver every tool holds, so that reading one does not imply
+    #: being able to write one.
+    credentials: CredentialStore | None = None
     history_limit: int = DEFAULT_LIMIT
 
 
@@ -283,6 +300,110 @@ class AlethicService:
             await service.resolve(approval_id, state, comment=comment)
         return {"id": str(approval_id), "state": state.value, "live": answered}
 
+
+    # --- Integrations ---------------------------------------------------------
+
+    def _integrations(self) -> IntegrationService:
+        if self._d.integrations is None:
+            raise IntegrationsDisabledError(
+                "Integrations are switched off in this configuration."
+            )
+        return self._d.integrations
+
+    @property
+    def integrations_available(self) -> bool:
+        """Whether this machine can connect anything at all.
+
+        Asked by an interface deciding whether to show the section, and it is
+        the only integration question that has an answer when the feature is
+        off - everything else raises, because "there are none" and "you cannot
+        have any" are different things to tell a person.
+        """
+        return self._d.integrations is not None
+
+    async def list_integrations(self) -> list[dict[str, Any]]:
+        return [views.integration(item) for item in await self._integrations().list()]
+
+    async def get_integration(self, integration_id: UUID) -> dict[str, Any] | None:
+        try:
+            return views.integration(await self._integrations().get(integration_id))
+        except IntegrationNotFoundError:
+            # Unknown is None, as everywhere else on this object: a stale link
+            # in a window somebody left open is a normal thing to hand in.
+            return None
+
+    async def add_integration(
+        self,
+        name: str,
+        configuration: dict[str, Any],
+        *,
+        kind: str = IntegrationKind.MCP.value,
+        capabilities: tuple[str, ...] = (),
+        secret_names: tuple[str, ...] = (),
+    ) -> dict[str, Any]:
+        """Write down a service. Starting it is `connect_integration`.
+
+        Strings come in and domain values go on: an interface names a capability
+        the way a person typed it, and one this platform does not have is an
+        error the caller can read rather than a silently ignored word.
+        """
+        item = await self._integrations().add(
+            name,
+            configuration,
+            kind=IntegrationKind(kind),
+            capabilities=frozenset(_capability(value) for value in capabilities),
+            secret_names=tuple(secret_names),
+        )
+        return views.integration(item)
+
+    async def connect_integration(self, integration_id: UUID) -> dict[str, Any]:
+        """Start it and ask what it offers.
+
+        A failure comes back as a status on the integration rather than as an
+        exception: "that command did not start" is information the person needs
+        next to the thing that did not start, not a stack trace.
+        """
+        return views.integration(await self._integrations().connect(integration_id))
+
+    async def enable_integration(self, integration_id: UUID) -> dict[str, Any]:
+        return views.integration(await self._integrations().enable(integration_id))
+
+    async def disable_integration(self, integration_id: UUID) -> dict[str, Any]:
+        return views.integration(await self._integrations().disable(integration_id))
+
+    async def remove_integration(self, integration_id: UUID) -> bool:
+        return await self._integrations().remove(integration_id)
+
+    async def classify_capability(
+        self, integration_id: UUID, effects: dict[str, str]
+    ) -> dict[str, Any]:
+        """Say what an integration's tools do to the world.
+
+        This is where a person's judgement enters the trust boundary, and it is
+        the only way in: the server's own claims never reach the stored map
+        (ADR 0015). What follows from the classification - the risk, whether it
+        asks - is not decided here and cannot be set from here.
+        """
+        classified = await self._integrations().classify(
+            integration_id, {name: _effect(value) for name, value in effects.items()}
+        )
+        return views.integration(classified)
+
+    async def store_credential(self, name: str, value: str) -> dict[str, Any]:
+        """Keep a credential this machine will need at the moment of a call.
+
+        The value goes in and never comes back out of this boundary: what is
+        returned is the name, so an interface can show that it is set without
+        ever holding it.
+        """
+        store = self._d.credentials
+        if store is None:
+            raise IntegrationsDisabledError(
+                "There is nowhere to keep a credential in this configuration."
+            )
+        await store.store(name, value)
+        return {"name": name, "stored": True}
+
     # --- The workforce --------------------------------------------------------
 
     def list_employees(self) -> list[dict[str, Any]]:
@@ -323,3 +444,38 @@ class AlethicService:
             "workspace": str(DEFAULT_WORKSPACE_ID),
             "sources": [source.value for source in RequestSource],
         }
+
+
+def _capability(value: str) -> Capability:
+    """A capability name from an interface, or a readable refusal.
+
+    The vocabulary is closed on purpose (ADR 0015): a routing term any
+    integration could invent is a term no employee declaration can be checked
+    against. So a name outside it is an error with the list in it, rather than
+    a word that is quietly dropped and a search that never matches.
+    """
+    try:
+        return Capability(value)
+    except ValueError as error:
+        known = ", ".join(sorted(str(c) for c in Capability))
+        raise AlethicError(
+            f"'{value}' is not a capability this platform knows. Known: {known}."
+        ) from error
+
+
+def _effect(value: str) -> Effect:
+    """An effect name from an interface, or a readable refusal.
+
+    Deliberately the only vocabulary this route accepts. A risk level or an
+    "approval required" flag sent from a window would be an interface setting
+    its own policy; the effect is the one thing a person actually knows - what
+    the tool does to the world - and the risk follows from it (ADR 0010).
+    """
+    try:
+        return Effect(value)
+    except ValueError as error:
+        known = ", ".join(effect.value for effect in Effect)
+        raise AlethicError(
+            f"'{value}' is not an effect. A capability does one of: {known}. "
+            "Risk is not set here; it follows from the effect."
+        ) from error

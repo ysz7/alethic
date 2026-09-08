@@ -24,6 +24,7 @@ from application.employee_runtime.executor import Executor
 from application.employee_runtime.planner import Planner
 from application.employee_runtime.runtime import EmployeeRuntime, RuntimeDependencies
 from application.employee_runtime.verifier import Verifier
+from application.integrations.service import IntegrationService
 from application.interface.activity import Activity
 from application.interface.runs import Runs
 from application.interface.service import (
@@ -41,7 +42,9 @@ from application.validation.harness import ValidationHarness
 from application.workflows.engine import WorkflowEngine
 from domain.approvals.protocols import ApprovalWaiter
 from domain.employees.definition import EmployeeDefinition
+from domain.errors import AlethicError
 from infrastructure.container import Container
+from infrastructure.mcp.connector import cached_connector, mcp_connector
 
 
 def build_container(settings: Settings | None = None, *, in_memory: bool = False) -> Container:
@@ -56,8 +59,68 @@ def build_container(settings: Settings | None = None, *, in_memory: bool = False
     container.use_screen_reader(
         lambda: LLMScreenReader(container.llm_for(*LLMScreenReader.routing()))
     )
+    container.use_integrations(lambda: build_integrations(container))
     return container
 
+
+def build_integrations(container: Container) -> IntegrationService:
+    """Assemble the lifecycle of connected services.
+
+    Here rather than in the infrastructure container for the same reason the
+    screen reader is: the service is an application component and the connector
+    is an adapter, and this is the one place allowed to see both. The service
+    itself never learns what MCP is - it is handed a way to connect.
+    """
+    return IntegrationService(
+        container.integration_repository,
+        container.tool_registry,
+        mcp_connector(timeout_seconds=container.settings.integration_timeout_seconds),
+        # Start-up reads the record; it does not launch every configured server
+        # in order to re-learn what is already written down.
+        restorer=cached_connector(
+            timeout_seconds=container.settings.integration_timeout_seconds
+        ),
+        secrets=container.secret_resolver,
+        on_change=container.refresh_grants,
+    )
+
+
+async def load_grants(container: Container) -> None:
+    """Let the employee registry see what is connected, and nothing more.
+
+    What a *listing* needs. `prepare` gets the same thing as a side effect of
+    restoring, but printing the declarations must not start a server or write
+    to the store - and a reader that could do either would be a command with a
+    side effect nobody expects from the word "list".
+    """
+    try:
+        container.refresh_grants(await container.integration_repository.list())
+    except AlethicError as error:
+        container.logger.warning("integrations.not_read", error=str(error))
+
+
+async def prepare(container: Container) -> None:
+    """Everything that has to be true before this process does any work.
+
+    Two steps, and the order is the point. The integrations are restored first,
+    because syncing the employees checks their declarations against what this
+    machine offers - and a grant to a service that has not been restored yet
+    reads, correctly but uselessly, as a grant to a service nobody connected.
+
+    Restoring is guarded the way remembering is: a machine whose integration
+    store cannot be read should run the work it was asked for without them,
+    with a line in the log saying so. Losing a capability is worse than not
+    having it, and losing the whole run over it is worse again.
+    """
+    integrations = getattr(container, "integrations", None)
+    if integrations is not None:
+        try:
+            restored = await integrations.restore()
+            if restored:
+                container.logger.info("integrations.restored", count=restored)
+        except AlethicError as error:
+            container.logger.warning("integrations.not_restored", error=str(error))
+    await container.sync_employees()
 
 def build_memory(
     container: Container,
@@ -213,6 +276,12 @@ def build_service(
             tool_calls=container.tool_call_log,
             llm_calls=container.llm_call_log,
             approval_service=container.approval_service,
+            integrations=container.integrations,
+            credentials=(
+                container.credential_store
+                if container.settings.integrations_enabled
+                else None
+            ),
             history_limit=history_limit,
         )
     )
