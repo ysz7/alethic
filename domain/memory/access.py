@@ -32,11 +32,14 @@ def visible(item: MemoryItem, query: MemoryQuery) -> bool:
     # A plan-scoped item belongs to the plan it was written under. Reading
     # another plan's working context is how one objective's mistakes end up in
     # the next one's prompt.
-    if (
-        item.scope is MemoryScope.PLAN
-        and query.plan_id is not None
-        and item.plan_id != query.plan_id
-    ):
+    #
+    # A query that names no plan matches no plan, rather than all of them. The
+    # weaker reading - skip the check when there is nothing to compare against -
+    # is the one that was here, and it made a standalone `run-task`, whose task
+    # has no plan, the one caller that could read every plan's memory at once.
+    # A scope is an access boundary (§86), and a boundary with a hole for the
+    # callers who happen not to mention it is not one.
+    if item.scope is MemoryScope.PLAN and item.plan_id != query.plan_id:
         return False
     if query.kinds and item.kind not in query.kinds:
         return False

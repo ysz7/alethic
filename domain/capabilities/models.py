@@ -32,6 +32,18 @@ class CapabilityRequirement:
     required: frozenset[Capability] = field(default_factory=frozenset)
     preferred: frozenset[Capability] = field(default_factory=frozenset)
     min_context_tokens: int | None = None
+    #: The floor under how good the model has to be, on the catalog's own
+    #: ranking. A capability is a yes or a no, and some work needs neither a
+    #: new capability nor a hint but a better model: judging whether an
+    #: objective is done is the case this came from, where the cheapest entry
+    #: in the catalog answered by copying the example out of its own prompt.
+    #:
+    #: It is a requirement rather than a hint on purpose. Hints only rank what
+    #: survives the filter, and the configured default beats them - so a
+    #: default pointing at the cheapest entry would keep winning the work it
+    #: had just been shown to be unfit for. Stated here, it filters first, and
+    #: the router says in its reason that the default could not do the work.
+    min_quality: float = 0.0
 
     def is_satisfied_by(self, offered: frozenset[Capability]) -> bool:
         return self.required <= offered

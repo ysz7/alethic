@@ -13,11 +13,28 @@ Two of those are in brackets, and both are the point of the phase.
 (§7.5). Decomposition is a means; an objective broken into one task whose whole
 content is the question already asked has cost an employee run to restate it.
 
+That route is checked before it is taken, and the first full validation run is
+why. "Read the notes in `notes/` and leave me `notes/summary.md`" was read as
+needing no work and closed with one sentence: no task, no tool, no file, and a
+report of success. So a direct answer now faces the same verifier, against the
+same criteria written before the reading, as delegated work does - and a claim
+of "no work needed" that its own answer cannot satisfy becomes work, with what
+the check found missing handed to the planner. Deciding what a request takes is
+a judgement like any other, and the platform does not take its own word for a
+judgement anywhere else.
+
 **Replanning once.** A verdict against the objective's own acceptance criteria
 can send the work back through planning, told what was missing - once. A second
 rejection usually means the criteria cannot be met by this workforce, and a
 third plan spends another budget finding that out again. What is left is
 escalated to the user, with what was tried (§7.11).
+
+**Reconciling.** Several people on one objective can report two things that
+cannot both be true. Blending them into one confident paragraph is the worst
+answer available, so the reports are checked against each other before the
+answer is written: Alethic settles what the evidence settles and escalates the
+rest, with both sides named (§87). Nothing runs for a single-task plan - one
+report cannot disagree with itself.
 
 **Remembering.** What Alethic reads out of a request - how the user wants things
 done here - outlives the request, and what a workspace has already learned is
@@ -43,6 +60,7 @@ import structlog
 
 from application.alethic.intent import IntentReader
 from application.alethic.planner import ObjectivePlanner
+from application.alethic.reconciliation import Reconciler, Reconciliation
 from application.alethic.supervisor import Recovery, Supervision, Supervisor
 from application.alethic.synthesis import Synthesizer, describe
 from application.alethic.verification import ObjectiveVerifier
@@ -80,6 +98,7 @@ class AlethicManager:
         verifier: ObjectiveVerifier,
         synthesizer: Synthesizer,
         registry: EmployeeRegistry,
+        reconciler: Reconciler | None = None,
         objectives: ObjectiveRepository,
         plans: PlanRepository,
         progress: ProgressSink | None = None,
@@ -92,6 +111,9 @@ class AlethicManager:
         self._verifier = verifier
         self._synthesizer = synthesizer
         self._registry = registry
+        # Optional in the same way memory is: a machine without one runs the
+        # Phase 7 loop, which is what a single-task plan does anyway.
+        self._reconciler = reconciler
         self._objectives = objectives
         self._plans = plans
         self._progress = progress or NullProgress()
@@ -144,11 +166,23 @@ class AlethicManager:
                 workspace_id=objective.workspace_id,
             )
 
+        rejected: tuple[str, ...] = ()
         if intent.is_answerable_directly:
-            return await self._answer_directly(objective, intent)
+            verdict = await self._verifier.verify(objective, intent.answer)
+            if verdict.passed:
+                return await self._answer_directly(objective, intent)
+            # It said this needed no work and then could not meet the standard
+            # it had just written. The standard is the more specific claim, and
+            # the one a plan can act on.
+            rejected = verdict.missing or (verdict.reason,)
+            log.info(
+                "alethic.direct_answer_rejected",
+                objective_id=str(objective.id),
+                missing=list(rejected),
+            )
 
         try:
-            return await self._work(objective, intent, remembered)
+            return await self._work(objective, intent, remembered, feedback=rejected)
         except DelegationError as error:
             # Nothing to delegate to is the user's to fix, not something to
             # replan around: every plan would end in the same place.
@@ -180,13 +214,20 @@ class AlethicManager:
         )
 
     async def _work(
-        self, objective: Objective, intent: Intent, remembered: tuple[str, ...] = ()
+        self,
+        objective: Objective,
+        intent: Intent,
+        remembered: tuple[str, ...] = (),
+        *,
+        feedback: tuple[str, ...] = (),
     ) -> ObjectiveResult:
+        """`feedback` is non-empty when a direct answer was tried and rejected:
+        the first plan is then told what the sentence failed to cover, rather
+        than starting from nothing and possibly missing the same thing."""
         workforce = self._registry.list(objective.workspace_id)
         objective = objective.to(ObjectiveStatus.PLANNING)
         await self._objectives.save(objective)
 
-        feedback: tuple[str, ...] = ()
         supervision: Supervision | None = None
         plan: Plan | None = None
         cost = 0.0
@@ -228,6 +269,17 @@ class AlethicManager:
             )
             cost += supervision.cost_usd
 
+            # Before judging the work against the objective: two reports that
+            # contradict each other are a different failure from work that fell
+            # short, and a verdict on the pair of them is a verdict on a
+            # contradiction. §87 comes first.
+            agreement = await self._reconcile(objective, supervision)
+            if agreement.escalate:
+                await self._plans.save(plan.to(PlanStatus.FAILED))
+                return await self._escalate(
+                    objective, supervision, agreement.conflicts, cost=cost
+                )
+
             verdict = await self._verifier.verify(
                 objective, describe(supervision.outcomes)
             )
@@ -236,7 +288,9 @@ class AlethicManager:
             )
 
             if verdict.passed:
-                return await self._deliver(objective, supervision, cost=cost)
+                return await self._deliver(
+                    objective, supervision, cost=cost, resolution=agreement.resolution
+                )
 
             feedback = verdict.missing or (verdict.reason,)
             log.info(
@@ -261,9 +315,16 @@ class AlethicManager:
     # --- Endings --------------------------------------------------------------
 
     async def _deliver(
-        self, objective: Objective, supervision: Supervision, *, cost: float
+        self,
+        objective: Objective,
+        supervision: Supervision,
+        *,
+        cost: float,
+        resolution: str = "",
     ) -> ObjectiveResult:
-        summary = await self._synthesizer.synthesize(objective, supervision.outcomes)
+        summary = await self._synthesizer.synthesize(
+            objective, supervision.outcomes, resolution=resolution
+        )
         return await self._finish(
             objective,
             ObjectiveStatus.DONE,
@@ -341,6 +402,24 @@ class AlethicManager:
         return result
 
     # --- Internals ------------------------------------------------------------
+
+    async def _reconcile(
+        self, objective: Objective, supervision: Supervision
+    ) -> Reconciliation:
+        """Can everything the team reported be true at once?
+
+        Only the accepted results are compared. A task that failed, or that the
+        manager refused, is not a second opinion - and asking whether a result
+        contradicts a failure is asking a question with no answer.
+        """
+        if self._reconciler is None:
+            return Reconciliation()
+        reports = tuple(
+            outcome.task.result.summary
+            for outcome in supervision.outcomes
+            if outcome.succeeded and outcome.task.result
+        )
+        return await self._reconciler.reconcile(objective, reports)
 
     async def _remembered(self, objective: Objective) -> tuple[str, ...]:
         """What this workspace knows that bears on this request.

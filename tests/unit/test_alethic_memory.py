@@ -92,7 +92,7 @@ async def test_a_question_answered_directly_is_still_on_the_record() -> None:
     """No task ran, so nothing else would have kept it."""
     memory = InMemoryMemory()
     manager, execution, _, _ = build(
-        script=[intent(needs_work=False, answer="It is 41.")],
+        script=[intent(needs_work=False, answer="It is 41."), verdict(True)],
         memory=workspace_memory(memory),
     )
 

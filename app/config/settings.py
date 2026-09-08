@@ -109,6 +109,12 @@ class Settings(BaseSettings):
     #: How many past tasks the history list loads.
     ui_history_limit: int = 50
 
+    # --- Work that starts on its own -----------------------------------------
+    #: How often `alethic serve` looks for a schedule that is due. Well under
+    #: the shortest interval a schedule may declare, and far enough above zero
+    #: that an idle machine is idle.
+    scheduler_tick_seconds: float = 30.0
+
     # --- Runtime -------------------------------------------------------------
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_format: Literal["json", "console"] = "json"
@@ -150,6 +156,17 @@ class Settings(BaseSettings):
     @property
     def workflows_enabled(self) -> bool:
         return self.flags.workflows
+
+    @property
+    def scheduler_enabled(self) -> bool:
+        """Off unless asked for, and that is the correct default (§12.9).
+
+        Everything else here starts because somebody typed something. This
+        starts on its own, with nobody at the keyboard to answer the approval
+        gate - so a machine that has not opted in never runs work nobody asked
+        for on the day it was installed.
+        """
+        return self.flags.scheduler
 
     @property
     def computer_use_enabled(self) -> bool:

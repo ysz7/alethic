@@ -172,7 +172,10 @@ def test_a_goal_stated_in_one_sentence_is_carried_to_a_result(tmp_path: Path) ->
 def test_a_question_needing_no_work_is_answered_without_a_plan(tmp_path: Path) -> None:
     settings = settings_for(tmp_path)
     create_schema(settings)
-    llm = script(intent(needs_work=False, answer="It keeps the whole database in one file."))
+    llm = script(
+        intent(needs_work=False, answer="It keeps the whole database in one file."),
+        verdict(True),
+    )
 
     with client_for(settings, llm) as client:
         objective_id = client.post(

@@ -130,4 +130,5 @@ class ModelCatalog:
                 requirement.min_context_tokens is None
                 or entry.context_tokens >= requirement.min_context_tokens
             )
+            and entry.quality >= requirement.min_quality
         ]

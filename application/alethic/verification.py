@@ -31,7 +31,7 @@ import structlog
 
 from application.prompts import render
 from domain.capabilities.models import CapabilityRequirement
-from domain.employees.verification import Verdict
+from domain.employees.verification import MIN_JUDGEMENT_QUALITY, Verdict
 from domain.llm.json_output import extract_object
 from domain.llm.models import LLMRequest, Message, RoutingHints, TaskKind
 from domain.llm.protocols import LLM
@@ -109,9 +109,11 @@ class ObjectiveVerifier:
 
     @staticmethod
     def routing() -> tuple[TaskKind, CapabilityRequirement, RoutingHints]:
+        """A floor, not a hint: this is the last thing standing between a bad
+        run and a user being told it succeeded, and hints do not filter."""
         return (
             TaskKind.VERIFICATION,
-            CapabilityRequirement(),
+            CapabilityRequirement(min_quality=MIN_JUDGEMENT_QUALITY),
             RoutingHints(quality=0.7, cost_sensitivity=0.5),
         )
 

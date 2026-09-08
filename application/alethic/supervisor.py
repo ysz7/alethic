@@ -21,21 +21,45 @@ follows one layer down.
 
 Dependencies are honoured, and a task whose dependency failed is never started:
 a summary written from a source that was never fetched is worse than no summary.
+
+Phase 12 adds three things to that, and none of them changes the plan.
+
+**Independent tasks run at once.** `Plan.ready` has always returned every task
+whose dependencies are met; the difference is that they are now started
+together, up to a limit, instead of one after another. Everything in one wave is
+independent by construction - if two tasks needed ordering, the planner would
+have written the edge - so this is the executor catching up with what the plan
+already said. A limit rather than no limit: each task is a whole employee run
+with its own model calls and its own tools, and a plan of six firing at once is
+six browsers.
+
+**A failure ends the plan, not the wave.** The tasks already in flight beside a
+failing one are allowed to finish and their results are kept. They were never
+downstream of it - that is what independent means - and throwing away work that
+succeeded because something unrelated did not is a cost with nothing behind it.
+
+**A result is accepted on the evidence.** `domain.workforce.acceptance` reads
+what the task actually did off its own record. An employee that reported success
+having had every tool call refused has not done the work, and the manager is the
+one who has to say so: the employee's own verifier is the same run asked twice.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+import asyncio
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from uuid import UUID
 
 import structlog
 
 from application.alethic.delegation import CapabilityDelegator
+from application.workforce.coordinator import WorkforceCoordinator
 from domain.capabilities.models import CapabilityRequirement
 from domain.policies.models import ActorKind
 from domain.tasks.progress import NullProgress, ProgressEvent, ProgressKind, ProgressSink
 from domain.tasks.task import Task, TaskStatus
+from domain.workforce.acceptance import Acceptance, accept
 from domain.workforce.assignment import SharedContext, TaskAssignment
 from domain.workforce.protocols import Plan, PlanProgress, TaskExecution
 
@@ -45,6 +69,12 @@ log = structlog.get_logger(__name__)
 #: Two, because the runtime has already retried once inside the task: a third
 #: outer attempt is the fifth model conversation about the same instruction.
 MAX_TASK_ATTEMPTS = 2
+
+#: How many tasks of one plan run at the same time. Each is a whole employee
+#: run - its own model calls, its own budget, possibly its own browser - so this
+#: is a machine's limit, not a plan's, and a plan wide enough to exceed it runs
+#: in two waves rather than failing.
+MAX_PARALLEL_TASKS = 3
 
 
 class Recovery(StrEnum):
@@ -56,15 +86,20 @@ class Recovery(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class TaskOutcome:
-    """One finished task, and who did it."""
+    """One finished task, who did it, and whether the manager takes it."""
 
     task: Task
     employee: str
     reason: str = ""
+    #: What the manager made of the evidence. A task can end COMPLETED and
+    #: still not be a result: §88 is the whole reason this field is separate
+    #: from `task.status`. The row keeps saying what the runtime concluded -
+    #: rewriting it would lose the disagreement, which is the interesting part.
+    acceptance: Acceptance = field(default_factory=Acceptance.taken)
 
     @property
     def succeeded(self) -> bool:
-        return self.task.status is TaskStatus.COMPLETED
+        return self.task.status is TaskStatus.COMPLETED and self.acceptance.accepted
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +161,19 @@ def classify(task: Task) -> Recovery:
     return Recovery.REPLAN
 
 
+def recovery_for(outcome: TaskOutcome) -> Recovery:
+    """What an unsuccessful outcome calls for, failed or merely not accepted.
+
+    A task the manager refused ended COMPLETED, so `classify` would read it as
+    a success and answer a question nobody asked. The refusal already carries
+    the distinction that matters: work blocked by permission may reach somebody
+    else, work that simply did not happen needs a different plan.
+    """
+    if outcome.task.status is TaskStatus.COMPLETED:
+        return Recovery.REASSIGN if outcome.acceptance.refused else Recovery.REPLAN
+    return classify(outcome.task)
+
+
 #: Failures where the same attempt is worth making again. Named by type, because
 #: a message is not a contract and a retry decision made from one is a guess.
 _TRANSIENT_ERRORS = frozenset(
@@ -153,39 +201,66 @@ class Supervisor:
         delegator: CapabilityDelegator,
         progress: ProgressSink | None = None,
         max_attempts: int = MAX_TASK_ATTEMPTS,
+        max_parallel: int = MAX_PARALLEL_TASKS,
     ) -> None:
         self._execution = execution
         self._delegator = delegator
         self._progress = progress or NullProgress()
         self._max_attempts = max_attempts
+        self._max_parallel = max(1, max_parallel)
 
     async def run(
         self, plan: Plan, *, context: SharedContext | None = None, objective_id: UUID | None = None
     ) -> Supervision:
-        """Run every task whose dependencies are met, until none are left."""
+        """Run every task whose dependencies are met, until none are left.
+
+        One wave at a time, and everything in a wave at once: `Plan.ready`
+        returns tasks with no path between them, so running them together is
+        what the plan already said and running them in file order was only ever
+        an executor that had not caught up.
+        """
         done: set[UUID] = set()
         outcomes: list[TaskOutcome] = []
         shortfall: list[str] = []
         recovery: Recovery | None = None
-        carried = context or SharedContext()
+        # Every result that moves between employees moves through here, and
+        # nothing else in this file builds a `SharedContext` for a task. That is
+        # §86 as a structure rather than a rule people remember.
+        coordinator = WorkforceCoordinator(plan, baseline=context or SharedContext())
+        limit = asyncio.Semaphore(self._max_parallel)
 
         while True:
             ready = plan.ready(done)
             if not ready:
                 break
-            for planned in ready:
-                outcome = await self._carry(
-                    planned, carried, objective_id, plan.requirements.get(planned.id)
-                )
+
+            async def carry(planned: Task) -> TaskOutcome:
+                async with limit:
+                    return await self._carry(
+                        planned,
+                        coordinator.context_for(planned),
+                        objective_id,
+                        plan.requirements.get(planned.id),
+                    )
+
+            wave = await asyncio.gather(*(carry(planned) for planned in ready))
+
+            # Read in plan order, whatever order they finished in: a run that
+            # reports its tasks in whichever one won a race is a run nobody can
+            # compare with the last one.
+            for planned, outcome in zip(ready, wave, strict=True):
                 outcomes.append(outcome)
                 if outcome.succeeded:
                     done.add(planned.id)
-                    carried = _carry_forward(carried, outcome)
+                    coordinator.record(planned.id, outcome.task)
                     continue
 
                 # A failed task stops the plan: whatever depended on it would be
-                # working from a result that does not exist.
-                recovery = classify(outcome.task)
+                # working from a result that does not exist. Its neighbours in
+                # this wave are already finished and their results stand - they
+                # never depended on it.
+                if recovery is None:
+                    recovery = recovery_for(outcome)
                 shortfall.append(
                     f"{planned.goal} - {outcome.reason or 'did not complete'}"
                 )
@@ -196,7 +271,6 @@ class Supervisor:
                     status=outcome.task.status.value,
                     recovery=recovery.value,
                 )
-                break
             if recovery is not None:
                 break
 
@@ -230,7 +304,7 @@ class Supervisor:
         outcome = await self._attempt(planned, context, objective_id, avoid, requirement)
 
         while not outcome.succeeded and attempt < self._max_attempts:
-            recovery = classify(outcome.task)
+            recovery = recovery_for(outcome)
             if recovery is Recovery.REASSIGN:
                 # Do not hand it back to the employee that could not reach it.
                 avoid.add(outcome.employee)
@@ -286,7 +360,24 @@ class Supervisor:
         finished = await self._execution.start(
             replace(planned, assigned_employee_id=chosen.id), assignment
         )
-        return TaskOutcome(task=finished, employee=chosen.name, reason=_why(finished))
+        # §88: the manager checks before accepting. Read off what the run did,
+        # not asked of a second model - a claim of success with nothing behind
+        # it is a fact about the record, and facts are cheaper than opinions.
+        taken = accept(finished)
+        if not taken.accepted:
+            log.info(
+                "alethic.result_not_accepted",
+                task_id=str(finished.id),
+                employee=chosen.name,
+                refused=taken.refused,
+                reason=taken.reason,
+            )
+        return TaskOutcome(
+            task=finished,
+            employee=chosen.name,
+            reason=taken.reason or _why(finished),
+            acceptance=taken,
+        )
 
     async def _announce(
         self,
@@ -337,22 +428,3 @@ def _why(task: Task) -> str:
     if task.error:
         return f"{task.error.kind}: {task.error.message}"
     return f"ended {task.status.value.lower()}"
-
-
-def _carry_forward(context: SharedContext, outcome: TaskOutcome) -> SharedContext:
-    """What a finished task hands to the ones that depend on it.
-
-    A summary and the files it named, not the transcript. The next employee is
-    being told what is now true, which is a decision the manager makes - not
-    handed a log to read.
-    """
-    summary = outcome.task.result.summary.strip() if outcome.task.result else ""
-    if not summary:
-        return context
-    artifacts = outcome.task.result.artifacts if outcome.task.result else ()
-    return SharedContext(
-        facts=(*context.facts, f"{outcome.task.goal} -> {summary}"),
-        constraints=context.constraints,
-        artifacts=(*context.artifacts, *artifacts),
-        data=context.data,
-    )

@@ -234,7 +234,7 @@ async def test_a_capability_nobody_declares_falls_back_to_the_whole_workforce(
 
 
 def test_the_shipped_employees_are_each_findable_by_what_they_do() -> None:
-    """The four that ship, found by capability rather than by name."""
+    """The five that ship, found by capability rather than by name."""
     root = Path(__file__).resolve().parents[2] / "employees"
     registry = YamlEmployeeRegistry(root)
 
@@ -254,4 +254,5 @@ def test_the_shipped_employees_are_each_findable_by_what_they_do() -> None:
         "operator",
         "organizer",
         "researcher",
+        "writer",
     }

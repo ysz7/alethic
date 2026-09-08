@@ -195,6 +195,18 @@ class ObjectiveResult:
 class WorkforceManager(Protocol):
     """Alethic's contract: the user's single entry point into the workforce."""
 
+    async def receive(
+        self, request: str, workspace_id: WorkspaceId | None = None
+    ) -> Objective:
+        """Write down what was asked, before anything is done about it.
+
+        Part of the contract rather than an implementation detail because a
+        caller that is not a person needs it: the scheduler has a sentence and
+        no conversation, and an objective row is the only thing that will
+        explain, afterwards, why a run started at four in the morning.
+        """
+        ...
+
     async def handle_objective(self, objective: Objective) -> ObjectiveResult: ...
 
     async def plan(self, objective: Objective) -> Plan: ...

@@ -28,6 +28,7 @@ from domain.llm.models import RoutingHints, TaskKind
 from domain.llm.protocols import LLM, ModelRouter
 from domain.llm.telemetry import LLMCallLog
 from domain.memory.protocols import Memory, MemoryMaintenance
+from domain.scheduling.protocols import EventLog, ScheduleRepository
 from domain.search.protocols import SearchEngine
 from domain.secrets.protocols import SecretResolver
 from domain.tasks.cancellation import Cancellations
@@ -586,6 +587,32 @@ class Container:
         from infrastructure.persistence.plan_repository import SqlitePlanRepository
 
         return SqlitePlanRepository(self.session_factory)
+
+    # --- Work that starts on its own ------------------------------------------
+
+    @cached_property
+    def schedule_repository(self) -> ScheduleRepository:
+        if self._in_memory:
+            from infrastructure.persistence.schedule_repository import (
+                InMemoryScheduleRepository,
+            )
+
+            return InMemoryScheduleRepository()
+        from infrastructure.persistence.schedule_repository import SqliteScheduleRepository
+
+        return SqliteScheduleRepository(self.session_factory)
+
+    @cached_property
+    def event_log(self) -> EventLog:
+        # Built with no flag, for the same reason the audit log is: an event
+        # nobody recorded is the one nobody can explain a run from afterwards.
+        if self._in_memory:
+            from infrastructure.persistence.schedule_repository import InMemoryEventLog
+
+            return InMemoryEventLog()
+        from infrastructure.persistence.schedule_repository import SqliteEventLog
+
+        return SqliteEventLog(self.session_factory)
 
     async def aclose(self) -> None:
         if "llm_factory" in self.__dict__:

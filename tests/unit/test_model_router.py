@@ -130,3 +130,41 @@ def test_changing_the_model_is_a_change_to_configuration_only() -> None:
 
     choice = router.select(TaskKind.EXECUTION, CapabilityRequirement(), RoutingHints())
     assert choice.model == "vendor/small"
+
+
+# --- The floor under a judgement ----------------------------------------------
+#
+# Phase 11 finding 3: verification handed to the cheapest entry in the catalog
+# came back with the example out of its own prompt. A hint could not have fixed
+# it - the configured default beats hints - so the floor is a requirement.
+
+
+def test_a_quality_floor_filters_before_the_default_is_considered(router) -> None:
+    choice = router.select(
+        TaskKind.EXTRACTION,  # whose configured default is 'cheap'
+        CapabilityRequirement(min_quality=0.5),
+        RoutingHints(),
+    )
+    assert choice.model != "vendor/small"
+    assert "cannot do this work" in choice.reason
+
+
+def test_a_floor_nothing_meets_is_a_configuration_error(router) -> None:
+    with pytest.raises(ConfigurationError, match="quality"):
+        router.select(TaskKind.EXECUTION, CapabilityRequirement(min_quality=0.99))
+
+
+def test_no_floor_leaves_the_cheapest_entry_routable(router) -> None:
+    """The floor is opt-in: cheap work still goes to the cheap model."""
+    choice = router.select(TaskKind.EXTRACTION, CapabilityRequirement(), RoutingHints())
+    assert choice.model == "vendor/small"
+
+
+def test_both_verifiers_will_not_take_the_bottom_of_a_catalog() -> None:
+    """Stated where the routing is declared, so no catalog can undo it."""
+    from application.alethic.verification import ObjectiveVerifier
+    from application.employee_runtime.verifier import Verifier
+
+    for routing in (ObjectiveVerifier.routing, Verifier.routing):
+        _, requirement, _ = routing()
+        assert requirement.min_quality > 0.0

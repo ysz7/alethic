@@ -11,7 +11,7 @@ import structlog
 
 from application.prompts import render
 from domain.capabilities.models import CapabilityRequirement
-from domain.employees.verification import Verdict
+from domain.employees.verification import MIN_JUDGEMENT_QUALITY, Verdict
 from domain.llm.json_output import extract_object
 from domain.llm.models import LLMRequest, Message, RoutingHints, TaskKind
 from domain.llm.protocols import LLM
@@ -71,10 +71,15 @@ class Verifier:
 
     @staticmethod
     def routing() -> tuple[TaskKind, CapabilityRequirement, RoutingHints]:
-        """Verification is a judgement about text, and it happens once."""
+        """Verification is a judgement about text, and it happens once.
+
+        Cheap is fine and cheapest is not: the floor is a requirement, so no
+        configured default can route a judgement to a model that answers one by
+        echoing the prompt back.
+        """
         return (
             TaskKind.VERIFICATION,
-            CapabilityRequirement(),
+            CapabilityRequirement(min_quality=MIN_JUDGEMENT_QUALITY),
             RoutingHints(quality=0.6, cost_sensitivity=0.7),
         )
 

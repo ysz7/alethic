@@ -12,6 +12,7 @@ from typing import Any
 
 from sqlalchemy import (
     DDL,
+    Boolean,
     CheckConstraint,
     Float,
     ForeignKey,
@@ -483,6 +484,69 @@ class ValidationRunRow(Base):
     result: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     started_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+class ScheduleRow(Base):
+    """A standing instruction to ask Alethic for something (§12.9).
+
+    It holds a request in words, not a plan and not an employee: a schedule
+    outlives the workforce it was written against, and one that named an
+    employee would keep pointing at a declaration somebody deleted.
+
+    `next_due_at` is stored rather than computed, which makes "what is due" an
+    index lookup instead of a scan that re-derives a recurrence per row - and,
+    more importantly, makes it survive a restart. A timer living in a process
+    that died is a schedule that silently stopped.
+
+    `last_objective_id` carries no foreign key. It is a pointer for somebody
+    following what a schedule actually did, and clearing old objectives must
+    not delete the standing instructions that produced them.
+    """
+
+    __tablename__ = "schedules"
+    __table_args__ = (Index("ix_schedules_due", "workspace_id", "enabled", "next_due_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    name: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    request: Mapped[str] = mapped_column(Text, nullable=False)
+    every_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    daily_at: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    on_event: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    next_due_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    last_objective_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    runs: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+
+
+class EventRow(Base):
+    """Something that happened which work might be owed to.
+
+    A row rather than a callback because an event has to survive arriving while
+    nothing is listening - a process killed, a machine asleep, the scheduler
+    started five minutes later. An in-process signal survives none of those, and
+    is silent about it in every case.
+
+    `consumed_at` lives here and not on the schedule: two schedules waiting on
+    one kind of event is a legitimate configuration, each firing twice for one
+    event is not, and recording the claim on the thing being claimed is what
+    makes the second impossible rather than unlikely.
+    """
+
+    __tablename__ = "events"
+    __table_args__ = (
+        Index("ix_events_pending", "workspace_id", "kind", "consumed_at", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    source: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+    consumed_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
 
 # The search index is part of the schema, not of the adapter: a database built

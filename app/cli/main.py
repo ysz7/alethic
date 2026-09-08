@@ -997,3 +997,163 @@ def _report(task) -> None:
 
 if __name__ == "__main__":
     app()
+
+
+# --- Work that starts on its own (§12.9) --------------------------------------
+
+
+@app.command()
+def schedules() -> None:
+    """The standing instructions on this machine, and when each next fires.
+
+    A schedule holds a request in the user's own words, the same sentence
+    `ask-alethic` would take. It never names an employee: choosing one is the
+    manager's job at the moment the work runs, not the user's months earlier.
+    """
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            found = await container.schedule_repository.list()
+            if not found:
+                typer.echo(
+                    "Nothing is scheduled here. Add one with "
+                    '`alethic schedule "<request>" --every 3600`.'
+                )
+                return
+            for schedule in found:
+                state = "" if schedule.enabled else "  [paused]"
+                typer.secho(schedule.name or str(schedule.id), fg="cyan", nl=False)
+                typer.echo(f"  {schedule.describe()}{state}")
+                typer.echo(f"  {schedule.request.splitlines()[0][:100]}")
+                when = (
+                    schedule.next_due_at.isoformat(timespec="minutes")
+                    if schedule.next_due_at
+                    else "when its event arrives"
+                )
+                typer.echo(f"  next: {when}   runs so far: {schedule.runs}")
+        finally:
+            await container.aclose()
+
+    _guarded(_run)
+
+
+@app.command()
+def schedule(
+    request: str = typer.Argument(..., help="What to ask Alethic for, in your own words."),
+    name: str = typer.Option("", "--name", help="A short name, for reading the list."),
+    every: int = typer.Option(0, "--every", help="Seconds between runs. Minimum 60."),
+    daily_at: str = typer.Option("", "--daily-at", help="A time of day in UTC, HH:MM."),
+    on_event: str = typer.Option("", "--on-event", help="An event kind to wait for."),
+) -> None:
+    """Ask for something to happen without being asked for again.
+
+    Exactly one of `--every`, `--daily-at` and `--on-event`. A schedule that
+    fired on two of them would fire twice for reasons a person reading the list
+    could not separate.
+    """
+    from datetime import time as _time
+
+    from domain.scheduling.models import Recurrence, Schedule
+
+    chosen = [bool(every), bool(daily_at), bool(on_event)]
+    if sum(chosen) != 1:
+        typer.secho(
+            "Choose exactly one of --every, --daily-at and --on-event.", fg="red", err=True
+        )
+        raise typer.Exit(code=1)
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            recurrence = None
+            if every:
+                recurrence = Recurrence(every_seconds=every)
+            elif daily_at:
+                recurrence = Recurrence(daily_at=_time.fromisoformat(daily_at))
+            created = Schedule.create(
+                request, name=name, recurrence=recurrence, on_event=on_event
+            )
+            await container.schedule_repository.save(created)
+            typer.secho(f"Scheduled: {created.name or created.id}", fg="green")
+            typer.echo(f"  {created.describe()}")
+            typer.echo(
+                "  It runs through the same manager, policies and approval gate as "
+                "anything you ask for yourself - including the ones that stop for a "
+                "person, which nobody will be there to answer."
+            )
+        finally:
+            await container.aclose()
+
+    _guarded(_run)
+
+
+@app.command()
+def unschedule(
+    schedule_id: str = typer.Argument(..., help="The id from `alethic schedules`."),
+    pause: bool = typer.Option(False, "--pause", help="Stop it without deleting it."),
+) -> None:
+    """Delete a schedule, or pause it and keep what it has done."""
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            store = container.schedule_repository
+            found = await store.get(UUID(schedule_id))
+            if found is None:
+                typer.secho("No schedule with that id.", fg="red", err=True)
+                raise typer.Exit(code=1)
+            if pause:
+                await store.save(found.set_enabled(False))
+                typer.secho(f"Paused: {found.name or found.id}", fg="yellow")
+            else:
+                await store.delete(found.id)
+                typer.secho(f"Deleted: {found.name or found.id}", fg="green")
+        finally:
+            await container.aclose()
+
+    _guarded(_run)
+
+
+@app.command()
+def events(
+    limit: int = typer.Option(20, "--limit", help="How many to show, newest first."),
+) -> None:
+    """What has happened here that work could be owed to."""
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            found = await container.event_log.recent(limit=limit)
+            if not found:
+                typer.echo("No events have been recorded here.")
+                return
+            for event in found:
+                mark = "used" if event.consumed else "open"
+                typer.secho(f"{mark}  {event.kind}", fg="cyan", nl=False)
+                typer.echo(f"  {event.created_at.isoformat(timespec='seconds')}")
+                if event.source:
+                    typer.echo(f"      from {event.source}")
+                if event.payload:
+                    details = ", ".join(f"{k}={v}" for k, v in sorted(event.payload.items()))
+                    typer.echo(f"      {details[:120]}")
+        finally:
+            await container.aclose()
+
+    _guarded(_run)
+
+
+def _guarded(coroutine_factory) -> None:
+    """Run one CLI coroutine, reporting a platform error rather than a traceback."""
+
+    async def _wrapped() -> None:
+        try:
+            await coroutine_factory()
+        except StorageNotInitializedError as error:
+            typer.secho(f"{error} Run `alembic upgrade head` first.", fg="red", err=True)
+            raise typer.Exit(code=1) from error
+        except AlethicError as error:
+            typer.secho(f"{type(error).__name__}: {error}", fg="red", err=True)
+            raise typer.Exit(code=1) from error
+
+    asyncio.run(_wrapped())

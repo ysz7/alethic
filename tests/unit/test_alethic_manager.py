@@ -71,6 +71,7 @@ def build(
     plans: InMemoryPlanRepository | None = None,
     max_revisions: int = 2,
     memory=None,
+    reconciler=None,
     #: Supply one to read back what each stage was actually told.
     llm: FakeLLM | None = None,
 ) -> tuple[AlethicManager, RecordingExecution, InMemoryObjectiveRepository, InMemoryPlanRepository]:
@@ -84,7 +85,7 @@ def build(
     # that "who should do this" does not have to be interleaved into the story
     # above at whatever point the supervisor happens to ask.
     chooser = FakeLLM([reply(item) for item in delegation or ()]) if delegation else llm
-    registry = FakeRegistry(*workforce)
+    registry = FakeRegistry(*(workforce if workforce is not None else (READER,)))
     runs = execution or RecordingExecution()
     objective_store = objectives or InMemoryObjectiveRepository()
     plan_store = plans or InMemoryPlanRepository()
@@ -98,6 +99,7 @@ def build(
         ),
         verifier=ObjectiveVerifier(llm),
         synthesizer=Synthesizer(llm),
+        reconciler=reconciler,
         registry=registry,
         objectives=objective_store,
         plans=plan_store,
@@ -161,7 +163,12 @@ async def test_the_answer_carries_the_evidence_behind_it() -> None:
 
 async def test_a_question_is_answered_without_a_plan_or_an_employee() -> None:
     manager, execution, _, plans = build(
-        script=[intent(needs_work=False, answer="It keeps the database in one file.")]
+        script=[
+            intent(needs_work=False, answer="It keeps the database in one file."),
+            # A direct answer is checked against the objective's criteria before
+            # anyone sees it, exactly as delegated work is.
+            verdict(True),
+        ]
     )
 
     result = await manager.handle_objective(await manager.receive("What is SQLite?"))
@@ -171,6 +178,57 @@ async def test_a_question_is_answered_without_a_plan_or_an_employee() -> None:
     assert execution.started == [], "nobody was given work"
     assert await plans.for_objective(result.objective_id) == [], "and nothing was decomposed"
     assert result.output["delegated"] is False
+
+
+async def test_an_answer_that_cannot_meet_the_criteria_becomes_work() -> None:
+    """Phase 11 finding 1, as a test.
+
+    "Read the notes and leave me a summary file" was read as needing no work
+    and closed with one sentence: nothing was done and the run reported
+    success. Deciding what a request takes is a judgement, and it is checked
+    like every other judgement here.
+    """
+    manager, execution, _, plans = build(
+        script=[
+            intent(
+                needs_work=False,
+                answer="Here is a summary of your notes.",
+                acceptance_criteria=["notes/summary.md exists and summarises the notes"],
+            ),
+            verdict(False, "no file was written"),
+            plan("Read notes/ and write notes/summary.md"),
+            verdict(True),
+            "Written.",
+        ]
+    )
+
+    result = await manager.handle_objective(
+        await manager.receive("Read the notes in notes/ and leave me notes/summary.md")
+    )
+
+    assert result.status is ObjectiveStatus.DONE
+    assert execution.started, "the sentence did not stand in for the file"
+    assert await plans.for_objective(result.objective_id) != []
+    assert result.output["delegated"] is True
+
+
+async def test_the_planner_is_told_what_the_direct_answer_missed() -> None:
+    """The rejected claim is the first plan's best lead, not a discarded one."""
+    llm = FakeLLM(
+        [
+            reply(intent(needs_work=False, answer="Here you go.")),
+            reply(verdict(False, "no file was written")),
+            reply(plan("Write the file")),
+            reply(verdict(True)),
+            reply("Written."),
+        ]
+    )
+    manager, _, _, _ = build(script=[], llm=llm)
+
+    await manager.handle_objective(await manager.receive("Leave me a summary file"))
+
+    planning = llm.requests[2].messages[0].content
+    assert "no file was written" in planning
 
 
 # --- When it does not meet what was asked -------------------------------------

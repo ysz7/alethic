@@ -42,6 +42,7 @@ class Synthesizer:
         outcomes: tuple[TaskOutcome, ...],
         *,
         missing: tuple[str, ...] = (),
+        resolution: str = "",
     ) -> str:
         results = describe(outcomes)
         if not results.strip():
@@ -57,6 +58,7 @@ class Synthesizer:
                             criteria=_criteria(objective),
                             results=results,
                             shortfall=_shortfall(missing),
+                            resolution=_resolution(resolution),
                         )
                     ),
                 ),
@@ -113,3 +115,19 @@ def _shortfall(missing: tuple[str, ...]) -> str:
     if not missing:
         return ""
     return "# What is still missing\n\n" + "\n".join(f"- {item}" for item in missing)
+
+
+def _resolution(resolution: str) -> str:
+    """A disagreement the manager already settled, so synthesis does not re-open it.
+
+    Stated as a decision rather than as more evidence: given both sides again, a
+    model writes a paragraph holding both, which is exactly the blended answer
+    §87 exists to prevent.
+    """
+    if not resolution.strip():
+        return ""
+    return (
+        "# A disagreement you have already settled\n\n"
+        "Write the answer this leaves standing. Do not re-argue it and do not "
+        "present the discarded side as a finding:\n\n" + resolution.strip()
+    )

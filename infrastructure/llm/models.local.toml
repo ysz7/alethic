@@ -56,6 +56,14 @@ quality = 0.6
 # The stronger entry takes the work that decides things - planning, acting,
 # writing the answer - and the small ones keep the cheap, structured jobs.
 # Anything here still runs without a provider key.
+#
+# `verification` is left pointing here at the small entry on purpose, and is
+# not honoured: verification declares a quality floor as a *requirement*
+# (`domain.employees.verification.MIN_JUDGEMENT_QUALITY`), so this entry is
+# filtered out before the default is consulted and the trace says why - "default
+# 'local-fast' cannot do this work". That is the first validation run's third
+# finding made visible rather than papered over by editing one line here, which
+# the next catalog would undo.
 [defaults]
 planning = "local-strong"
 execution = "local-strong"

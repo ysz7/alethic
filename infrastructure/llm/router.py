@@ -49,6 +49,11 @@ class CapabilityAwareModelRouter:
                     if requirement.min_context_tokens
                     else ""
                 )
+                + (
+                    f" at quality {requirement.min_quality} or better"
+                    if requirement.min_quality
+                    else ""
+                )
             )
 
         preferred = self._catalog.defaults.get(task_kind)
@@ -90,6 +95,7 @@ class CapabilityAwareModelRouter:
             required=frozenset(capabilities),
             preferred=required.preferred,
             min_context_tokens=context,
+            min_quality=required.min_quality,
         )
 
     def _score(

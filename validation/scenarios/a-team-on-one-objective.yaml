@@ -1,0 +1,51 @@
+# Phase 12's Definition of Done as a request somebody would actually make: work
+# that honestly takes more than one person, stated in one sentence, with nobody
+# named. What is being measured is the decomposition and the hand-off - whether
+# Alethic sees two independent jobs and one that waits for both, and whether the
+# third employee is told what the first two found.
+#
+# The two gathering tasks are deliberately about different things and are both
+# already on this machine: a scenario whose parallelism depends on the network
+# would measure the network. Two files, read separately, written up together.
+#
+# `max_steps` is a ceiling on the whole objective, not on a task. It is set
+# where a sequential run of three employees would sit comfortably: the point of
+# the parallel branch is wall time, and wall time is not what this can see.
+
+name: a-team-on-one-objective
+description: >
+  One goal that takes three people - two independent readings and a document
+  written from both - stated without naming anybody.
+phase: 12
+tags: [manager, workforce, files]
+
+request: >
+  In "figures/" there are our own sales for September and a note on what
+  competitors charge. Read both and leave me "figures/comparison.md": a short
+  Markdown document saying how our prices compare, citing a number from each
+  source. Do not change either source file.
+
+reset: [figures/comparison.md]
+
+setup:
+  figures/our-sales-september.csv: |
+    product,units,unit_price_eur
+    starter,412,19.00
+    standard,168,49.00
+    premium,37,129.00
+  figures/competitor-pricing.md: |
+    Competitor pricing, checked 3 September
+    - Northwind: entry plan 24.00 EUR, standard 55.00 EUR, no premium tier.
+    - Calyx: single plan at 39.00 EUR, unlimited seats.
+    - Beam: entry 15.00 EUR but charges per seat above five.
+
+expect:
+  files_exist: [figures/comparison.md]
+  file_contains:
+    # One number from each source, which is the cheapest available proof that
+    # both branches ran and that both reached the employee that wrote the file.
+    figures/comparison.md: "49"
+  # The sources are read, never rewritten. A run that "compared" by editing one
+  # of them has done something other than what was asked.
+  tools_forbidden: [fs.move]
+  max_steps: 60

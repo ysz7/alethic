@@ -13,6 +13,7 @@ from application.alethic.delegation import CapabilityDelegator
 from application.alethic.intent import IntentReader
 from application.alethic.manager import AlethicManager
 from application.alethic.planner import ObjectivePlanner
+from application.alethic.reconciliation import Reconciler
 from application.alethic.supervisor import Supervisor
 from application.alethic.synthesis import Synthesizer
 from application.alethic.verification import ObjectiveVerifier
@@ -112,11 +113,13 @@ async def build_runtime(container: Container, definition: EmployeeDefinition) ->
 def build_manager(container: Container) -> AlethicManager:
     """Assemble Alethic.
 
-    Five model-facing components, each routed for what it is: comprehension and
+    Six model-facing components, each routed for what it is: comprehension and
     decomposition get a good model, choosing from a short list gets a cheap one,
-    the answer the user reads gets a good one again. None of them names a model,
-    and none of them names an employee - the workforce arrives from the registry
-    and the work is done through `TaskExecution`, which is the task runner.
+    judging - the verdict and deciding which of two people is right - is held
+    above the bottom of the catalog, and the answer the user reads gets a good
+    model again. None of them names a model, and none of them names an employee -
+    the workforce arrives from the registry and the work is done through
+    `TaskExecution`, which is the task runner.
     """
     registry = container.employee_registry
     _, recorder = build_memory(container)
@@ -132,6 +135,7 @@ def build_manager(container: Container) -> AlethicManager:
         ),
         verifier=ObjectiveVerifier(container.llm_for(*ObjectiveVerifier.routing())),
         synthesizer=Synthesizer(container.llm_for(*Synthesizer.routing())),
+        reconciler=Reconciler(container.llm_for(*Reconciler.routing())),
         registry=registry,
         objectives=container.objective_repository,
         plans=container.plan_repository,

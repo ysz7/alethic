@@ -24,6 +24,12 @@ between steps and before each tool call. Both default to a component that does
 nothing, so a run nobody is watching costs nothing to be watchable, and a run
 nobody is cancelling never pays for the question.
 
+**A tool that keeps being refused is withdrawn.** Being told no is information,
+and once is enough for a model to act on; fifteen times is a step budget spent
+on a conversation with the gate. So the refusals in this task's own transcript
+decide which tools the next request offers, and a tool refused twice is not one
+of them (`domain.tools.refusals`).
+
 **The interface hierarchy is decided from what the employee has, and recorded.**
 The tools an employee is allowed to use are what say whether it can reach the
 world through an API, a browser or a screen, so the choice is made here, once,
@@ -63,6 +69,7 @@ from domain.tasks.progress import NullProgress, ProgressEvent, ProgressKind, Pro
 from domain.tasks.task import Task
 from domain.tools.models import ToolResult
 from domain.tools.protocols import Tool, ToolRegistry
+from domain.tools.refusals import REFUSAL_LIMIT, REFUSED, refusal_counts, withheld
 from domain.tools.telemetry import ToolCallLog, ToolCallRecord
 
 log = structlog.get_logger(__name__)
@@ -130,8 +137,8 @@ class Executor:
         of the system holding it.
         """
         started = self._clock()
-        specs = self._tools.list_specs(definition)
-        choice = select(spec.interface_level for spec in specs)
+        granted = self._tools.list_specs(definition)
+        choice = select(spec.interface_level for spec in granted)
         if choice is not None:
             log.info(
                 "interface.selected",
@@ -172,10 +179,15 @@ class Executor:
                     stopped_by=exceeded,
                 )
 
+            # Recomputed from the transcript each turn rather than tracked in a
+            # local, so a run resumed in another process offers the same tools
+            # this one would have.
+            barred = withheld(transcript.observations)
+            offered = tuple(spec for spec in granted if spec.name not in barred)
             response = await self._llm.generate(
                 LLMRequest(
                     messages=transcript.messages,
-                    tools=tuple(specs),
+                    tools=offered,
                     temperature=definition.model_profile.temperature,
                 )
             )
@@ -208,8 +220,15 @@ class Executor:
                     step=transcript.steps,
                     payload={"tool": call.name, "arguments": redact(call.arguments)},
                 )
-                result = await self._invoke(call, definition, task, on_status)
-                observation = self._observe(transcript.steps, call, result, definition)
+                result, refused = await self._invoke(call, definition, task, on_status)
+                observation = self._observe(
+                    transcript.steps,
+                    call,
+                    result,
+                    definition,
+                    refused=refused,
+                    refusals_so_far=refusal_counts(transcript.observations)[call.name],
+                )
                 transcript = transcript.with_observation(observation).with_message(
                     Message.tool(observation.summary, call.id)
                 )
@@ -263,14 +282,20 @@ class Executor:
         definition: EmployeeDefinition,
         task: Task,
         on_status: StatusSink | None = None,
-    ) -> ToolResult:
+    ) -> tuple[ToolResult, bool]:
+        """Run the call, and say whether it was refused rather than merely failed.
+
+        The second half of that answer is what `domain.tools.refusals` counts,
+        and the distinction is the whole of it: a tool that ran and returned an
+        error may work next time, a tool that was never reached will not.
+        """
         try:
             tool = self._tools.get(call.name, definition)
         except (ToolNotFoundError, PermissionDeniedError) as error:
             # Not a crash: the model asked for something it cannot have, and
             # being told so is information it can act on.
             log.info("tool.refused", tool=call.name, employee=definition.name, reason=str(error))
-            return ToolResult.failure(str(error))
+            return ToolResult.failure(str(error)), True
 
         gate = await self._approvals.check(
             tool, call.arguments, task, definition, status=on_status
@@ -278,7 +303,7 @@ class Executor:
         if not gate.allowed:
             log.info("tool.not_approved", tool=call.name, task_id=str(task.id))
             await self._record(task, call, ToolResult.failure(gate.reason))
-            return ToolResult.failure(gate.reason)
+            return ToolResult.failure(gate.reason), True
 
         started = self._clock()
         try:
@@ -291,7 +316,7 @@ class Executor:
             result = replace(result, latency_ms=int((self._clock() - started) * 1000))
         await self._record(task, call, result, tool.spec.interface_level)
         await self._audit_call(task, definition, tool, call, result)
-        return result
+        return result, False
 
     async def _audit_call(
         self,
@@ -365,6 +390,9 @@ class Executor:
         call: ToolCallRequest,
         result: ToolResult,
         definition: EmployeeDefinition,
+        *,
+        refused: bool = False,
+        refusals_so_far: int = 0,
     ) -> Observation:
         """Interpret what just happened, explicitly, before deciding anything."""
         # Redacted here, not at the log: this summary goes back into the
@@ -377,6 +405,22 @@ class Executor:
         else:
             summary = f"{call.name} returned: {output}"
 
+        if refused and refusals_so_far + 1 >= REFUSAL_LIMIT:
+            # Said here rather than in a message of its own, because this line
+            # is already on its way into the transcript and a separate note
+            # would be added again by every process that resumed the run.
+            summary += (
+                f" {call.name} has now been refused {refusals_so_far + 1} times "
+                "in this task and is no longer available. Reach the goal another "
+                "way, or report what stopped you."
+            )
+            log.info(
+                "tool.withheld",
+                tool=call.name,
+                employee=definition.name,
+                refusals=refusals_so_far + 1,
+            )
+
         interface = self._interface_of(call.name, definition)
         observation = Observation(
             step=step,
@@ -386,6 +430,7 @@ class Executor:
                 "tool": call.name,
                 "arguments": redact(call.arguments),
                 "interface": interface.value,
+                **({REFUSED: True} if refused else {}),
             },
         )
         log.info(
@@ -394,6 +439,7 @@ class Executor:
             tool=call.name,
             interface=interface.value,
             succeeded=result.success,
+            refused=refused,
         )
         return observation
 

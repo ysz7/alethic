@@ -155,3 +155,71 @@ async def test_a_broken_telemetry_log_does_not_fail_the_task() -> None:
     ).run(task, employee, opening(task, employee))
 
     assert outcome.finished
+
+
+# --- A tool that keeps being refused ------------------------------------------
+#
+# Phase 11 finding 2: an analyst forbidden `code.run` called it fifteen times
+# and spent the whole step budget being told no. The refusal text says not to;
+# text is a suggestion, so the tool is withdrawn instead.
+
+
+def repeated(name: str, times: int) -> FakeLLM:
+    """A model that asks for the same tool over and over, then gives up."""
+    return FakeLLM(
+        [
+            *(
+                tool_reply(ToolCallRequest(id=f"c{i}", name=name, arguments={"path": "x"}))
+                for i in range(times)
+            ),
+            reply("I could not do it."),
+        ]
+    )
+
+
+async def test_a_tool_refused_twice_stops_being_offered() -> None:
+    task, employee = Task.create("Write it"), definition(tools=frozenset({"fs.write"}))
+    tool = DangerousTool("fs.write")
+    llm = repeated("fs.write", 5)
+
+    outcome = await Executor(
+        llm,
+        InMemoryToolRegistry([tool]),
+        approvals=ApprovalGate(ScriptedApprovalService.rejecting()),
+    ).run(task, employee, opening(task, employee))
+
+    assert tool.calls == []
+    offered = [[spec.name for spec in request.tools] for request in llm.requests]
+    assert offered[0] == ["fs.write"], "it is offered until it has been refused twice"
+    assert offered[1] == ["fs.write"]
+    assert all(names == [] for names in offered[2:]), "and never again in this task"
+    assert "no longer available" in outcome.transcript.observations[1].summary
+
+
+async def test_a_tool_that_merely_fails_keeps_being_offered() -> None:
+    """Refused is not failed: a timeout may not happen twice, a policy will."""
+    task, employee = Task.create("Read it"), definition(tools=frozenset({"fs.read"}))
+    tool = FakeTool("fs.read", result=ToolResult.failure("the page timed out"))
+    llm = repeated("fs.read", 4)
+
+    await Executor(llm, InMemoryToolRegistry([tool])).run(
+        task, employee, opening(task, employee)
+    )
+
+    assert len(tool.calls) == 4
+    assert all([spec.name for spec in request.tools] == ["fs.read"] for request in llm.requests)
+
+
+async def test_a_resumed_run_withholds_what_the_first_one_did() -> None:
+    """The count is derived from the transcript, so it survives the process."""
+    from domain.tools.refusals import withheld
+
+    task, employee = Task.create("Write it"), definition(tools=frozenset({"fs.write"}))
+    first = await Executor(
+        repeated("fs.write", 2),
+        InMemoryToolRegistry([DangerousTool("fs.write")]),
+        approvals=ApprovalGate(ScriptedApprovalService.rejecting()),
+    ).run(task, employee, opening(task, employee))
+
+    carried = Transcript.from_state(first.transcript.to_state())
+    assert withheld(carried.observations) == frozenset({"fs.write"})

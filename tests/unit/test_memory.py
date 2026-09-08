@@ -372,3 +372,52 @@ def _finished_task(goal: str, summary: str) -> Task:
         task, _ = task.transition_to(status)
     task, _ = task.transition_to(TaskStatus.COMPLETED, result=TaskResult(summary=summary))
     return task
+
+
+# --- 12.4: a plan's memory belongs to that plan -------------------------------
+
+
+async def test_a_plan_never_reads_another_plans_memory() -> None:
+    """The isolation test Phase 12's Definition of Done asks for."""
+    memory = InMemoryMemory()
+    ours, theirs = uuid4(), uuid4()
+    for plan_id, text in ((ours, "our finding"), (theirs, "their finding")):
+        await memory.remember(
+            MemoryItem.create(
+                text,
+                scope=MemoryScope.PLAN,
+                kind=MemoryKind.EPISODIC,
+                plan_id=plan_id,
+            )
+        )
+
+    found = await memory.recall(
+        MemoryQuery(
+            text="finding", scopes=frozenset({MemoryScope.PLAN}), plan_id=ours
+        )
+    )
+
+    assert [item.content for item in found] == ["our finding"]
+
+
+async def test_a_query_that_names_no_plan_reads_no_plan_memory() -> None:
+    """A boundary with a hole for the callers who do not mention it is not one.
+
+    A standalone `run-task` has no plan, and under the weaker reading it was the
+    one caller that could read every plan's memory at once.
+    """
+    memory = InMemoryMemory()
+    await memory.remember(
+        MemoryItem.create(
+            "somebody else's plan",
+            scope=MemoryScope.PLAN,
+            kind=MemoryKind.EPISODIC,
+            plan_id=uuid4(),
+        )
+    )
+
+    found = await memory.recall(
+        MemoryQuery(text="plan", scopes=frozenset({MemoryScope.PLAN}), plan_id=None)
+    )
+
+    assert found == []

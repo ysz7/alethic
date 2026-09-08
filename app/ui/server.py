@@ -52,6 +52,7 @@ from app.config.container import build_container, build_manager, build_task_runn
 from app.config.settings import Settings, get_settings
 from app.ui import views
 from app.ui.runs import Runs
+from application.scheduling.scheduler import Scheduler
 from domain.approvals.models import ApprovalState
 from domain.errors import AlethicError, StorageNotInitializedError
 from domain.tasks.progress import ProgressKind
@@ -115,17 +116,45 @@ def create_app(
         app.state.settings = resolved
         app.state.container = container
         app.state.confirmer = confirmer
+        manager = build_manager(container)
         app.state.runs = Runs(
             runner=build_task_runner(container),
-            manager=build_manager(container),
+            manager=manager,
             tasks=container.task_repository,
             cancellations=container.cancellations,
             approvals=confirmer,
         )
-        log.info("ui.started", host=resolved.ui_host, port=resolved.ui_port)
+        # Started on the same loop that serves the requests, for the same
+        # reason a task is: one process, one database, and a proactive
+        # objective that is watched in the trace exactly like one somebody
+        # asked for. Off unless the flag says otherwise - work nobody asked
+        # for is opt-in.
+        stop_scheduler = asyncio.Event()
+        scheduler_task: asyncio.Task[None] | None = None
+        if resolved.scheduler_enabled:
+            scheduler = Scheduler(
+                manager=manager,
+                schedules=container.schedule_repository,
+                events=container.event_log,
+                tick_seconds=resolved.scheduler_tick_seconds,
+            )
+            scheduler_task = asyncio.create_task(scheduler.run_forever(stop_scheduler))
+
+        log.info(
+            "ui.started",
+            host=resolved.ui_host,
+            port=resolved.ui_port,
+            scheduler=resolved.scheduler_enabled,
+        )
         try:
             yield
         finally:
+            stop_scheduler.set()
+            if scheduler_task is not None:
+                # Awaited rather than cancelled: a firing that is halfway
+                # through an objective should finish the tick it is in, and the
+                # loop already checks the signal between them.
+                await scheduler_task
             await app.state.runs.aclose()
             await container.aclose()
 
