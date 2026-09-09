@@ -12,6 +12,11 @@ requires: [WORKFLOWS, APPROVALS]
 
 reset: [drafts, inbox]
 
+# Drafting is allowed and delivery is not, which is the whole process: the
+# person answers yes to the files being written and is never asked about the
+# send, because `code.run` is not in this list.
+approve: [fs.write]
+
 setup:
   inbox/01-invoice-overdue.md: |
     From: billing@northwind-supplies.example

@@ -28,6 +28,12 @@ class ApprovalRequest:
     id: UUID
     task_id: UUID
     action: str
+    #: The tool this question is about. `action` is that tool rendered with its
+    #: arguments, for a person to read; this is what the question is *about*,
+    #: for anything that has to decide by tool rather than by prose. Kept apart
+    #: because reading the name back out of the rendered line is parsing our own
+    #: formatting, which is the habit the rest of the platform refuses.
+    tool: str = ""
     payload: dict[str, Any] = field(default_factory=dict)
     risk_level: RiskLevel = RiskLevel.HIGH
     workspace_id: WorkspaceId = DEFAULT_WORKSPACE_ID

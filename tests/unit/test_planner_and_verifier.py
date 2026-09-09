@@ -129,3 +129,40 @@ async def test_the_verifier_is_shown_the_plan_it_should_judge_against() -> None:
     prompt = llm.last_request.messages[0].content
     assert "collect sources" in prompt
     assert "Explain WAL mode" in prompt
+
+
+async def test_the_verifier_is_shown_what_the_task_actually_did() -> None:
+    """Phase 16: it rejected work whose evidence the platform was holding.
+
+    The triage step of the inbox workflow listed a directory, read four files,
+    and was rejected twice for showing "no evidence that the files were read" -
+    which stopped the workflow before a draft was written.
+    """
+    llm = FakeLLM([reply('{"passed": true}')])
+    await Verifier(llm).verify(
+        Task.create("Read the inbox"),
+        TaskResult(
+            summary="Four messages, one needs a reply.",
+            output={
+                "observations": [
+                    {
+                        "step": 1,
+                        "summary": "fs.list returned: 4 files",
+                        "succeeded": True,
+                        "details": {"tool": "fs.list"},
+                    }
+                ]
+            },
+        ),
+    )
+
+    prompt = llm.last_request.messages[0].content
+    assert "fs.list" in prompt
+
+
+async def test_a_task_that_called_nothing_says_so_rather_than_saying_nothing() -> None:
+    """An empty section reads as an omission; the absence is itself the finding."""
+    llm = FakeLLM([reply('{"passed": true}')])
+    await Verifier(llm).verify(Task.create("Think about it"), TaskResult(summary="Done."))
+
+    assert "No tool was called" in llm.last_request.messages[0].content

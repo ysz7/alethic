@@ -24,6 +24,11 @@ setup:
     Membership renewal
     Annual, $540.00, renews 1 November.
 
+# The same answers as the run this one is a follow-up to. A scenario about
+# memory that is refused the tools its predecessor was allowed measures the
+# refusal instead.
+approve: [fs.move, fs.write]
+
 expect:
   file_contains:
     sorted/INDEX.md: invoice-4418

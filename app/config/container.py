@@ -49,6 +49,7 @@ from domain.errors import AlethicError
 from infrastructure.container import Container
 from infrastructure.knowledge.extraction import Extractors
 from infrastructure.mcp.connector import cached_connector, mcp_connector
+from infrastructure.validation.approver import DeclaredApprover
 
 
 def build_container(settings: Settings | None = None, *, in_memory: bool = False) -> Container:
@@ -382,6 +383,12 @@ def build_harness(container: Container) -> ValidationHarness:
     `run-workflow` - and nothing else that can do work. Everything else handed
     in here is a way of reading what happened afterwards.
     """
+    # Installed here rather than inside the harness: what answers an approval
+    # is an adapter, and the composition root is the one place allowed to hand
+    # one to the runtime. The harness is given the same object as a contract it
+    # can only open and close around a run.
+    approver = DeclaredApprover()
+    container.use_approval_confirmer(approver.confirm)
     return ValidationHarness(
         scenarios=container.scenario_registry,
         runs=container.validation_runs,
@@ -397,4 +404,5 @@ def build_harness(container: Container) -> ValidationHarness:
         memory=container.memory,
         knowledge=build_knowledge(container),
         workspaces=build_workspaces(container),
+        approver=approver,
     )

@@ -20,6 +20,11 @@ request: >
 # to say what must not be there.
 reset: [sorted]
 
+# Somebody who asks for a folder to be sorted says yes to the moving and to the
+# index. Declared per tool rather than by switching the gate off, so a run that
+# reaches for anything else is still refused and still visible.
+approve: [fs.move, fs.write]
+
 setup:
   unsorted/invoice-4417.txt: |
     INVOICE 4417

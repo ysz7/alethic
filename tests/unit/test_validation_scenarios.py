@@ -272,3 +272,65 @@ def test_a_scenario_knows_what_this_machine_cannot_give_it() -> None:
     assert scenario.missing_requirements(frozenset({Requirement.MEMORY})) == (
         Requirement.COMPUTER_USE,
     )
+
+
+# --- Phase 16: the refusal a scenario asked for, and the person it declared ----
+#
+# Every approval recorded by the first full pass was rejected by `no-approver`,
+# and the two rules below are what that hid: a run doing exactly what its author
+# wrote down could not be recorded as a pass, and the refusal it was written to
+# observe was reported as the reason it failed.
+
+
+def test_a_scenario_that_declared_a_refusal_is_not_blamed_for_it() -> None:
+    """`tools_denied` in an expectation is the author asking for that refusal."""
+    kind = classify(
+        evidence(succeeded=False, tools_denied=("code.run",)),
+        (CheckResult("code.run refused", CheckStatus.PASSED),),
+        expected_denials=frozenset({"code.run"}),
+    )
+    assert kind is FailureKind.NONE
+
+
+def test_a_refusal_nobody_declared_still_explains_the_run() -> None:
+    kind = classify(
+        evidence(succeeded=False, tools_denied=("fs.write", "code.run")),
+        (CheckResult("finished", CheckStatus.FAILED),),
+        expected_denials=frozenset({"code.run"}),
+    )
+    assert kind is FailureKind.NEEDED_APPROVAL
+
+
+def test_a_run_that_must_not_succeed_can_still_pass() -> None:
+    """The declared expectations are the whole standard, `must_succeed` included.
+
+    The workflow scenario that stops where the sending would have been could
+    never pass: it correctly did not succeed, every check about that passed, and
+    the verdict came back NEEDED_APPROVAL anyway.
+    """
+    expect = Expectations(tools_denied=("code.run",), must_succeed=False)
+    facts = evidence(succeeded=False, tools_denied=("code.run",))
+    results = check(expect, facts)
+    run = outcome_of(
+        "triage",
+        facts,
+        results,
+        classify(facts, results, expected_denials=frozenset(expect.tools_denied)),
+    )
+    assert run.status is RunStatus.PASSED
+
+
+def test_a_scenario_says_what_the_person_would_have_answered(tmp_path: Path) -> None:
+    write(
+        tmp_path,
+        "attended",
+        "name: attended\nrequest: do it\napprove: [fs.write]\n",
+    )
+    scenario = YamlScenarioRegistry(tmp_path).get("attended")
+    assert scenario.approve == ("fs.write",)
+
+
+def test_a_scenario_that_says_nothing_is_a_run_nobody_was_there_for(tmp_path: Path) -> None:
+    """The default is unattended, which is what a machine nobody asked should be."""
+    write(tmp_path, "alone", "name: alone\nrequest: do it\n")
+    assert YamlScenarioRegistry(tmp_path).get("alone").approve == ()

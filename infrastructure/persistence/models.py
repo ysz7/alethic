@@ -252,6 +252,8 @@ class ApprovalRow(Base):
         String(36), ForeignKey("employees.id"), nullable=True
     )
     action: Mapped[str] = mapped_column(Text, nullable=False)
+    #: The tool the question is about, beside the rendered line a person reads.
+    tool: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     risk_level: Mapped[str] = mapped_column(String(16), nullable=False)
     state: Mapped[str] = mapped_column(String(16), nullable=False)

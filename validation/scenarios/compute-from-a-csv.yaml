@@ -19,6 +19,12 @@ request: >
 
 reset: [reports]
 
+# Running code is HIGH whatever the code says, and this request is "work it out
+# by running code" - so the person who made it is the one who says yes. Without
+# this the scenario measured the gate refusing an unattended machine, sixteen
+# steps in a row, and never reached the arithmetic it was written for.
+approve: [code.run, fs.write]
+
 setup:
   data/sales.csv: |
     order_id,region,quantity,unit_price

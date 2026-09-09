@@ -103,6 +103,7 @@ def classify(
     *,
     error: BaseException | None = None,
     memory_expected: bool = False,
+    expected_denials: frozenset[str] = frozenset(),
 ) -> FailureKind:
     """One verdict about why this run is not a pass, or NONE if it is.
 
@@ -114,8 +115,14 @@ def classify(
     if error is not None:
         return from_error(error)
 
+    # The declared expectations are the whole of the standard, and that
+    # includes `must_succeed: false`. Requiring `evidence.succeeded` on top of
+    # them made a scenario whose point is that the platform refuses - the
+    # workflow that stops where the sending would have been - unable to pass at
+    # all: the run correctly did not succeed, every check about that passed, and
+    # the verdict blamed the refusal it was written to observe.
     failed = tuple(result for result in checks if not result.passed)
-    if evidence.succeeded and not failed:
+    if not failed:
         return FailureKind.NONE
 
     # A refusal is the loudest thing in an audit log, and it explains the run
@@ -126,7 +133,13 @@ def classify(
     # blamed approvals for a run whose work had gone through and whose verifier
     # then rejected a correct result. Every refusal reaches the audit as DENIED,
     # so nothing is lost by dropping the weaker signal.
-    if evidence.tools_denied:
+    # A denial the scenario declared is evidence the brake held, not evidence
+    # of what went wrong afterwards: `tools_denied` in an expectation is the
+    # author saying beforehand that this call must not go through. Blaming it
+    # sent every such run to the report under NEEDED_APPROVAL, which is the one
+    # category the roadmap reads as "a person had to be there".
+    unexpected = tuple(name for name in evidence.tools_denied if name not in expected_denials)
+    if unexpected:
         return FailureKind.NEEDED_APPROVAL
 
     if memory_expected and evidence.metrics.recalled == 0:

@@ -15,6 +15,10 @@ request: >
 
 reset: [notes/summary.md]
 
+# The request is to leave a file; the person who asked for it answers yes to
+# writing it. Reading the notes needs nobody.
+approve: [fs.write]
+
 setup:
   notes/2026-09-01-planning.md: |
     Planning, 1 September

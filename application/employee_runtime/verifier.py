@@ -3,6 +3,17 @@
 The employee that did the work is the wrong witness to whether it worked: a
 confident summary is exactly what a failed run also produces. So a separate call
 judges the output against the goal, and a task cannot complete without it.
+
+**It is shown what the task did, not only what it said.** Until Phase 16 the
+verdict was formed from the summary alone, and the prompt asks it to fail a
+result that "claims something it does not show" - so it failed work whose
+evidence the platform was holding and did not hand over. The triage step of the
+inbox workflow listed a directory, read four files and was rejected twice for
+producing "no evidence that the files were read", which stopped the workflow
+before a single draft was written. This is the same rule Phase 12 wrote for
+accepting a task (`domain.workforce.acceptance`): judge on the record, not on
+the report. The two do not merge - that one asks whether the work happened, this
+one asks whether it is any good - but they may not disagree about the facts.
 """
 
 from __future__ import annotations
@@ -38,6 +49,7 @@ class Verifier:
             "verifier",
             goal=task.goal,
             expected=_expected(plan),
+            actions=_actions(result),
             result=result.summary,
         )
         response = await self._llm.generate(
@@ -92,4 +104,35 @@ def _expected(plan: TaskPlan | None) -> str:
         + (f" -> {step.expected_outcome}" if step.expected_outcome else "")
         for step in plan.steps
     ]
+    return "\n".join(lines)
+
+
+def _actions(result: TaskResult) -> str:
+    """What the run is recorded as having done, one line per action.
+
+    Read from the result's own observations rather than from a store: the
+    verifier runs inside the same stage that produced them, and reaching for a
+    repository here would give the check a dependency it does not need and a
+    second source of truth it could disagree with.
+    """
+    observations = result.output.get("observations") or ()
+    lines = []
+    for entry in observations:
+        if not isinstance(entry, dict):
+            continue
+        details = entry.get("details") or {}
+        tool = str(details.get("tool", "")).strip()
+        if not tool:
+            continue
+        outcome = "ok" if entry.get("succeeded", True) else "failed"
+        # The name and the outcome, and deliberately not what came back. A first
+        # attempt included a truncated trace of the output and the verifier
+        # started judging the answer against it: a summary of five meeting notes
+        # was failed for naming an owner "not present in the provided text",
+        # where the text it had been shown was the first two hundred characters
+        # of one file. This section answers whether the action happened. What
+        # the action returned is in the result, which is the next section down.
+        lines.append(f"- {tool} ({outcome})")
+    if not lines:
+        return "Nothing was recorded. No tool was called during this task."
     return "\n".join(lines)

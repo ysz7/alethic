@@ -36,6 +36,7 @@ def _to_values(approval: Approval) -> dict:
             str(request.requested_by_employee_id) if request.requested_by_employee_id else None
         ),
         "action": request.action,
+        "tool": request.tool,
         "payload": request.payload,
         "risk_level": request.risk_level.value,
         "state": approval.state.value,
@@ -54,6 +55,7 @@ def _to_approval(row: ApprovalRow) -> Approval:
             id=UUID(row.id),
             task_id=UUID(row.task_id),
             action=row.action,
+            tool=row.tool or "",
             payload=row.payload or {},
             risk_level=RiskLevel(row.risk_level),
             workspace_id=WorkspaceId(row.workspace_id),

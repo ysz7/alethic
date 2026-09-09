@@ -27,6 +27,10 @@ request: >
 
 reset: [figures/comparison.md]
 
+# The document the request asks for is the document the person said yes to.
+# Nothing else, which is what keeps `tools_forbidden: [fs.move]` meaningful.
+approve: [fs.write]
+
 setup:
   figures/our-sales-september.csv: |
     product,units,unit_price_eur

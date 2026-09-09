@@ -28,6 +28,8 @@ reports failures for a switched-off desktop teaches people to stop reading it.
 from __future__ import annotations
 
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from shutil import rmtree
@@ -49,6 +51,7 @@ from domain.tools.telemetry import ToolCallLog
 from domain.validation.evidence import Evidence, Metrics, check
 from domain.validation.failures import classify
 from domain.validation.protocols import (
+    Approver,
     ObjectiveExecution,
     ScenarioRegistry,
     WorkflowExecution,
@@ -84,6 +87,7 @@ class ValidationHarness:
         memory: Memory | None = None,
         knowledge: KnowledgeService | None = None,
         workspaces: WorkspaceService | None = None,
+        approver: Approver | None = None,
     ) -> None:
         self._scenarios = scenarios
         self._runs = runs
@@ -102,6 +106,10 @@ class ValidationHarness:
         # do work, which is the restraint the whole harness rests on.
         self._knowledge = knowledge
         self._workspaces = workspaces
+        # Who answers the questions the platform decides to ask. Not a way to
+        # do work: the scenario declared the answer before the run, and this
+        # only holds it for the length of one.
+        self._approver = approver
 
     # --- Running --------------------------------------------------------------
 
@@ -153,9 +161,10 @@ class ValidationHarness:
         task_ids: tuple[UUID, ...] = ()
         cost = 0.0
         try:
-            summary, succeeded, missing_from_run, task_ids, cost = await self._ask(
-                scenario, asked_in
-            )
+            with self._answering(scenario):
+                summary, succeeded, missing_from_run, task_ids, cost = await self._ask(
+                    scenario, asked_in
+                )
         except Exception as caught:  # a scenario that raises is a finding, not a crash
             error = caught
             log.warning(
@@ -183,6 +192,11 @@ class ValidationHarness:
             results,
             error=error,
             memory_expected=Requirement.MEMORY in scenario.requires,
+            # Both lists say a refusal here is the platform behaving: one
+            # declares the call that must be refused, the other the tool that
+            # must not have run. Neither is a person the run needed.
+            expected_denials=frozenset(scenario.expect.tools_denied)
+            | frozenset(scenario.expect.tools_forbidden),
         )
         run = outcome_of(
             scenario.name,
@@ -219,6 +233,21 @@ class ValidationHarness:
         ]
 
     # --- The three doors ------------------------------------------------------
+
+    @contextmanager
+    def _answering(self, scenario: Scenario) -> Iterator[None]:
+        """Put the scenario's declared answers in front of the gate, and only here.
+
+        With no approver configured the run is unattended, which is what every
+        run was before scenarios could say otherwise - and still the right
+        default: a machine nobody asked is a machine that refuses.
+        """
+        if self._approver is None:
+            yield
+            return
+        with self._approver.answering(frozenset(scenario.approve)):
+            yield
+
 
     async def _ask(
         self, scenario: Scenario, workspace_id: WorkspaceId

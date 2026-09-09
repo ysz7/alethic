@@ -162,6 +162,18 @@ class Scenario:
     #: nothing to do with sorting. A scenario has to be able to say what must
     #: *not* be there, or the second attempt measures the first one's leftovers.
     reset: tuple[str, ...] = ()
+    #: What the person at the keyboard would have said yes to, by tool name.
+    #: Nothing else is allowed, and a scenario that declares none is a run
+    #: nobody was there for - which is what every run before this field was.
+    #:
+    #: This is part of the world the scenario sets up, like `setup` files, not
+    #: a power the harness has: a request the platform decides to make of a
+    #: person is answered the way the author said beforehand it would be. The
+    #: alternative - running the suite with approvals configured to allow -
+    #: cannot express the scenario whose whole point is a refusal, and the
+    #: alternative of leaving it unattended made "write the file you were asked
+    #: for" impossible to pass and filled the report with NEEDED_APPROVAL.
+    approve: tuple[str, ...] = ()
     inputs: dict[str, Any] = field(default_factory=dict)
     expect: Expectations = field(default_factory=Expectations)
     #: Force this into the regression set on a machine with no history of it.

@@ -134,6 +134,7 @@ class ApprovalGate:
         request = ApprovalRequest.create(
             task_id=task.id,
             action=action,
+            tool=tool.spec.name,
             payload=redact(input_data),
             risk_level=decision.risk_level,
             workspace_id=task.workspace_id,
