@@ -57,6 +57,7 @@ KNOWN_EXPECT_FIELDS = frozenset(
         "file_contains",
         "tools_denied",
         "tools_forbidden",
+        "min_employees",
         "max_cost_usd",
         "max_steps",
         "must_succeed",
@@ -269,6 +270,11 @@ def _expectations(path: Path, raw: Any) -> Expectations:
     steps = raw.get("max_steps")
     if steps is not None and (not isinstance(steps, int) or isinstance(steps, bool) or steps < 1):
         raise ConfigurationError(f"{path}: max_steps must be a whole number of 1 or more.")
+    people = raw.get("min_employees")
+    if people is not None and (
+        not isinstance(people, int) or isinstance(people, bool) or people < 1
+    ):
+        raise ConfigurationError(f"{path}: min_employees must be a whole number of 1 or more.")
 
     return Expectations(
         output_contains=_strings(path, "output_contains", raw.get("output_contains")),
@@ -277,6 +283,7 @@ def _expectations(path: Path, raw: Any) -> Expectations:
         file_contains=_files(path, "file_contains", raw.get("file_contains")),
         tools_denied=_strings(path, "tools_denied", raw.get("tools_denied")),
         tools_forbidden=_strings(path, "tools_forbidden", raw.get("tools_forbidden")),
+        min_employees=people,
         max_cost_usd=float(cost) if cost is not None else None,
         max_steps=steps,
         must_succeed=bool(raw.get("must_succeed", True)),

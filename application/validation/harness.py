@@ -408,6 +408,9 @@ class ValidationHarness:
                 interventions=answered,
                 recalled=recalled,
             ),
+            employees=len(
+                {task.assigned_employee_id for task in tasks if task.assigned_employee_id}
+            ),
             tools_used=used,
             tools_failed=failed,
             tools_denied=denied,

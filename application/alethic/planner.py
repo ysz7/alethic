@@ -18,7 +18,10 @@ checked for a cycle. Declared edges can be both, which is what makes Phase 12's
 concurrency a change of executor rather than a change of plan.
 
 **What a task needs is stated, so the workforce can be searched rather than
-read.** Each task carries the capabilities whoever takes it must offer. The
+read.** Each task carries what whoever takes it must offer - a capability, or
+the name of a connected service, because since Phase 18 those are two axes of
+the same question and the closed capability vocabulary could not express the
+second (`domain/workforce/routing.py`). The
 delegator narrows by those before showing anything to a model, which is what
 makes a declared capability worth declaring - and what makes a workforce of
 thirty a search rather than thirty cards in a prompt. A task that names none is
@@ -54,6 +57,7 @@ from domain.llm.models import LLMRequest, Message, RoutingHints, TaskKind
 from domain.llm.protocols import LLM
 from domain.tasks.task import Task, TaskCreatedBy
 from domain.workforce.protocols import Objective, Plan, PlanStatus
+from domain.workforce.routing import Requirement
 
 log = structlog.get_logger(__name__)
 
@@ -103,7 +107,9 @@ class ObjectivePlanner:
         # does not know its plan cannot be found from one, and `tasks.plan_id`
         # would be a column nothing ever filled in.
         plan_id = uuid4()
-        tasks, dependencies, requirements = self._read(parsed, objective, plan_id)
+        tasks, dependencies, requirements = self._read(
+            parsed, objective, plan_id, workforce
+        )
         if not tasks:
             log.warning("alethic.plan_unreadable", objective_id=str(objective.id))
             tasks, dependencies, requirements = (
@@ -136,19 +142,29 @@ class ObjectivePlanner:
     # --- Reading the model's answer -------------------------------------------
 
     def _read(
-        self, parsed: dict[str, object], objective: Objective, plan_id: UUID
+        self,
+        parsed: dict[str, object],
+        objective: Objective,
+        plan_id: UUID,
+        workforce: list[EmployeeDefinition],
     ) -> tuple[
         tuple[Task, ...],
         tuple[tuple[UUID, UUID], ...],
-        dict[UUID, CapabilityRequirement],
+        dict[UUID, Requirement],
     ]:
         """Turn the model's task ids into real ones, dropping what cannot be used."""
         raw = parsed.get("tasks")
         if not isinstance(raw, list | tuple):
             return (), (), {}
 
+        # The names a `needs` entry may carry beyond the capability vocabulary:
+        # what this workforce is actually granted, read off the same cards the
+        # model was shown. An invented service is dropped like an invented
+        # capability, because neither narrows to anybody.
+        offered = frozenset(name for d in workforce for name in d.integrations)
+
         tasks: dict[str, Task] = {}
-        requirements: dict[UUID, CapabilityRequirement] = {}
+        requirements: dict[UUID, Requirement] = {}
         for index, item in enumerate(raw):
             if not isinstance(item, dict):
                 continue
@@ -158,9 +174,12 @@ class ObjectivePlanner:
             key = str(item.get("id", "") or f"t{index + 1}")
             task = self._task(objective, goal, plan_id, priority=5 - min(index, 4))
             tasks[key] = task
-            needed = _capabilities(item.get("needs"))
-            if needed:
-                requirements[task.id] = CapabilityRequirement(required=needed)
+            needed, services = _needs(item.get("needs"), offered)
+            if needed or services:
+                requirements[task.id] = Requirement(
+                    capabilities=CapabilityRequirement(required=needed),
+                    services=services,
+                )
             if len(tasks) == self._max_tasks:
                 break
 
@@ -201,22 +220,32 @@ class ObjectivePlanner:
         )
 
 
-def _capabilities(raw: object) -> frozenset[Capability]:
-    """What the model said a task needs, keeping only names that exist.
+def _needs(raw: object, offered: frozenset[str]) -> tuple[frozenset[Capability], frozenset[str]]:
+    """What the model said a task needs, split into the two things it can be.
 
-    An invented capability is dropped rather than refused: a task open to the
-    whole workforce is a worse route than a narrowed one and a far better
-    outcome than a task nobody qualifies for.
+    A term is a capability if it names one, and otherwise the name of a
+    connected service somebody in this workforce holds. Anything else is
+    dropped rather than refused: a task open to the whole workforce is a worse
+    route than a narrowed one and a far better outcome than a task nobody
+    qualifies for.
     """
     if not isinstance(raw, list | tuple):
-        return frozenset()
+        return frozenset(), frozenset()
     known: set[Capability] = set()
+    services: set[str] = set()
+    by_lower = {name.lower(): name for name in offered}
     for item in raw:
+        text = str(item).strip()
         try:
-            known.add(Capability(str(item).strip().upper()))
+            known.add(Capability(text.upper()))
+            continue
         except ValueError:
-            log.info("alethic.unknown_capability", name=str(item)[:32])
-    return frozenset(known)
+            pass
+        if text.lower() in by_lower:
+            services.add(by_lower[text.lower()])
+            continue
+        log.info("alethic.unknown_capability", name=text[:32])
+    return frozenset(known), frozenset(services)
 
 
 def _remembered(lines: tuple[str, ...]) -> str:

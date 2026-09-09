@@ -62,7 +62,7 @@ from application.alethic.intent import IntentReader
 from application.alethic.planner import ObjectivePlanner
 from application.alethic.reconciliation import Reconciler, Reconciliation
 from application.alethic.supervisor import Recovery, Supervision, Supervisor
-from application.alethic.synthesis import Synthesizer, describe
+from application.alethic.synthesis import NOTHING_WAS_DONE, Synthesizer, actions, describe
 from application.alethic.verification import ObjectiveVerifier
 from application.knowledge.workspace import WorkspaceKnowledge
 from application.memory.workspace import WorkspaceMemory
@@ -188,7 +188,13 @@ class AlethicManager:
 
         rejected: tuple[str, ...] = ()
         if intent.is_answerable_directly:
-            verdict = await self._verifier.verify(objective, intent.answer)
+            # The evidence for a direct answer is that there is none. Saying so
+            # is the whole of Phase 18's fix here: three runs in a row answered
+            # this request out of a memory of the last one, and a verifier shown
+            # only the sentence had nothing to disagree with.
+            verdict = await self._verifier.verify(
+                objective, intent.answer, actions=NOTHING_WAS_DONE
+            )
             if verdict.passed:
                 return await self._answer_directly(objective, intent)
             # It said this needed no work and then could not meet the standard
@@ -303,7 +309,9 @@ class AlethicManager:
                 )
 
             verdict = await self._verifier.verify(
-                objective, describe(supervision.outcomes)
+                objective,
+                describe(supervision.outcomes),
+                actions=actions(supervision.outcomes),
             )
             await self._plans.save(
                 plan.to(PlanStatus.DONE if verdict.passed else PlanStatus.FAILED)

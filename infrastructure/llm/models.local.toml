@@ -24,7 +24,7 @@ quality = 0.8
 
 [models.local-balanced]
 provider = "local"
-model = "gpt-oss:20b"
+model = "lfm2:24b"
 capabilities = ["TEXT_REASONING", "TOOL_CALLING", "STRUCTURED_OUTPUT", "LONG_CONTEXT", "CODE"]
 context_tokens = 131072
 input_cost_per_1k_usd = 0.0

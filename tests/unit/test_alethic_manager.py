@@ -16,7 +16,7 @@ from application.alethic.intent import IntentReader
 from application.alethic.manager import AlethicManager
 from application.alethic.planner import ObjectivePlanner
 from application.alethic.supervisor import Supervisor
-from application.alethic.synthesis import Synthesizer
+from application.alethic.synthesis import NOTHING_WAS_DONE, Synthesizer, actions
 from application.alethic.verification import ObjectiveVerifier
 from domain.workforce.protocols import ObjectiveStatus
 from infrastructure.persistence.objective_repository import InMemoryObjectiveRepository
@@ -399,3 +399,35 @@ async def test_with_no_criteria_the_request_itself_becomes_the_standard() -> Non
 
     assert result.status is ObjectiveStatus.ESCALATED
     assert result.missing == ("it did not answer the question that was asked",)
+
+
+# --- What the verifier is shown -----------------------------------------------
+
+
+async def test_a_direct_answer_is_verified_against_having_done_nothing() -> None:
+    """Phase 18's worst finding, as a property of the prompt the check gets.
+
+    Three consecutive runs of the same request were answered out of a memory of
+    the previous one: the document had been written the day before, the answer
+    said what was in it, the file had been deleted before the run started, and
+    every criterion read as met. What separated that from a real result was not
+    in the text the verifier was shown.
+    """
+    llm = FakeLLM(
+        [
+            reply(intent(needs_work=False, answer="It compares as follows.")),
+            reply(verdict(True)),
+        ]
+    )
+    manager, _, _, _ = build(script=[], llm=llm)
+
+    objective = await manager.receive("Read both and leave me a comparison file")
+    await manager.handle_objective(objective)
+
+    checking = llm.requests[-1].messages[0].content
+    assert "What was actually done" in checking
+    assert NOTHING_WAS_DONE in checking
+
+
+def test_the_actions_of_a_run_that_did_nothing_are_said_in_full() -> None:
+    assert actions(()) == NOTHING_WAS_DONE

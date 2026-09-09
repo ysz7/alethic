@@ -23,6 +23,17 @@ wave work through by failing quietly. And **a verdict that passes while naming
 something missing has not passed** - that contradiction turned up in the first
 real run of this phase, and reading it either way is a choice, so it is read the
 safe way and logged.
+
+**And it is told what was actually done**, which is Phase 16's fix for the task
+verifier applied one level up, for the same reason and after a worse failure. A
+direct answer arrives here as prose and nothing else, and the check that is
+supposed to stop "needs no work" from closing a request that asked for a file
+was being handed only the sentence claiming it was done. Three consecutive
+Phase 18 runs of the same request were answered from a memory of the last one -
+the document had been written yesterday, the answer said what it contained, and
+the file had been deleted before the run started. Every criterion read as met.
+What separates that from a real result is not in the text, so the text is no
+longer all this sees.
 """
 
 from __future__ import annotations
@@ -46,7 +57,15 @@ class ObjectiveVerifier:
     def __init__(self, llm: LLM) -> None:
         self._llm = llm
 
-    async def verify(self, objective: Objective, results: str) -> Verdict:
+    async def verify(
+        self, objective: Objective, results: str, *, actions: str = ""
+    ) -> Verdict:
+        """`actions` is what the platform records as having happened.
+
+        Empty is allowed and means "not stated", not "nothing happened" - the
+        two are different and only the caller can tell them apart, so nothing
+        here guesses.
+        """
         if not results.strip():
             # Nothing came back. No model call is needed to know that is not it.
             return Verdict.rejected(
@@ -65,6 +84,7 @@ class ObjectiveVerifier:
             objective=objective.text,
             criteria=_criteria(objective),
             results=results,
+            actions=actions.strip() or "Not recorded.",
         )
         response = await self._llm.generate(
             LLMRequest(

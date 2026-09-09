@@ -9,12 +9,17 @@ on the next run. `tests/unit/test_alethic_governance.py` enforces that by readin
 included, because a name in a comment is a name that will be in a branch later.
 
 **The field is narrowed by what the work needs, before anybody is asked.** The
-plan says what each task requires; `EmployeeRegistry.find_by_capability` answers
-who offers it. That is what makes a declared capability worth declaring, and it
-is what keeps a workforce of thirty a search rather than thirty cards in a
-prompt. Narrowing that leaves nobody is discarded rather than obeyed - a task
-routed to no one is worse than a task routed imperfectly, and the requirement
-was a hint about the work, not a rule about the workforce.
+plan says what each task requires - a capability, or the name of a connected
+service - and `EmployeeRegistry.find_by_capability` and
+`domain.workforce.routing.holders` answer who qualifies. The second axis is
+Phase 18's: every term in the capability vocabulary is already claimed by
+somebody the platform ships with, so an integration could only ever contribute
+one that four employees already declare. Narrowing is what makes a declared
+capability worth declaring, and what keeps a workforce of thirty a search rather
+than thirty cards in a prompt. A narrowing that leaves nobody is discarded
+rather than obeyed - a task routed to no one is worse than a task routed
+imperfectly, and the requirement was a hint about the work, not a rule about the
+workforce.
 
 **One candidate needs no model call.** A workforce of one has nothing to choose
 between, and asking a model to pick from a list of one spends money to be told
@@ -50,6 +55,7 @@ from domain.policies.models import Actor, ActorKind, SimpleActor, effective_tool
 from domain.secrets.models import is_sensitive
 from domain.tasks.task import Task
 from domain.workforce.assignment import SharedContext, TaskAssignment
+from domain.workforce.routing import MIN_DELEGATION_QUALITY, Requirement, holders
 
 log = structlog.get_logger(__name__)
 
@@ -78,7 +84,7 @@ class CapabilityDelegator:
         llm: LLM,
         registry: EmployeeRegistry,
         *,
-        requirement: CapabilityRequirement | None = None,
+        requirement: Requirement | None = None,
     ) -> None:
         self._llm = llm
         self._registry = registry
@@ -90,7 +96,7 @@ class CapabilityDelegator:
         *,
         context: SharedContext | None = None,
         avoid: set[str] | None = None,
-        requirement: CapabilityRequirement | None = None,
+        requirement: Requirement | None = None,
     ) -> tuple[EmployeeDefinition, SharedContext, str]:
         """Who should do this, what they are told, and why they were picked.
 
@@ -137,11 +143,17 @@ class CapabilityDelegator:
 
     @staticmethod
     def routing() -> tuple[TaskKind, CapabilityRequirement, RoutingHints]:
-        """Picking from a short list of cards. Cheap work, done once per task."""
+        """Short work, and not cheap work: see `MIN_DELEGATION_QUALITY`.
+
+        Still `EXTRACTION` - a card is read and a name comes back, which is what
+        that kind describes - but with a floor under it, so a catalog whose
+        cheapest entry is the default for extraction cannot be the thing that
+        decides who does the work.
+        """
         return (
             TaskKind.EXTRACTION,
-            CapabilityRequirement(),
-            RoutingHints(quality=0.5, cost_sensitivity=0.7),
+            CapabilityRequirement(min_quality=MIN_DELEGATION_QUALITY),
+            RoutingHints(quality=0.6, cost_sensitivity=0.6),
         )
 
     async def delegate(self, task: Task) -> TaskAssignment:
@@ -159,26 +171,37 @@ class CapabilityDelegator:
     # --- Internals ------------------------------------------------------------
 
     def _candidates(
-        self, task: Task, requirement: CapabilityRequirement | None
+        self, task: Task, requirement: Requirement | None
     ) -> list[EmployeeDefinition]:
-        """Who could take this, narrowed by what it needs where that is known."""
+        """Who could take this, narrowed by what it needs where that is known.
+
+        Both axes narrow, and neither refuses. Nobody declaring what the task
+        asks for is worth saying - it is usually a missing declaration rather
+        than a missing employee - and is answered by widening back to the
+        previous field rather than by failing the task.
+        """
         wanted = requirement or self._requirement
         everyone = self._registry.list(task.workspace_id)
-        if wanted is None or not wanted.required:
+        if wanted is None or not wanted.narrows:
             return everyone
 
-        found = self._registry.find_by_capability(wanted)
-        if not found:
-            # Nobody declares it. That is worth saying - it is usually a missing
-            # declaration rather than a missing employee - but not worth
-            # refusing over, so the whole workforce is considered instead.
-            log.info(
-                "alethic.no_one_declares",
-                task_id=str(task.id),
-                needed=sorted(c.value for c in wanted.required),
+        found = everyone
+        if wanted.capabilities.required:
+            found = self._registry.find_by_capability(wanted.capabilities) or self._said(
+                task, sorted(c.value for c in wanted.capabilities.required), everyone
             )
-            return everyone
+        if wanted.services:
+            found = holders(found, wanted.services) or self._said(
+                task, sorted(wanted.services), found
+            )
         return found
+
+    @staticmethod
+    def _said(
+        task: Task, needed: list[str], fallback: list[EmployeeDefinition]
+    ) -> list[EmployeeDefinition]:
+        log.info("alethic.no_one_declares", task_id=str(task.id), needed=needed)
+        return fallback
 
     async def _ask(
         self, task: Task, candidates: list[EmployeeDefinition]
@@ -219,13 +242,10 @@ class CapabilityDelegator:
         )
 
 
-def _why_only(requirement: CapabilityRequirement | None) -> str:
+def _why_only(requirement: Requirement | None) -> str:
     """Why a field of one is a field of one - narrowed, or simply small."""
-    if requirement is not None and requirement.required:
-        return (
-            "the only employee that declares "
-            + ", ".join(sorted(c.value for c in requirement.required))
-        )
+    if requirement is not None and requirement.narrows:
+        return "the only employee that declares " + requirement.describe()
     return "the only employee available for this task"
 
 

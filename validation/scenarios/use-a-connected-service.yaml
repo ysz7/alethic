@@ -25,10 +25,17 @@
 #   POST /api/integrations/<id>/connect
 #   POST /api/integrations/<id>/capabilities  {"effects": {"search_notes": "READ"}}
 #
-# and grant it to an employee by adding `integrations: [notes]` to its
-# declaration. Classifying `search_notes` as READ is part of the setup on
-# purpose: unclassified it is EXECUTE, which is HIGH, and this scenario would
-# spend itself on a question about the search rather than on the search.
+# and grant it to ONE employee by adding `integrations: [notes]` to its
+# declaration. One, not several: since Phase 18 a task may require a service by
+# name, so the grant is what the routing narrows on (ADR 0018). Granting it to
+# everybody who might be given the work was Phase 14's workaround for a closed
+# capability vocabulary, and it is no longer needed - the run that validated
+# this held it on the researcher alone, and every delegation read "the only
+# employee that declares notes".
+#
+# Classifying `search_notes` as READ is part of the setup on purpose:
+# unclassified it is EXECUTE, which is HIGH, and this scenario would spend
+# itself on a question about the search rather than on the search.
 
 name: use-a-connected-service
 description: >

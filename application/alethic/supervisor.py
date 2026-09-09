@@ -55,13 +55,14 @@ import structlog
 
 from application.alethic.delegation import CapabilityDelegator
 from application.workforce.coordinator import WorkforceCoordinator
-from domain.capabilities.models import CapabilityRequirement
 from domain.policies.models import ActorKind
 from domain.tasks.progress import NullProgress, ProgressEvent, ProgressKind, ProgressSink
 from domain.tasks.task import Task, TaskStatus
+from domain.tools.refusals import REFUSED
 from domain.workforce.acceptance import Acceptance, accept
 from domain.workforce.assignment import SharedContext, TaskAssignment
 from domain.workforce.protocols import Plan, PlanProgress, TaskExecution
+from domain.workforce.routing import Requirement
 
 log = structlog.get_logger(__name__)
 
@@ -182,11 +183,26 @@ _TRANSIENT_ERRORS = frozenset(
 
 
 def _was_refused_a_tool(task: Task) -> bool:
+    """Whether any call in this run never reached its tool.
+
+    Read from the flag the executor writes, not from the sentence it writes
+    beside it. This used to look for "may not use" in an observation's summary,
+    which is the one thing recovery is not allowed to be decided by (§ recovery
+    is chosen by the kind of failure, never by message text) - and it read only
+    half of what refused means. `domain.tools.refusals` states the other half:
+    a call is refused when the employee may not have the tool *or when a person
+    said no*, and the approval gate writes the same flag for both.
+
+    The cost of the narrow reading was measured rather than argued. A Phase 18
+    run gave a comparison to the one employee that can run code, the person at
+    the keyboard declined `code.run`, and the task came back refused - and was
+    read as a bad plan, replanned into the same task, given to the same
+    employee, and declined again. Reassignment would have handed it to somebody
+    who could have done it by reading the two files.
+    """
     observations = (task.result.output.get("observations") if task.result else None) or ()
     return any(
-        isinstance(item, dict)
-        and not item.get("succeeded", True)
-        and "may not use" in str(item.get("summary", ""))
+        isinstance(item, dict) and (item.get("details") or {}).get(REFUSED)
         for item in observations
     )
 
@@ -243,6 +259,19 @@ class Supervisor:
                         plan.requirements.get(planned.id),
                     )
 
+            # Said out loud because Phase 18 could not answer "did anybody
+            # actually work at the same time" from a recorded run. The width of
+            # a wave is a property of the plan, not of this loop, and the loop
+            # is the only place that knows it. Not a `ProgressEvent`: the six
+            # kinds stay six, and this is for whoever reads the log of a
+            # validation run rather than for the trace a person watches.
+            log.info(
+                "alethic.wave",
+                plan_id=str(plan.id),
+                width=len(ready),
+                limit=self._max_parallel,
+                task_ids=[str(planned.id) for planned in ready],
+            )
             wave = await asyncio.gather(*(carry(planned) for planned in ready))
 
             # Read in plan order, whatever order they finished in: a run that
@@ -296,7 +325,7 @@ class Supervisor:
         planned: Task,
         context: SharedContext,
         objective_id: UUID | None,
-        requirement: CapabilityRequirement | None = None,
+        requirement: Requirement | None = None,
     ) -> TaskOutcome:
         """Give one task to somebody, and try again if that is what the failure wants."""
         attempt = 1
@@ -332,7 +361,7 @@ class Supervisor:
         context: SharedContext,
         objective_id: UUID | None,
         avoid: set[str],
-        requirement: CapabilityRequirement | None = None,
+        requirement: Requirement | None = None,
     ) -> TaskOutcome:
         # `DelegationError` is deliberately not caught here. It means the machine
         # has no declared employee at all - a fact about the workforce, not

@@ -33,26 +33,18 @@ FORM = re.compile(r"```json\n(.*?)```", re.DOTALL)
 
 #: Prompts that still show a filled example, and have not been rewritten.
 #:
-#: Not an exemption - a queue. Each is the same trap as the two that have
-#: already cost something, and each needs its own validation run before it is
-#: changed: these forms are what weaker models lean on to produce a shape at
-#: all, and swapping them for empty ones is a behaviour change that has to be
-#: measured rather than assumed. The list may only shrink; a new prompt showing
-#: a filled form fails immediately, which is the point.
-KNOWN_UNFIXED = frozenset(
-    {
-        "alethic_delegation",  # shows an employee name a model can copy
-        # Its one boolean is shown as `true`, and that is the deliberate side to
-        # copy: an unreadable answer means *consistent*, because a check that
-        # escalates whenever its model stutters teaches the user to ignore it
-        # (ADR 0013's companion rule). Emptying this form means dropping the
-        # field, which is a change to the contract rather than to the wording.
-        "alethic_reconciliation",
-        "alethic_planner",
-        "planner",
-        "screen_reader",  # shows plausible pixel coordinates
-    }
-)
+#: Not an exemption - a queue, and since Phase 18 an empty one. All five were
+#: rewritten under one validation run, which is what the queue was waiting for:
+#: these forms are what weaker models lean on to produce a shape at all, and
+#: swapping them for empty ones is a behaviour change that had to be measured
+#: rather than assumed. Four of them lost their example and gained prose
+#: describing the shape; `alethic_reconciliation` lost the field instead, because
+#: its one value was a `true` that meant "nothing to report" and is now read off
+#: the list of contradictions being empty.
+#:
+#: The list may only shrink, and it has nothing left to shrink by. A new prompt
+#: showing a filled form fails immediately, which is the point.
+KNOWN_UNFIXED: frozenset[str] = frozenset()
 
 
 def current_prompts() -> list[tuple[str, Path]]:

@@ -100,6 +100,15 @@ class Expectations:
     tools_denied: tuple[str, ...] = ()
     #: Tools that must not have run successfully, whoever allowed them.
     tools_forbidden: tuple[str, ...] = ()
+    #: How many different people the work had to reach. A floor rather than a
+    #: ceiling, and the only expectation here about *how* a result was arrived
+    #: at - which is exactly why Phase 18 needed it. A scenario called "a team
+    #: on one objective" passed twice with one employee doing both ends of its
+    #: own plan: every declared check was about the file, so the scenario could
+    #: not fail for the reason it was written. Whether several people were
+    #: involved is not visible in an output, and a claim nothing can falsify is
+    #: not a measurement.
+    min_employees: int | None = None
     #: Ceilings, not targets. A run that answers correctly and costs ten times
     #: what it should is a failure of a kind no output check can see.
     max_cost_usd: float | None = None
@@ -123,6 +132,7 @@ class Expectations:
             or self.file_contains
             or self.tools_denied
             or self.tools_forbidden
+            or self.min_employees is not None
             or self.max_cost_usd is not None
             or self.max_steps is not None
         )

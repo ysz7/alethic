@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from application.alethic.delegation import CapabilityDelegator
 from application.alethic.supervisor import Recovery, Supervisor, classify
 from domain.employees.limits import LimitKind
@@ -143,7 +145,19 @@ def test_a_transient_failure_is_retried_by_the_same_employee() -> None:
     assert classify(failed) is Recovery.RETRY
 
 
-def test_a_refused_tool_sends_the_task_to_somebody_else() -> None:
+@pytest.mark.parametrize(
+    "summary",
+    [
+        # The two ways a call never reaches its tool. Both are refusals
+        # (`domain.tools.refusals`), and the recovery has to read the flag
+        # rather than either sentence: Phase 18 watched an approval refusal be
+        # replanned into the same task for the same employee, because only the
+        # first of these two wordings was recognised.
+        "web.search failed: EMPLOYEE 'x' may not use 'web.search'",
+        "web.search was not approved.",
+    ],
+)
+def test_a_refused_tool_sends_the_task_to_somebody_else(summary: str) -> None:
     task = Task.create("Look it up")
     failed = task.transition_to(
         TaskStatus.FAILED,
@@ -154,7 +168,8 @@ def test_a_refused_tool_sends_the_task_to_somebody_else() -> None:
                 "observations": [
                     {
                         "succeeded": False,
-                        "summary": "web.search failed: EMPLOYEE 'x' may not use 'web.search'",
+                        "summary": summary,
+                        "details": {"tool": "web.search", "refused": True},
                     }
                 ]
             },
@@ -162,6 +177,29 @@ def test_a_refused_tool_sends_the_task_to_somebody_else() -> None:
     )[0]
 
     assert classify(failed) is Recovery.REASSIGN
+
+
+def test_a_tool_that_ran_and_failed_is_not_a_refusal() -> None:
+    """Refused is not failed: a page that timed out may work on the next call."""
+    task = Task.create("Look it up")
+    failed = task.transition_to(
+        TaskStatus.FAILED,
+        error=TaskError(kind="VerificationFailed", message="nothing found"),
+        result=TaskResult(
+            summary="",
+            output={
+                "observations": [
+                    {
+                        "succeeded": False,
+                        "summary": "web.search failed: the search timed out",
+                        "details": {"tool": "web.search"},
+                    }
+                ]
+            },
+        ),
+    )[0]
+
+    assert classify(failed) is Recovery.REPLAN
 
 
 def test_running_out_of_budget_calls_for_a_different_plan() -> None:

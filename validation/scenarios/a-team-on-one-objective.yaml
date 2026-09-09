@@ -45,6 +45,14 @@ setup:
 
 expect:
   files_exist: [figures/comparison.md]
+  # The scenario's own name, made falsifiable. Phase 18 watched this pass twice
+  # with one employee taking both ends of its own two-task plan: every other
+  # check here is about the file, and a file says nothing about who wrote it.
+  # Two rather than three - the request has three jobs in it and a decomposition
+  # that merges the two readings is a defensible plan, while one that gives the
+  # gathering and the writing to the same person has not divided the work at
+  # all.
+  min_employees: 2
   file_contains:
     # One number from each source, which is the cheapest available proof that
     # both branches ran and that both reached the employee that wrote the file.

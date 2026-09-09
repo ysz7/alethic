@@ -10,6 +10,15 @@ What goes into the card is what a manager would need to choose: the role, what
 the person is for, and - decisively - the tools they are allowed to use, because
 that is the whole of what they can actually reach. Someone with no web tools
 cannot look anything up, however well their role reads against the task.
+
+Since Phase 18 the card also names the *services* this person was granted. The
+tools those brought were already in the list, namespaced by the service, and
+that turned out not to be enough: a name buried among a dozen `fs.*` entries is
+not something a plan can be narrowed by. Named on its own line it is a term the
+planner can write into a task's `needs`, and `domain.workforce.routing` turns it
+into a field of the people who actually hold it - which is the whole of the fix
+for work that went to whoever the model liked rather than to whoever could
+reach the service.
 """
 
 from __future__ import annotations
@@ -29,6 +38,10 @@ def _card(definition: EmployeeDefinition) -> str:
     if definition.role.description:
         lines.append(definition.role.description.strip())
     lines.append(f"Tools they may use: {', '.join(sorted(definition.allowed_tools)) or 'none'}")
+    if definition.integrations:
+        lines.append(
+            "Connected services they hold: " + ", ".join(sorted(definition.integrations))
+        )
     if definition.goals:
         lines.append(
             "They always try to: "

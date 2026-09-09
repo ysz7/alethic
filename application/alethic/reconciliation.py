@@ -26,6 +26,14 @@ this package, and deliberately so: a verifier that cannot be read must not wave
 work through, because its job is to doubt. This one's job is to notice
 something unusual, and a parse failure is not evidence of a contradiction. A
 check that escalates whenever its model stutters teaches the user to ignore it.
+
+That last rule used to sit awkwardly with the prompt, which asked for a
+`consistent` boolean and had to show it as `true` - the one value in any form
+here that a model was invited to copy, and the reason this prompt sat in
+`tests/unit/test_prompt_forms.py`'s queue. Phase 18 dropped the field instead of
+emptying it: the list of contradictions was always the specific claim, and
+consistency is now read off it. The safe answer and the empty form are the same
+answer, which is what the rule wanted all along.
 """
 
 from __future__ import annotations
@@ -98,13 +106,18 @@ class Reconciler:
             log.warning("alethic.reconciliation_unreadable", objective_id=str(objective.id))
             return Reconciliation()
 
-        conflicts = tuple(
-            text for item in parsed.get("conflicts", ()) or () if (text := str(item).strip())
+        raw = parsed.get("conflicts") or ()
+        conflicts = (
+            tuple(text for item in raw if (text := str(item).strip()))
+            if isinstance(raw, list | tuple)
+            else ()
         )
-        # Consistent and then a list of contradictions is the same self-
-        # contradiction the objective verifier meets, read the same way: the
-        # list is the specific claim.
-        consistent = bool(parsed.get("consistent", True)) and not conflicts
+        # There is no `consistent` field to disagree with: the list of
+        # contradictions was always the specific claim, and a boolean beside it
+        # could only ever be the vaguer half of a self-contradiction. No
+        # conflicts named is agreement, and so is an answer that named none
+        # because it could not be read.
+        consistent = not conflicts
         resolution = (
             str(parsed.get("resolution", "")).strip()
             if bool(parsed.get("resolvable", False))

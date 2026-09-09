@@ -95,6 +95,10 @@ class Evidence:
     file_text: dict[str, str] = field(default_factory=dict)
     #: The exception type that ended the run, if one did. A type, never a
     #: message: the platform classifies failures by type everywhere else.
+    #: How many different employees the run's tasks were assigned to. A count
+    #: rather than names: the question a scenario asks is whether the work was
+    #: shared, and the names are on the task rows for anybody reading one run.
+    employees: int = 0
     error_type: str = ""
     error_message: str = ""
 
@@ -193,6 +197,16 @@ def check(expect: Expectations, evidence: Evidence) -> tuple[CheckResult, ...]:
     for tool in expect.tools_forbidden:
         results.append(
             _result(f"{tool} never ran", tool not in used, "" if tool not in used else "it ran")
+        )
+
+    if expect.min_employees is not None:
+        involved = evidence.employees
+        results.append(
+            _result(
+                f"at least {expect.min_employees} employee(s)",
+                involved >= expect.min_employees,
+                "" if involved >= expect.min_employees else f"the work reached {involved}",
+            )
         )
 
     if expect.max_cost_usd is not None:

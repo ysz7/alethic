@@ -108,6 +108,46 @@ def describe(outcomes: tuple[TaskOutcome, ...]) -> str:
     return "\n\n".join(blocks)
 
 
+def actions(outcomes: tuple[TaskOutcome, ...]) -> str:
+    """What the platform records as having happened, one line per action.
+
+    The name of each tool and whether it worked, and deliberately nothing else:
+    the verifier's question here is whether the thing was done, and showing it
+    what a call returned turns it into a second reader of the material (the
+    employee verifier learned that in Phase 16 and the note is on `_actions`
+    there).
+
+    Its most important output is the empty case. An objective that ran no tasks
+    at all - because the manager decided the request needed none - says so in
+    one sentence, and that sentence is the difference between a verdict on a
+    result and a verdict on a description of one.
+    """
+    lines: list[str] = []
+    for outcome in outcomes:
+        observations = (outcome.task.result.output.get("observations") or ()) if (
+            outcome.task.result
+        ) else ()
+        for entry in observations:
+            if not isinstance(entry, dict):
+                continue
+            tool = str((entry.get("details") or {}).get("tool", "")).strip()
+            if not tool:
+                continue
+            lines.append(f"- {tool} ({'ok' if entry.get('succeeded', True) else 'failed'})")
+    if not lines:
+        return NOTHING_WAS_DONE
+    return "\n".join(lines)
+
+
+#: Said in full rather than left as an empty section, because a heading with
+#: nothing under it reads as missing information rather than as information.
+NOTHING_WAS_DONE = (
+    "Nothing. No task was run, no tool was called, and no file was created or "
+    "changed. Whatever the result says was produced from the request itself and "
+    "from what was already remembered here, not from doing the work."
+)
+
+
 def _criteria(objective: Objective) -> str:
     if not objective.acceptance_criteria:
         return "not stated"
