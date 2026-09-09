@@ -15,19 +15,57 @@ import {
   type Integration,
 } from "../../../entities/integration";
 import { MemoryLine } from "../../../entities/memory";
+import {
+  ConnectionCard,
+  ModelRow,
+  type Connection,
+  type ModelEntry,
+} from "../../../entities/provider";
 import { WorkspaceRow, type Workspace } from "../../../entities/workspace";
 import { AddIntegrationForm } from "../../../features/add-integration";
 import { IntegrationActions } from "../../../features/manage-integration";
 import { AddDocumentForm, DocumentActions } from "../../../features/manage-documents";
+import {
+  AddConnectionForm,
+  AddModelForm,
+  WorkRouting,
+} from "../../../features/manage-providers";
 import { NewWorkspaceForm } from "../../../features/switch-workspace";
 import { useRuntime } from "../../../shared/api";
 import { useWorkspaces } from "../../../widgets/workspace-bar";
 import { useDocuments } from "../model/useDocuments";
 import { useIntegrations } from "../model/useIntegrations";
 import { useMemory } from "../model/useMemory";
+import { useProviders } from "../model/useProviders";
 
 /** Offered when adding a service. The core refuses anything outside its own list. */
 const CAPABILITIES = ["EMAIL", "WEB_BROWSING", "FILE_ACCESS", "CODE"];
+
+/** What a model may be picked for. The router refuses anything outside its list. */
+const MODEL_CAPABILITIES = [
+  "TEXT_REASONING",
+  "TOOL_CALLING",
+  "STRUCTURED_OUTPUT",
+  "LONG_CONTEXT",
+  "CODE",
+  "VISION",
+  "EMBEDDING",
+];
+
+/**
+ * The kinds of work a model can be given, in the order they happen in a run.
+ * Named here only to lay the rows out; what each one means, and which model it
+ * would otherwise reach, is the router's answer and arrives from the runtime.
+ */
+const TASK_KINDS = [
+  "PLANNING",
+  "EXECUTION",
+  "VERIFICATION",
+  "SYNTHESIS",
+  "EXTRACTION",
+  "CONVERSATION",
+  "EMBEDDING",
+];
 
 export function SettingsPage({ onSwitched }: { onSwitched?: () => void } = {}) {
   const client = useRuntime();
@@ -36,6 +74,7 @@ export function SettingsPage({ onSwitched }: { onSwitched?: () => void } = {}) {
   const workspaces = useWorkspaces(client, onSwitched);
   const documents = useDocuments(client);
   const memory = useMemory(client);
+  const providers = useProviders(client);
 
   return (
     <section className="settings" aria-label="Settings">
@@ -124,6 +163,73 @@ export function SettingsPage({ onSwitched }: { onSwitched?: () => void } = {}) {
           ))}
         </ul>
       )}
+
+      <h2>Providers and models</h2>
+      <p className="note">
+        A provider is a kind; a connection is an account. Two keys to one vendor
+        are two connections, and a model says which one it is reached through.
+        A key is stored encrypted and never shown again - only replaced.
+      </p>
+      {providers.problem && (
+        <p className="problem" role="alert">
+          {providers.problem}
+        </p>
+      )}
+      {providers.settings.connections.length === 0 && providers.ready && (
+        <p className="note">
+          Nothing added. The machine is using whatever key it was configured
+          with and the models it shipped with.
+        </p>
+      )}
+      {providers.settings.connections.map((connection: Connection) => (
+        <ConnectionCard
+          key={connection.id}
+          connection={connection}
+          actions={
+            <div className="actions">
+              <button type="button" onClick={() => void providers.dropProvider(connection.name)}>
+                Remove
+              </button>
+            </div>
+          }
+        />
+      ))}
+      <AddConnectionForm kinds={providers.settings.kinds} onAdd={providers.addProvider} />
+
+      <h3>Models</h3>
+      {providers.settings.models.map((entry: ModelEntry) => (
+        <ModelRow
+          key={entry.name}
+          entry={entry}
+          actions={
+            <div className="actions">
+              <button type="button" onClick={() => void providers.dropEntry(entry.name)}>
+                Remove
+              </button>
+            </div>
+          }
+        />
+      ))}
+      {providers.settings.connections.length > 0 && (
+        <AddModelForm
+          connections={providers.settings.connections}
+          installed={providers.installed}
+          onAdd={providers.addEntry}
+          known={MODEL_CAPABILITIES}
+        />
+      )}
+
+      <h3>Where work goes</h3>
+      <p className="note">
+        Each kind of work can be given to one model. Left to the router, it
+        picks from what the work needs and what each model can do.
+      </p>
+      <WorkRouting
+        kinds={TASK_KINDS}
+        defaults={providers.settings.defaults}
+        models={providers.settings.models}
+        onRoute={providers.route}
+      />
 
       <h2>Integrations</h2>
       {!available && ready && (

@@ -27,9 +27,11 @@ from domain.employees.definition import EmployeeDefinition
 from domain.integrations.models import Integration
 from domain.integrations.specs import spec_for
 from domain.knowledge.models import Document, Passage
+from domain.llm.catalog import ModelEntry
 from domain.memory.models import MemoryItem
 from domain.policies.risk import at_least
 from domain.policies.rules import APPROVAL_THRESHOLD
+from domain.providers.models import Connection
 from domain.tasks.task import Task, TaskEvent
 from domain.tools.telemetry import ToolCallRecord
 from domain.workforce.protocols import Objective, Plan
@@ -371,4 +373,57 @@ def memory_item(item: MemoryItem) -> dict[str, Any]:
         "importance": round(item.importance, 3),
         "created_at": item.created_at.isoformat(),
         "expires_at": item.expires_at.isoformat() if item.expires_at else "",
+    }
+
+
+def connection(item: Connection, *, has_key: bool) -> dict[str, Any]:
+    """One way in to a provider, as a settings page sees it.
+
+    `has_key` and never the key. The value is not returned by any method on
+    this boundary and not held in any view: a page that can display a
+    credential is a page that puts one in a screenshot, a bug report and a log,
+    and there is nothing a person does with a key they already typed except
+    replace it.
+    """
+    return {
+        "id": str(item.id),
+        "name": item.name,
+        "kind": item.kind,
+        "base_url": item.base_url,
+        "description": item.description,
+        "needs_credential": item.needs_credential,
+        "has_key": has_key,
+        "usable": item.is_usable and (has_key or not item.needs_credential),
+    }
+
+
+def provider_kind(kind: Any) -> dict[str, Any]:
+    """One kind of provider this machine can talk to."""
+    return {
+        "name": kind.name,
+        "label": kind.label,
+        "needs_credential": kind.needs_credential,
+        "default_base_url": kind.default_base_url,
+    }
+
+
+def model_entry(entry: ModelEntry, *, used_for: tuple[str, ...] = ()) -> dict[str, Any]:
+    """One catalog entry, with the work that currently goes to it.
+
+    `used_for` is here rather than left to the page because it is the thing a
+    person is about to act on: removing an entry that planning depends on is a
+    different decision from removing one nothing points at.
+    """
+    return {
+        "name": entry.name,
+        "provider": entry.provider,
+        "model": entry.model,
+        "connection": entry.connection,
+        "capabilities": sorted(item.value for item in entry.capabilities),
+        "context_tokens": entry.context_tokens,
+        "input_cost_per_1k_usd": entry.input_cost_per_1k_usd,
+        "output_cost_per_1k_usd": entry.output_cost_per_1k_usd,
+        "quality": entry.quality,
+        "dimensions": entry.dimensions,
+        "used_for": list(used_for),
     }

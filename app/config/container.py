@@ -39,6 +39,7 @@ from application.memory.consolidation import Consolidator
 from application.memory.distiller import OutcomeDistiller
 from application.memory.recorder import MemoryRecorder
 from application.memory.workspace import WorkspaceMemory
+from application.providers.service import ProviderService
 from application.task_runner import TaskRunner
 from application.validation.harness import ValidationHarness
 from application.workflows.engine import WorkflowEngine
@@ -48,6 +49,8 @@ from domain.employees.definition import EmployeeDefinition
 from domain.errors import AlethicError
 from infrastructure.container import Container
 from infrastructure.knowledge.extraction import Extractors
+from infrastructure.llm.discovery import installed_models
+from infrastructure.llm.providers import KINDS
 from infrastructure.mcp.connector import cached_connector, mcp_connector
 from infrastructure.validation.approver import DeclaredApprover
 
@@ -104,6 +107,45 @@ async def load_grants(container: Container) -> None:
         container.logger.warning("integrations.not_read", error=str(error))
 
 
+async def _restore_credentials(container: Container) -> None:
+    """Load the sealed credentials, and take over from the file store once.
+
+    The import runs on every start and does nothing after the first: a name
+    already in the store is skipped, so this costs one query on a machine that
+    was never on the old version. The file is left where it is - see
+    `Container.legacy_credentials` for why.
+    """
+    credentials = container.credential_store
+    restore = getattr(credentials, "restore", None)
+    if restore is None:
+        return
+    try:
+        await restore()
+        legacy = container.legacy_credentials
+        names = await legacy.names()
+        if names:
+            await credentials.import_from(legacy, names)  # type: ignore[attr-defined]
+    except AlethicError as error:
+        container.logger.warning("credentials.not_restored", error=str(error))
+
+
+async def _load_catalog(container: Container) -> None:
+    """Replace the shipped catalog with what this installation holds.
+
+    Guarded, like everything else here: a machine whose catalog rows cannot be
+    read runs on the file it shipped with, which is the configuration a fresh
+    clone has and a perfectly good one. Failing to start because a settings
+    table is unreadable would turn an editable preference into a hard dependency.
+    """
+    await container.connection_directory.restore()
+    if container.catalog_source.is_overridden:
+        return
+    try:
+        container.use_catalog(await container.catalog_source.load())
+    except AlethicError as error:
+        container.logger.warning("catalog.not_loaded", error=str(error))
+
+
 async def prepare(container: Container) -> None:
     """Everything that has to be true before this process does any work.
 
@@ -119,12 +161,19 @@ async def prepare(container: Container) -> None:
     service that has not been restored yet reads, correctly but uselessly, as a
     grant to a service nobody connected.
 
+    The credentials are restored before both, because an integration reached
+    during the restore resolves a secret, and a resolver that has not read its
+    rows yet answers "no such credential" - which is indistinguishable from the
+    user never having entered one.
+
     Restoring is guarded the way remembering is: a machine whose integration
     store cannot be read should run the work it was asked for without them,
     with a line in the log saying so. Losing a capability is worse than not
     having it, and losing the whole run over it is worse again.
     """
     await build_workspaces(container).list()
+    await _restore_credentials(container)
+    await _load_catalog(container)
     integrations = getattr(container, "integrations", None)
     if integrations is not None:
         try:
@@ -351,11 +400,8 @@ def build_service(
             knowledge=build_knowledge(container),
             retriever=container.retriever,
             memory=container.memory,
-            credentials=(
-                container.credential_store
-                if container.settings.integrations_enabled
-                else None
-            ),
+            credentials=container.credential_store,
+            providers=build_providers(container),
             history_limit=history_limit,
         )
     )
@@ -372,6 +418,32 @@ def build_workflow_engine(container: Container) -> WorkflowEngine:
         container.workflow_registry,
         build_task_runner(container),
         container.workflow_runs,
+    )
+
+
+def build_providers(container: Container) -> ProviderService:
+    """Settings for providers, models and where work goes.
+
+    The kinds and the discovery function are handed in from here: the list of
+    what this machine can talk to belongs beside the adapters, and the
+    application layer may not import them (ADR 0001).
+
+    `on_change` is what makes a settings page take effect without a restart -
+    the catalog is re-read and anything built from it is dropped.
+    """
+
+    async def reload() -> None:
+        await container.connection_directory.restore()
+        if not container.catalog_source.is_overridden:
+            container.use_catalog(await container.catalog_source.load())
+
+    return ProviderService(
+        container.connections,
+        container.catalog_repository,
+        credentials=container.credential_store,
+        kinds=KINDS,
+        discover=installed_models,
+        on_change=reload,
     )
 
 

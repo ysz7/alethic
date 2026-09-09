@@ -135,6 +135,10 @@ class ModelChoice:
     provider: str
     model: str
     reason: str = ""
+    #: Which configured way in to that provider to use, by name. Empty means
+    #: the one the machine was configured with - which is what every choice
+    #: meant before a person could add a second account to one provider.
+    connection: str = ""
 
 
 @dataclass(frozen=True, slots=True)

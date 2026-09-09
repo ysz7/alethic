@@ -123,6 +123,48 @@ class NewConversation(BaseModel):
     title: str = ""
 
 
+class NewConnection(BaseModel):
+    """What a person typed into "Add provider".
+
+    `api_key` comes in and is never sent back by anything: it goes straight to
+    the credential store, and every view of a connection carries `has_key`
+    instead. A response body that echoed it would put a live key in a browser's
+    network log.
+    """
+
+    name: str = Field(min_length=1, max_length=120)
+    kind: str = Field(min_length=1, max_length=32)
+    api_key: str = ""
+    base_url: str = ""
+    description: str = ""
+
+
+class NewKey(BaseModel):
+    api_key: str = Field(min_length=1)
+
+
+class NewModel(BaseModel):
+    """One catalog entry, as the settings page describes it."""
+
+    name: str = Field(min_length=1, max_length=120)
+    provider: str = Field(min_length=1, max_length=64)
+    model: str = Field(min_length=1, max_length=200)
+    connection: str = ""
+    capabilities: tuple[str, ...] = ()
+    context_tokens: int = 8192
+    input_cost_per_1k_usd: float = 0.0
+    output_cost_per_1k_usd: float = 0.0
+    quality: float = 0.5
+    dimensions: int = 0
+
+
+class WorkRouting(BaseModel):
+    """Give this kind of work to that model."""
+
+    task_kind: str = Field(min_length=1, max_length=32)
+    entry_name: str = Field(min_length=1, max_length=120)
+
+
 class NewIntegration(BaseModel):
     """What a person typed into "Add MCP Server".
 
@@ -443,6 +485,92 @@ def _routes(app: FastAPI) -> None:
         )
         return {"removed": removed}
 
+    # --- Providers, models and where work goes --------------------------------
+
+    @app.get("/api/providers")
+    async def providers(request: Request) -> dict[str, Any]:
+        """Everything the settings page shows, in one request.
+
+        One call rather than four, because these are read together and shown
+        together: a page that renders connections before it knows which models
+        depend on them has to re-render, and a person watching that sees the
+        settings change under their hands.
+        """
+        service = _service(request)
+        return {
+            "kinds": await _settings_change(service.list_provider_kinds()),
+            "connections": await _settings_change(service.list_connections()),
+            "models": await _settings_change(service.list_models()),
+            "defaults": await _settings_change(service.list_task_defaults()),
+        }
+
+    @app.post("/api/providers/connections", status_code=201)
+    async def add_connection(request: Request, body: NewConnection) -> dict[str, Any]:
+        return await _settings_change(
+            _service(request).add_connection(
+                body.name,
+                body.kind,
+                api_key=body.api_key,
+                base_url=body.base_url,
+                description=body.description,
+            )
+        )
+
+    @app.put("/api/providers/connections/{name}/key")
+    async def replace_connection_key(
+        request: Request, name: str, body: NewKey
+    ) -> dict[str, Any]:
+        return await _settings_change(_service(request).replace_connection_key(name, body.api_key))
+
+    @app.delete("/api/providers/connections/{name}")
+    async def remove_connection(request: Request, name: str) -> dict[str, Any]:
+        await _settings_change(_service(request).remove_connection(name))
+        return {"removed": True}
+
+    @app.get("/api/providers/connections/{name}/installed")
+    async def installed_models(request: Request, name: str) -> dict[str, Any]:
+        """What the runner behind this connection already has.
+
+        Empty where it cannot be asked - a hosted provider, or a runner that is
+        not running - and that is a list, not an error: the page offers a text
+        field instead, and nothing about the settings stops working.
+        """
+        return {"models": await _settings_change(_service(request).list_installed_models(name))}
+
+    @app.post("/api/providers/models", status_code=201)
+    async def add_model(request: Request, body: NewModel) -> dict[str, Any]:
+        return await _settings_change(
+            _service(request).add_model(
+                body.name,
+                body.provider,
+                body.model,
+                connection=body.connection,
+                capabilities=body.capabilities,
+                context_tokens=body.context_tokens,
+                input_cost_per_1k_usd=body.input_cost_per_1k_usd,
+                output_cost_per_1k_usd=body.output_cost_per_1k_usd,
+                quality=body.quality,
+                dimensions=body.dimensions,
+            )
+        )
+
+    @app.delete("/api/providers/models/{name}")
+    async def remove_model(request: Request, name: str) -> dict[str, Any]:
+        await _settings_change(_service(request).remove_model(name))
+        return {"removed": True}
+
+    @app.put("/api/providers/defaults")
+    async def send_work_to(request: Request, body: WorkRouting) -> dict[str, Any]:
+        return {
+            "defaults": await _settings_change(
+                _service(request).send_work_to(body.task_kind, body.entry_name)
+            )
+        }
+
+    @app.delete("/api/providers/defaults/{task_kind}")
+    async def clear_task_default(request: Request, task_kind: str) -> dict[str, Any]:
+        return {"defaults": await _settings_change(_service(request).clear_task_default(task_kind))}
+
     # --- Integrations ---------------------------------------------------------
 
     @app.get("/api/integrations")
@@ -662,6 +790,23 @@ async def _integration(awaitable):
         raise HTTPException(status_code=404, detail=str(error)) from error
     except IntegrationsDisabledError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+async def _settings_change(awaitable):
+    """A settings request answered with a status a page can act on.
+
+    Configuration mistakes here are the ordinary case rather than the exception:
+    a name already taken, a kind this machine cannot talk to, a connection three
+    models depend on. Each of those is something the person can fix in the form
+    they are looking at, so it comes back as a 400 with the sentence the
+    application layer wrote - not as a 500, which tells them to read a log.
+    """
+    try:
+        return await _guarded(awaitable)
+    except NotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except AlethicError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 async def _guarded(awaitable):

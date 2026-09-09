@@ -3,6 +3,10 @@
 This is the file you edit to change models. Nothing in `domain/`,
 `application/` or an employee declaration names a model, so switching one is a
 configuration change and never a code change.
+
+`ModelEntry` itself is a domain value (`domain.llm.catalog`) and is re-exported
+here, because this is where every reader of a catalog already looks. What stays
+in this module is the reading of a file, which is what infrastructure is for.
 """
 
 from __future__ import annotations
@@ -13,38 +17,10 @@ from pathlib import Path
 
 from domain.capabilities.models import Capability, CapabilityRequirement
 from domain.errors import ConfigurationError
-from domain.llm.models import ModelChoice, TaskKind
+from domain.llm.catalog import ModelEntry
+from domain.llm.models import TaskKind
 
 DEFAULT_CATALOG_PATH = Path(__file__).parent / "models.toml"
-
-
-@dataclass(frozen=True, slots=True)
-class ModelEntry:
-    name: str
-    provider: str
-    model: str
-    capabilities: frozenset[Capability] = field(default_factory=frozenset)
-    context_tokens: int = 8_192
-    input_cost_per_1k_usd: float = 0.0
-    output_cost_per_1k_usd: float = 0.0
-    #: Rough, hand-maintained quality ranking used to break ties. It is a
-    #: preference order, not a benchmark.
-    quality: float = 0.5
-    #: How many numbers this model's vectors have. Nothing but an embedding
-    #: entry sets it, and it is here rather than discovered because a store
-    #: full of vectors of one size has to be able to say so before a query is
-    #: made rather than after it returns a wrong answer (ADR 0016).
-    dimensions: int = 0
-
-    def cost_of(self, prompt_tokens: int, output_tokens: int) -> float:
-        return (
-            prompt_tokens * self.input_cost_per_1k_usd
-            + output_tokens * self.output_cost_per_1k_usd
-        ) / 1000
-
-    @property
-    def choice(self) -> ModelChoice:
-        return ModelChoice(provider=self.provider, model=self.model)
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +47,7 @@ class ModelCatalog:
                         name=name,
                         provider=spec["provider"],
                         model=spec["model"],
+                        connection=str(spec.get("connection", "")),
                         capabilities=frozenset(
                             Capability(c) for c in spec.get("capabilities", [])
                         ),

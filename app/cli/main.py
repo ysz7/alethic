@@ -21,6 +21,7 @@ from app.config.container import (
     build_harness,
     build_knowledge,
     build_manager,
+    build_providers,
     build_task_runner,
     build_workflow_engine,
     build_workspaces,
@@ -29,8 +30,10 @@ from app.config.container import (
 )
 from app.config.settings import get_settings, normalise_database_url
 from domain.approvals.models import ApprovalState
+from domain.capabilities.models import Capability
 from domain.errors import AlethicError, StorageNotInitializedError
 from domain.integrations.specs import spec_for
+from domain.llm.catalog import ModelEntry
 from domain.llm.models import LLMRequest, Message, RoutingHints, TaskKind
 from domain.policies.models import ActorKind, SimpleActor
 from domain.policies.risk import at_least
@@ -1459,6 +1462,194 @@ def document_remove(
                 typer.secho(f"No document {document_id}.", fg="yellow")
                 return
             typer.secho(f"Removed {document_id}.", fg="green")
+        finally:
+            await container.aclose()
+
+    _guarded(_run)
+
+
+@app.command()
+def providers() -> None:
+    """Which providers are connected, which models they serve, where work goes.
+
+    The machine without a window is not a second-class one: everything the
+    settings page does is here, through the same application service, so a
+    server installation is configured the same way a desktop is.
+    """
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            await prepare(container)
+            service = build_providers(container)
+            connections = await service.list_connections()
+            entries = await service.list_models()
+            defaults = await service.defaults()
+
+            if not connections:
+                typer.echo(
+                    "No providers connected. The machine is using whatever\n"
+                    "ALETHIC_LLM_API_KEY and the shipped catalog give it.\n"
+                    "Add one with: alethic provider-add <name> --kind openai"
+                )
+            for connection in connections:
+                held = await container.credential_store.names()
+                has_key = connection.secret_name in held
+                state = "ready" if (has_key or not connection.needs_credential) else "no key"
+                typer.secho(
+                    f"{connection.name}  ({connection.kind}, {state})",
+                    fg="green" if state == "ready" else "yellow",
+                )
+                if connection.base_url:
+                    typer.echo(f"    at {connection.base_url}")
+
+            typer.echo("")
+            sends: dict[str, list[str]] = {}
+            for kind, entry_name in defaults.items():
+                sends.setdefault(entry_name, []).append(kind.value.lower())
+            for entry in entries:
+                where = f" via {entry.connection}" if entry.connection else ""
+                work = ", ".join(sorted(sends.get(entry.name, ()))) or "-"
+                typer.echo(f"{entry.name:<18}{entry.model}{where}")
+                typer.echo(f"{'':<18}does: {work}")
+        finally:
+            await container.aclose()
+
+    _guarded(_run)
+
+
+@app.command(name="provider-add")
+def provider_add(
+    name: str = typer.Argument(..., help="What to call this connection here."),
+    kind: str = typer.Option(..., "--kind", help="openai, anthropic, gemini, openrouter, local."),
+    api_key: str = typer.Option(
+        "", "--api-key", help="The key. Stored encrypted; never printed back."
+    ),
+    base_url: str = typer.Option("", "--base-url", help="Where to reach it, if not the default."),
+) -> None:
+    """Add a way in to a provider.
+
+    The name is yours to choose and is what a model entry points at, so two
+    keys to one vendor are `openai-work` and `openai-personal` rather than a
+    thing the platform cannot express.
+    """
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            await prepare(container)
+            connection = await build_providers(container).add_connection(
+                name, kind, api_key=api_key, base_url=base_url
+            )
+            typer.secho(f"Added {connection.name} ({connection.kind}).", fg="green")
+            if connection.needs_credential:
+                # The name, never the value - the same rule the views follow.
+                typer.echo(f"Key stored as '{connection.secret_name}'.")
+        finally:
+            await container.aclose()
+
+    _guarded(_run)
+
+
+@app.command(name="provider-remove")
+def provider_remove(
+    name: str = typer.Argument(..., help="The connection to remove."),
+) -> None:
+    """Remove a connection, unless models are pointing at it."""
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            await prepare(container)
+            await build_providers(container).remove_connection(name)
+            typer.secho(f"Removed {name}, and the credential with it.", fg="green")
+        finally:
+            await container.aclose()
+
+    _guarded(_run)
+
+
+@app.command(name="model-add")
+def model_add(
+    name: str = typer.Argument(..., help="What to call this entry."),
+    model: str = typer.Option(..., "--model", help="The model's own name at the provider."),
+    connection: str = typer.Option("", "--connection", help="Which connection to reach it by."),
+    provider: str = typer.Option("", "--provider", help="Defaults to the connection's kind."),
+    capabilities: str = typer.Option(
+        "TEXT_REASONING,TOOL_CALLING",
+        "--capabilities",
+        help="Comma-separated. What the router is allowed to pick this for.",
+    ),
+    context_tokens: int = typer.Option(8192, "--context", help="Context window, in tokens."),
+    quality: float = typer.Option(0.5, "--quality", help="Preference order, 0 to 1."),
+) -> None:
+    """Add a model to the catalog, reached through a connection."""
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            await prepare(container)
+            service = build_providers(container)
+            kind = provider
+            if not kind and connection:
+                found = await service.list_connections()
+                kind = next((c.kind for c in found if c.name == connection), "")
+            entry = ModelEntry(
+                name=name,
+                provider=kind or "local",
+                model=model,
+                connection=connection,
+                capabilities=frozenset(
+                    Capability(item.strip().upper())
+                    for item in capabilities.split(",")
+                    if item.strip()
+                ),
+                context_tokens=context_tokens,
+                quality=quality,
+            )
+            await service.add_model(entry)
+            typer.secho(f"Added {name} -> {model}.", fg="green")
+        finally:
+            await container.aclose()
+
+    _guarded(_run)
+
+
+@app.command(name="model-remove")
+def model_remove(name: str = typer.Argument(..., help="The catalog entry to remove.")) -> None:
+    """Remove a catalog entry. Work sent to it falls back to being ranked."""
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            await prepare(container)
+            await build_providers(container).remove_model(name)
+            typer.secho(f"Removed {name}.", fg="green")
+        finally:
+            await container.aclose()
+
+    _guarded(_run)
+
+
+@app.command(name="send-work-to")
+def send_work_to(
+    task_kind: str = typer.Argument(..., help="planning, execution, verification, ..."),
+    entry_name: str = typer.Argument(..., help="The catalog entry to send it to."),
+) -> None:
+    """Give one kind of work to one model. The routing request, in one line."""
+
+    async def _run() -> None:
+        container = build_container()
+        try:
+            await prepare(container)
+            await build_providers(container).send_work_to(
+                TaskKind(task_kind.strip().upper()), entry_name
+            )
+            typer.secho(f"{task_kind.lower()} now goes to {entry_name}.", fg="green")
+        except ValueError as error:
+            known = ", ".join(sorted(kind.value.lower() for kind in TaskKind))
+            typer.secho(f"Unknown kind of work. Known: {known}.", fg="red", err=True)
+            raise typer.Exit(code=1) from error
         finally:
             await container.aclose()
 

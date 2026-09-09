@@ -19,6 +19,13 @@ dependencies = [
     # the installations cannot open is not the primary surface.
     "fastapi>=0.115",
     "uvicorn>=0.32",
+    # Credentials are encrypted where they are stored (Phase 17). Not an extra:
+    # a key the user typed into the settings window is the ordinary case, and a
+    # platform that stores it in the clear on half its installations has not
+    # made a choice, it has made a default. Portable wheels on macOS, Linux and
+    # Windows, and nothing from the operating system's own keychain - the
+    # backend has to run on a server too.
+    "cryptography>=44.0",
 ]
 
 [project.optional-dependencies]

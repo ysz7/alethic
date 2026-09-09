@@ -51,6 +51,13 @@ export class RuntimeClient {
     });
   }
 
+  async put<T>(path: string, body?: unknown): Promise<T> {
+    return this.call<T>(path, {
+      method: "PUT",
+      body: JSON.stringify(body ?? {}),
+    });
+  }
+
   async del<T>(path: string): Promise<T> {
     return this.call<T>(path, { method: "DELETE" });
   }

@@ -86,6 +86,9 @@ class Container:
         #: Set by an interface that answers approvals itself, before anything
         #: builds the approval service. None means the terminal answers them.
         self._confirmer: Callable[..., object] | None = None
+        #: The catalog once storage has been read. None means nobody has read
+        #: it yet and the shipped file answers - see `model_catalog`.
+        self._catalog: ModelCatalog | None = None
         #: Set by the composition root, which is the only place allowed to
         #: build an application component (ADR 0001).
         self._integrations: Callable[[], object] | None = None
@@ -156,7 +159,80 @@ class Container:
 
     @cached_property
     def model_catalog(self) -> ModelCatalog:
-        return ModelCatalog.load(self.settings.model_catalog_path)
+        """What the router and the factory read. The file until storage says otherwise.
+
+        Synchronous because everything that reads a catalog reads it while
+        choosing a model, and a coroutine there would put an await on the one
+        path that must stay cheap. `load_catalog` replaces it during start-up
+        with what the store holds; a process that never got that far runs on the
+        shipped file, which is a working machine rather than a broken one.
+        """
+        if self._catalog is None:
+            self._catalog = ModelCatalog.load(self.settings.model_catalog_path)
+        return self._catalog
+
+    def use_catalog(self, catalog: ModelCatalog) -> None:
+        """Told what the catalog is, once storage has been read.
+
+        Anything built from it is dropped rather than left holding the old one:
+        a router that keeps the file's entries after a person added a model in
+        the window is a settings page that appears not to work.
+        """
+        self._catalog = catalog
+        for built in ("model_router", "llm_factory"):
+            self.__dict__.pop(built, None)
+
+    @cached_property
+    def catalog_repository(self):
+        from infrastructure.persistence.catalog_repository import SqlCatalogRepository
+
+        return SqlCatalogRepository(self.session_factory)
+
+    @cached_property
+    def catalog_source(self):
+        from infrastructure.llm.store import StoredCatalogSource
+
+        return StoredCatalogSource(
+            self.catalog_repository,
+            configured_path=self.settings.model_catalog_path,
+            reachable=self._can_reach,
+        )
+
+    def _can_reach(self, entry) -> bool:
+        """Whether a client could be built for this entry on this machine.
+
+        Three ways an entry is reachable: it names a connection that has what it
+        needs; it needs no credential at all; or it names nothing and the machine
+        has the single configured key, which is what every installation before
+        Phase 17 relies on.
+        """
+        if entry.connection:
+            connection = self.connection_directory.get(entry.connection)
+            return connection is not None and (
+                not connection.needs_credential or bool(connection.secret_name)
+            )
+        from infrastructure.llm.providers import kind_named
+
+        try:
+            return not kind_named(entry.provider).needs_credential or bool(
+                self.settings.llm_api_key
+            )
+        except AlethicError:
+            # A provider this build has no adapter for. Nothing can call it, so
+            # nothing should route to it - and the settings page still shows it.
+            return False
+
+    @cached_property
+    def connections(self):
+        from infrastructure.persistence.connection_repository import SqlConnectionRepository
+
+        return SqlConnectionRepository(self.session_factory)
+
+    @cached_property
+    def connection_directory(self):
+        from infrastructure.llm.connections import ConnectionDirectory
+
+        return ConnectionDirectory(self.connections)
 
     @cached_property
     def model_router(self) -> ModelRouter:
@@ -166,6 +242,8 @@ class Container:
     def llm_factory(self) -> ProviderFactory:
         return ProviderFactory(
             catalog=self.model_catalog,
+            connections=self.connection_directory,
+            secrets=self.secret_resolver,
             api_key=self.settings.llm_api_key,
             base_url=self.settings.llm_base_url,
             local_base_url=self.settings.local_llm_base_url,
@@ -260,11 +338,35 @@ class Container:
 
     @cached_property
     def _credentials(self):
+        """The encrypted store, with the environment still winning over it.
+
+        In memory it holds ciphertext and nothing else; the master key opens one
+        value at a time, when a tool asks. `restore` fills it, and until then it
+        answers with whatever the environment has - which is the correct answer
+        for a process that has not started properly rather than a degraded one.
+        """
+        from infrastructure.persistence.secret_repository import SqlSecretRepository
+        from infrastructure.secrets.encrypted import EncryptedCredentialStore
+        from infrastructure.secrets.encryption import Envelope, resolve_master_key
+
+        return EncryptedCredentialStore(
+            SqlSecretRepository(self.session_factory),
+            Envelope(resolve_master_key(self.settings.data_dir)),
+            fallback=EnvSecretResolver(),
+        )
+
+    @cached_property
+    def legacy_credentials(self):
+        """The 0600 JSON file installations before Phase 17 have.
+
+        Kept only to be read once at start-up. It is never written to again and
+        never deleted: erasing the only copy of a credential the moment
+        something else believes it has written another one is how a recoverable
+        problem becomes a lost key.
+        """
         from infrastructure.secrets.local import LocalCredentialStore
 
-        return LocalCredentialStore(
-            self.settings.data_dir / "credentials.json", fallback=EnvSecretResolver()
-        )
+        return LocalCredentialStore(self.settings.data_dir / "credentials.json")
 
     @cached_property
     def secret_resolver(self) -> SecretResolver:

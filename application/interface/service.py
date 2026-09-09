@@ -38,6 +38,7 @@ from application.interface.activity import Activity, ActivityEvent
 from application.interface.contracts import RequestSource, UserRequest
 from application.interface.runs import Runs
 from application.knowledge.service import KnowledgeService
+from application.providers.service import ProviderService
 from application.workspaces.service import WorkspaceService
 from domain.approvals.models import ApprovalState
 from domain.approvals.protocols import (
@@ -49,10 +50,12 @@ from domain.capabilities.models import Capability
 from domain.conversations.models import Conversation
 from domain.conversations.repository import ConversationRepository
 from domain.employees.protocols import EmployeeRegistry
-from domain.errors import AlethicError, IntegrationNotFoundError
+from domain.errors import AlethicError, ConfigurationError, IntegrationNotFoundError
 from domain.integrations.models import IntegrationKind
 from domain.knowledge.models import KnowledgeQuery
 from domain.knowledge.protocols import Retriever
+from domain.llm.catalog import ModelEntry
+from domain.llm.models import TaskKind
 from domain.llm.telemetry import LLMCallLog
 from domain.memory.models import MemoryQuery, MemoryScope
 from domain.memory.protocols import Memory
@@ -125,6 +128,10 @@ class ServiceDependencies:
     #: answering with an empty list, which would invite somebody to add one.
     knowledge: KnowledgeService | None = None
     retriever: Retriever | None = None
+    #: Providers, keys and where each kind of work goes. None where a surface
+    #: was built without settings - every method below then says so rather than
+    #: showing an empty list somebody would try to add to.
+    providers: ProviderService | None = None
     #: Read-only. The facade shows what is remembered and cannot forget it:
     #: `MemoryMaintenance` is a separate contract for exactly that reason, and
     #: an interface that held both would make "show me" one click from "delete".
@@ -513,6 +520,131 @@ class AlethicService:
         """
         return self._d.integrations is not None
 
+    # --- Providers, keys and where work goes ----------------------------------
+    #
+    # A key goes in through here and never comes back out: no method returns a
+    # credential, and the views carry `has_key` instead. Everything else about
+    # a provider is ordinary configuration and is shown in full.
+
+    def _providers(self) -> ProviderService:
+        if self._d.providers is None:
+            raise ConfigurationError(
+                "Provider settings are not available in this process."
+            )
+        return self._d.providers
+
+    async def list_provider_kinds(self) -> list[dict[str, Any]]:
+        """What this machine can talk to at all. The list a person picks from."""
+        return [views.provider_kind(kind) for kind in self._providers().kinds()]
+
+    async def list_connections(self) -> list[dict[str, Any]]:
+        providers = self._providers()
+        stored = await self._stored_credential_names()
+        return [
+            views.connection(item, has_key=item.secret_name in stored)
+            for item in await providers.list_connections(await self._here())
+        ]
+
+    async def add_connection(
+        self,
+        name: str,
+        kind: str,
+        *,
+        api_key: str = "",
+        base_url: str = "",
+        description: str = "",
+    ) -> dict[str, Any]:
+        connection = await self._providers().add_connection(
+            name,
+            kind,
+            api_key=api_key,
+            base_url=base_url,
+            description=description,
+            workspace_id=await self._here(),
+        )
+        return views.connection(connection, has_key=bool(connection.secret_name))
+
+    async def replace_connection_key(self, name: str, api_key: str) -> dict[str, Any]:
+        connection = await self._providers().replace_key(name, api_key, await self._here())
+        return views.connection(connection, has_key=True)
+
+    async def remove_connection(self, name: str) -> None:
+        await self._providers().remove_connection(name, await self._here())
+
+    async def list_installed_models(self, connection: str) -> list[str]:
+        """What a runner already has. Empty where it cannot be asked."""
+        return list(await self._providers().available_models(connection, await self._here()))
+
+    async def list_models(self) -> list[dict[str, Any]]:
+        providers = self._providers()
+        workspace = await self._here()
+        defaults = await providers.defaults(workspace)
+        used_for: dict[str, list[str]] = {}
+        for kind, entry_name in defaults.items():
+            used_for.setdefault(entry_name, []).append(kind.value)
+        return [
+            views.model_entry(entry, used_for=tuple(sorted(used_for.get(entry.name, ()))))
+            for entry in await providers.list_models(workspace)
+        ]
+
+    async def add_model(
+        self,
+        name: str,
+        provider: str,
+        model: str,
+        *,
+        connection: str = "",
+        capabilities: tuple[str, ...] = (),
+        context_tokens: int = 8_192,
+        input_cost_per_1k_usd: float = 0.0,
+        output_cost_per_1k_usd: float = 0.0,
+        quality: float = 0.5,
+        dimensions: int = 0,
+    ) -> dict[str, Any]:
+        """Strings in, domain values on - as everywhere else on this boundary.
+
+        A capability this platform does not have is an error the caller can
+        read, never a word quietly dropped: an entry whose capabilities were
+        half-ignored is a model the router will not choose, for a reason nobody
+        can see in the window.
+        """
+        entry = ModelEntry(
+            name=name.strip(),
+            provider=provider.strip(),
+            model=model.strip(),
+            connection=connection.strip(),
+            capabilities=frozenset(_capability(item) for item in capabilities),
+            context_tokens=context_tokens,
+            input_cost_per_1k_usd=input_cost_per_1k_usd,
+            output_cost_per_1k_usd=output_cost_per_1k_usd,
+            quality=quality,
+            dimensions=dimensions,
+        )
+        return views.model_entry(await self._providers().add_model(entry, await self._here()))
+
+    async def remove_model(self, name: str) -> None:
+        await self._providers().remove_model(name, await self._here())
+
+    async def list_task_defaults(self) -> dict[str, str]:
+        """Which model each kind of work goes to."""
+        defaults = await self._providers().defaults(await self._here())
+        return {kind.value: name for kind, name in defaults.items()}
+
+    async def send_work_to(self, task_kind: str, entry_name: str) -> dict[str, str]:
+        await self._providers().send_work_to(
+            _task_kind(task_kind), entry_name, await self._here()
+        )
+        return await self.list_task_defaults()
+
+    async def clear_task_default(self, task_kind: str) -> dict[str, str]:
+        await self._providers().clear_default(_task_kind(task_kind))
+        return await self.list_task_defaults()
+
+    async def _stored_credential_names(self) -> frozenset[str]:
+        if self._d.credentials is None:
+            return frozenset()
+        return frozenset(await self._d.credentials.names())
+
     async def list_integrations(self) -> list[dict[str, Any]]:
         return [views.integration(item) for item in await self._integrations().list()]
 
@@ -671,3 +803,17 @@ def _effect(value: str) -> Effect:
             f"'{value}' is not an effect. A capability does one of: {known}. "
             "Risk is not set here; it follows from the effect."
         ) from error
+
+
+def _task_kind(value: str) -> TaskKind:
+    """A kind of work named by an interface, or a readable refusal.
+
+    Same rule as `_capability` and the same reason: sending work to a kind the
+    router has never heard of would store a row nothing reads, and a settings
+    page that appears to have saved something is worse than one that says no.
+    """
+    try:
+        return TaskKind(value.strip().upper())
+    except ValueError as error:
+        known = ", ".join(sorted(kind.value for kind in TaskKind))
+        raise AlethicError(f"Unknown kind of work '{value}'. Known: {known}.") from error

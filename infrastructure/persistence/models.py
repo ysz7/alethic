@@ -727,6 +727,114 @@ class ChunkRow(Base):
     created_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
 
 
+class ConnectionRow(Base):
+    """A way in to a provider: which vendor, reached how, paying with what.
+
+    Unique on (workspace, name) for the same reason integrations are: the name
+    is what a catalog entry points at, and two rows answering to one name would
+    make "which key does this model use" a question with two answers.
+
+    `secret_name` names a credential and never holds one. The value lives in
+    `secrets`, encrypted, and is resolved at the moment a client is built.
+    """
+
+    __tablename__ = "connections"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "name", name="uq_connections_name"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    base_url: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    secret_name: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    #: Whether this kind can work without a credential. Stored rather than
+    #: re-derived, so a row still reads correctly on a machine whose adapters
+    #: have changed under it.
+    needs_credential: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+
+
+class ModelEntryRow(Base):
+    """One catalog entry: a model, and the connection it is reached through.
+
+    The catalog was a TOML file and stays one on disk - the shipped file is what
+    a fresh installation is seeded from, and `ALETHIC_MODEL_CATALOG_PATH` still
+    overrides everything for a machine with no window. What this table adds is
+    the entry a *person* added, which cannot live in a file inside an installed
+    application.
+
+    `capabilities` is a list of the platform's own capability names, not a
+    provider's: what a model can do is the vocabulary the router filters on, and
+    a vendor does not get a vote on it. Costs are per 1k tokens, as in the file.
+    """
+
+    __tablename__ = "model_entries"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "name", name="uq_model_entries_name"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    model: Mapped[str] = mapped_column(String(200), nullable=False)
+    connection: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    capabilities: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    context_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=8192)
+    input_cost_per_1k_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    output_cost_per_1k_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    quality: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    dimensions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+
+
+class TaskDefaultRow(Base):
+    """Which catalog entry a kind of work goes to.
+
+    One row per kind of work, and that is the whole of "give this key to this
+    task". Deliberately not per employee: an employee's declaration may not name
+    a model (ADR 0003), and a table keyed by employee would be that rule broken
+    somewhere the rule cannot see it.
+    """
+
+    __tablename__ = "task_defaults"
+
+    task_kind: Mapped[str] = mapped_column(String(32), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    entry_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+
+
+class SecretRow(Base):
+    """A credential, encrypted, with the master key kept anywhere but here.
+
+    In the store rather than in a file beside it because the backend has to be
+    deployable: a container that restarts with an empty filesystem loses a file
+    and keeps its database. What lands here is AES-GCM ciphertext, and the key
+    that opens it comes from `ALETHIC_MASTER_KEY` or a 0600 file - so a backup,
+    a dump, or `storage-migrate` carries something unreadable rather than a set
+    of live API keys.
+
+    The name is the identity, as it is for every other credential in the
+    platform: an integration record and a provider connection both *name* the
+    secret they need and never hold it.
+    """
+
+    __tablename__ = "secrets"
+
+    name: Mapped[str] = mapped_column(String(120), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    nonce: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(nullable=False, default=_utcnow)
+
+
 # The search index is part of the schema, not of the adapter: a database built
 # by `create_all` - which is what the test suite does - has to be searchable the
 # same way the migrated one is, or the tests exercise a different backend than
