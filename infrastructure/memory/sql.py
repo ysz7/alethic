@@ -41,6 +41,7 @@ from domain.memory.models import (
 )
 from domain.memory.ranking import CUTOFF_RATIO, best_of, score
 from domain.workspace.models import DEFAULT_WORKSPACE_ID, WorkspaceId
+from infrastructure.persistence import memory_fts
 from infrastructure.persistence.dialect import is_postgres, upsert
 from infrastructure.persistence.models import MemoryItemRow
 from infrastructure.persistence.session import session_scope
@@ -258,15 +259,25 @@ class SqlMemory:
         so it is normalised the other way round - and what leaves this method is
         a fraction of the best hit either way, which is what makes the domain's
         cutoff mean the same thing on both backends (ADR 0016).
+
+        The words are joined with `|` and asked of `to_tsquery`, because the
+        other branch asks FTS5 for any of them. `plainto_tsquery` was here and
+        joins with `and`: on PostgreSQL "where is the report" then matched
+        nothing, since no note contains every word of the question a person
+        typed. Same question, two answers - which is the drift ADR 0016 exists
+        to prevent, and Phase 19 found it by running the memory tests on the
+        second dialect. The words reach here already reduced to `\\w+`, so there
+        is no operator among them for `to_tsquery` to trip over.
         """
+        vector = memory_fts.POSTGRES_VECTOR.format(column="content")
         rows = await session.execute(
             text(
-                "SELECT id, ts_rank(to_tsvector('simple', content), query) AS rank "
-                "FROM memory_items, plainto_tsquery('simple', :words) AS query "
-                "WHERE to_tsvector('simple', content) @@ query "
+                f"SELECT id, ts_rank({vector}, query) AS rank "
+                "FROM memory_items, to_tsquery('simple', :words) AS query "
+                f"WHERE {vector} @@ query "
                 "ORDER BY rank DESC LIMIT :limit"
             ),
-            {"words": " ".join(words), "limit": limit},
+            {"words": " | ".join(words), "limit": limit},
         )
         hits = rows.all()
         if not hits:

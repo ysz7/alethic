@@ -30,10 +30,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sqlalchemy import delete, func, insert, select
+from sqlalchemy import delete, func, insert, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from infrastructure.observability.logging import get_logger
+from infrastructure.persistence.dialect import POSTGRES, advance_identity
 from infrastructure.persistence.models import Base
 
 log = get_logger(__name__)
@@ -127,7 +128,43 @@ async def copy(source: AsyncEngine, destination: AsyncEngine) -> TransferResult:
             log.warning("storage.copy_failed", table=table.name, error=str(error))
         results.append(TableResult(name=table.name, copied=copied))
         log.info("storage.copied", table=table.name, rows=copied)
+    problems.extend(await _advance_identities(destination))
     return TransferResult(tables=tuple(results), problems=tuple(problems))
+
+
+async def _advance_identities(destination: AsyncEngine) -> list[str]:
+    """Part of the copy, not a tidy-up after it.
+
+    Four tables number their own rows. The copy brings the numbers with it and
+    says nothing to the sequence that hands out the next one, so a store moved
+    onto PostgreSQL verified row for row and then could not write: the first
+    task event after the move asked for id 1, which had arrived from SQLite an
+    hour earlier. Every recorded run of the validation set failed on it, and
+    nothing in the suite could see it - a test builds an empty schema and
+    inserts, which is the one case where the sequence is already right.
+
+    A problem here is a problem with the move, and the move reports problems
+    rather than raising: the caller is a person watching a copy it can still
+    abandon.
+    """
+    if destination.dialect.name != POSTGRES:
+        # SQLite takes the next id from the highest one present, so the rows
+        # that arrived have already said everything there is to say.
+        return []
+    problems: list[str] = []
+    async with destination.begin() as connection:
+        for table in _tables():
+            column = table.autoincrement_column
+            if column is None:
+                continue
+            try:
+                await connection.execute(text(advance_identity(table.name, column.name)))
+            except Exception as error:
+                problems.append(f"{table.name}.{column.name}: {error}")
+                log.warning(
+                    "storage.identity_not_advanced", table=table.name, error=str(error)
+                )
+    return problems
 
 
 async def verify(source: AsyncEngine, destination: AsyncEngine) -> TransferResult:
@@ -214,7 +251,15 @@ async def erase(engine: AsyncEngine) -> dict[str, int]:
     removed: dict[str, int] = {}
     async with engine.begin() as connection:
         for table in reversed(_tables()):
-            result = await connection.execute(delete(table))
-            removed[table.name] = int(result.rowcount or 0)
+            # Counted before the delete rather than taken from `rowcount`, which
+            # sees only the rows this statement removed itself. A retry hangs off
+            # the task that failed, so deleting the parents took two child tasks
+            # with it by cascade, and the erase reported 193 rows one line after
+            # telling a person it was about to erase 195. Two numbers that
+            # disagree about an irreversible act read as a partial erase, and
+            # twenty-five counts is a cheap price for the one that is true.
+            present = await connection.execute(select(func.count()).select_from(table))
+            await connection.execute(delete(table))
+            removed[table.name] = int(present.scalar() or 0)
     log.warning("storage.erased", tables=len(removed), rows=sum(removed.values()))
     return removed

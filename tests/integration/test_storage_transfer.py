@@ -7,13 +7,20 @@ and a test that needed a server to assert them would be a test nobody runs.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from sqlalchemy import insert, select, update
 
 from infrastructure.persistence import transfer
-from infrastructure.persistence.models import Base, DocumentRow, MemoryItemRow, WorkspaceRow
+from infrastructure.persistence.models import (
+    Base,
+    DocumentRow,
+    MemoryItemRow,
+    TaskRow,
+    WorkspaceRow,
+)
 from infrastructure.persistence.session import create_engine
 
 
@@ -155,3 +162,48 @@ async def test_the_destination_keeps_its_schema_after_an_erase(stores) -> None:
 
     async with source.connect() as connection:
         assert (await connection.execute(select(WorkspaceRow))).all() == []
+
+
+async def test_a_row_a_cascade_took_is_still_a_row_that_was_erased(stores) -> None:
+    """The count a person is shown before and the one shown after are the same.
+
+    A retry hangs off the task that failed, so erasing the tasks deletes two
+    rows with one statement and `rowcount` reports one. The real move in Phase
+    19 said "about to erase 195" and then "erased 193", which reads as a
+    partial erase of something that cannot be undone.
+    """
+    source, _ = stores
+    now = datetime.now(UTC).replace(tzinfo=None)
+    async with source.begin() as connection:
+        await connection.execute(
+            insert(TaskRow.__table__),
+            [
+                {
+                    "id": "aaaaaaaa-0000-0000-0000-000000000001",
+                    "workspace_id": "work",
+                    "employee_id": None,
+                    "parent_task_id": None,
+                    "goal": "The one that failed",
+                    "status": "FAILED",
+                    "created_at": now,
+                    "updated_at": now,
+                },
+                {
+                    "id": "aaaaaaaa-0000-0000-0000-000000000002",
+                    "workspace_id": "work",
+                    "employee_id": None,
+                    "parent_task_id": "aaaaaaaa-0000-0000-0000-000000000001",
+                    "goal": "The retry",
+                    "status": "COMPLETED",
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            ],
+        )
+    async with source.connect() as connection:
+        before = len((await connection.execute(select(TaskRow.id))).all())
+
+    removed = await transfer.erase(source)
+
+    assert before == 2
+    assert removed["tasks"] == 2

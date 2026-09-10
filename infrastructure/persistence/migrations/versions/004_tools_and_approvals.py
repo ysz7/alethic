@@ -26,7 +26,7 @@ def upgrade() -> None:
         sa.Column("tool", sa.String(64), nullable=False),
         sa.Column("input", sa.JSON(), nullable=True),
         sa.Column("output", sa.JSON(), nullable=True),
-        sa.Column("success", sa.Boolean(), nullable=False, server_default=sa.text("1")),
+        sa.Column("success", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("error", sa.Text(), nullable=True),
         sa.Column("latency_ms", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("created_at", sa.DateTime(), nullable=False),

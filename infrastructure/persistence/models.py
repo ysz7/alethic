@@ -8,7 +8,7 @@ by the Protocols in `domain/`, not by a dialect-agnostic subset of SQL.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlalchemy import (
     DDL,
@@ -37,6 +37,7 @@ from domain.validation.run import RunStatus as ValidationStatus
 from domain.workflows.definition import WorkflowTrigger
 from domain.workforce.protocols import ObjectiveStatus, PlanStatus
 from infrastructure.persistence import knowledge_fts, memory_fts
+from infrastructure.persistence.dialect import UtcTimestamp
 
 TASK_STATUS_VALUES = tuple(status.value for status in TaskStatus)
 APPROVAL_STATE_VALUES = tuple(state.value for state in ApprovalState)
@@ -55,7 +56,9 @@ DOCUMENT_STATUS_VALUES = tuple(status.value for status in DocumentStatus)
 
 
 class Base(DeclarativeBase):
-    pass
+    # Every `Mapped[datetime]` below is a moment in UTC, and gets the column type
+    # that says so once (`dialect.UtcTimestamp`) rather than forty-three times.
+    type_annotation_map: ClassVar[dict[Any, Any]] = {datetime: UtcTimestamp}
 
 
 def _utcnow() -> datetime:
@@ -839,9 +842,20 @@ class SecretRow(Base):
 # by `create_all` - which is what the test suite does - has to be searchable the
 # same way the migrated one is, or the tests exercise a different backend than
 # the product ships.
+# Both dialects, for the same reason: Phase 19 found `create_all` building a
+# PostgreSQL schema with no text index at all, and the one test that searched
+# there creating the index itself in its fixture - a harness quietly holding up
+# the thing it was meant to be checking.
 for _statement in (*memory_fts.CREATE, *knowledge_fts.CREATE):
     event.listen(
         Base.metadata,
         "after_create",
         DDL(_statement).execute_if(dialect="sqlite"),
+    )
+
+for _statement in (*memory_fts.CREATE_POSTGRES, *knowledge_fts.CREATE_POSTGRES):
+    event.listen(
+        Base.metadata,
+        "after_create",
+        DDL(_statement).execute_if(dialect="postgresql"),
     )

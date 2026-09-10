@@ -898,6 +898,7 @@ def validate(
 
             harness = build_harness(container)
             failures = 0
+            skipped = 0
             for scenario in chosen:
                 typer.secho(f"\n> {scenario.name}", fg="cyan")
                 # A workflow scenario has no request of its own - the process
@@ -908,10 +909,18 @@ def validate(
                 _report_validation(run)
                 if run.status is RunStatus.FAILED:
                     failures += 1
+                elif run.status is RunStatus.SKIPPED:
+                    skipped += 1
 
             typer.echo("")
+            # Counted, not inferred from the failures: everything that did not
+            # fail was being called passed, so a scenario the machine cannot
+            # even attempt was reported as a scenario that worked. Phase 19 read
+            # "5/13 passed" off a run with four passes, which is the one number
+            # a person takes away from this command.
             typer.secho(
-                f"{len(chosen) - failures}/{len(chosen)} passed.",
+                f"{len(chosen) - failures - skipped}/{len(chosen)} passed"
+                + (f", {skipped} not available here." if skipped else "."),
                 fg="green" if not failures else "yellow",
             )
             if failures:

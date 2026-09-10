@@ -135,3 +135,34 @@ same shape of trigger as §4's, and should be written down as one when it is.
 **Copy without erasing.** Leaves the user's data in two places with no statement
 about which is authoritative, and the second one is the one nobody remembers to
 protect.
+
+## Confirmed in Phase 19, with three corrections to this decision's own terms
+
+Everything above was written before a server existed on this machine. Phase 19
+ran it - migrations, the whole test suite, a real move in both directions, and
+the validation set - and the decision holds: no failure was classified as
+storage, and nothing above `infrastructure/` had to change. The record is
+`validation/tasks/phase-19-postgresql-confirmed-on-a-real-server.md`. Three
+things in this document turned out to be understated.
+
+**"What actually differs is small" needed a third entry, and it is time.** The
+domain works in aware UTC and the columns are naive; SQLite forgave that on the
+write side for eighteen phases and PostgreSQL refuses it outright. The
+conversion belongs on the column type (`dialect.UtcTimestamp`), where it is
+stated once, rather than in the eleven repositories that had each written half
+of it.
+
+**A copy is not finished when the rows have arrived.** Four tables number their
+own rows, and on PostgreSQL the number comes from a sequence the copy never
+touches. A store that verified row for row could not then take one more row.
+Advancing the sequences is part of `copy`, not a step after it: a move that
+leaves the destination unwritable is not a move, and the person watching it has
+no way to know.
+
+**"Both return the same thing to the domain" was not true of the words.** The
+two indexes tokenised differently and combined a query's words differently, so
+what a person could find depended on which backend they had chosen - the drift
+ADR 0016's normalisation was supposed to make impossible, sitting one level
+below where that normalisation happens. The query expression and the index
+expression are now one constant per index, and the words are joined the same way
+on both.

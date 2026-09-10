@@ -111,7 +111,10 @@ async def test_no_credential_is_written_to_the_row(session_factory) -> None:
 
         row = (await session.execute(text("SELECT * FROM integrations"))).mappings().one()
 
-    assert row["secret_names"] == '["NOTES_TOKEN"]'
+    # The name, and not the value - asserted on what the column *holds* rather
+    # than on the text one dialect happens to store it as: SQLite hands back the
+    # JSON as a string and PostgreSQL hands it back decoded, and neither of those
+    # is what §74 is about.
     assert "NOTES_TOKEN" in str(row["secret_names"])
     assert "secret" not in str(row["configuration"]).lower()
 

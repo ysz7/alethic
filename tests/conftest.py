@@ -1,24 +1,66 @@
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.config.settings import normalise_database_url
 from infrastructure.persistence.models import Base
 from infrastructure.persistence.session import create_engine, create_session_factory
 from infrastructure.persistence.task_repository import SqlTaskRepository
 
+POSTGRES_URL = os.environ.get("ALETHIC_TEST_POSTGRES_URL", "")
+
+
+#: Rebuilt once per pytest session, on first use, and inside whichever event
+#: loop that test runs in - a session-scoped async fixture would hold its
+#: connections on a loop the tests do not use.
+_postgres_schema_built = False
+
+
+async def _postgres_factory() -> async_sessionmaker[AsyncSession]:
+    """The configured server, with a schema built the way the platform builds it.
+
+    Emptied between tests rather than dropped and recreated: twenty-six tables
+    of DDL per test is a minute of the suite spent on nothing these tests are
+    about, which is what the repositories do with rows.
+    """
+    global _postgres_schema_built
+    engine = create_engine(normalise_database_url(POSTGRES_URL))
+    async with engine.begin() as connection:
+        if not _postgres_schema_built:
+            await connection.run_sync(Base.metadata.drop_all)
+            await connection.run_sync(Base.metadata.create_all)
+            _postgres_schema_built = True
+        else:
+            tables = ", ".join(table.name for table in Base.metadata.sorted_tables)
+            await connection.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+    return create_session_factory(engine)
+
 
 @pytest_asyncio.fixture
 async def session_factory(tmp_path: Path) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
-    """A real SQLite file, not an in-memory database.
+    """A real database file, not an in-memory one.
 
     The point of these tests is that work survives a restart, and a shared
     in-memory database would not exercise that.
+
+    With `ALETHIC_TEST_POSTGRES_URL` set the same tests run against the second
+    dialect instead - which is what Phase 19 needed and what three hand-written
+    PostgreSQL tests could not give: thirteen repositories, one fixture, either
+    backend. Unset, nothing changes and the suite still needs no server.
     """
+    if POSTGRES_URL:
+        factory = await _postgres_factory()
+        yield factory
+        await factory.kw["bind"].dispose()
+        return
+
     engine = create_engine(f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)

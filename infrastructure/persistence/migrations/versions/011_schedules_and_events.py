@@ -52,7 +52,7 @@ def upgrade() -> None:
         sa.Column("every_seconds", sa.Integer(), nullable=True),
         sa.Column("daily_at", sa.String(8), nullable=True),
         sa.Column("on_event", sa.String(64), nullable=False, server_default=""),
-        sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.text("1")),
+        sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("next_due_at", sa.DateTime(), nullable=True),
         sa.Column("last_run_at", sa.DateTime(), nullable=True),
         sa.Column("last_objective_id", sa.String(36), nullable=True),

@@ -40,6 +40,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from domain.errors import StorageError, StorageNotInitializedError
 from domain.knowledge.models import Chunk, Document, DocumentStatus, Vector
 from domain.workspace.models import DEFAULT_WORKSPACE_ID, WorkspaceId
+from infrastructure.persistence import knowledge_fts
 from infrastructure.persistence.dialect import is_postgres, upsert
 from infrastructure.persistence.models import ChunkRow, DocumentRow
 from infrastructure.persistence.session import session_scope
@@ -286,14 +287,20 @@ class SqlKnowledgeStore:
             return {}
         async with self._session() as session:
             if is_postgres(session):
+                # `|`, not `plainto_tsquery`'s implicit `and`: the other branch
+                # asks FTS5 for any of the words, and a passage containing every
+                # word of a typed question is rare enough that the two indexes
+                # answered differently (Phase 19). The vector expression is the
+                # index's own, so the index is actually used.
+                vector = knowledge_fts.POSTGRES_VECTOR.format(column="content")
                 rows = await session.execute(
                     text(
-                        "SELECT id, ts_rank(to_tsvector('simple', content), query) AS rank "
-                        "FROM chunks, plainto_tsquery('simple', :words) AS query "
-                        "WHERE to_tsvector('simple', content) @@ query "
+                        f"SELECT id, ts_rank({vector}, query) AS rank "
+                        "FROM chunks, to_tsquery('simple', :words) AS query "
+                        f"WHERE {vector} @@ query "
                         "ORDER BY rank DESC LIMIT :limit"
                     ),
-                    {"words": " ".join(words), "limit": limit},
+                    {"words": " | ".join(words), "limit": limit},
                 )
                 hits = rows.all()
                 best = max((float(rank) for _, rank in hits), default=0.0)
