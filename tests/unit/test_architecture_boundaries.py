@@ -26,7 +26,7 @@ FORBIDDEN_IN_DOMAIN = {
     "pydantic_settings",
 }
 
-FORBIDDEN_IN_ALETHIC = {"infrastructure", "app", "employees"}
+FORBIDDEN_IN_PROMETHEUS = {"infrastructure", "app", "employees"}
 
 
 def imported_roots(path: Path) -> set[str]:
@@ -64,14 +64,14 @@ def test_application_does_not_import_infrastructure() -> None:
     assert not offenders, f"application talks to domain contracts only: {offenders}"
 
 
-def test_alethic_never_imports_a_concrete_employee_or_adapter() -> None:
-    alethic_dir = REPO_ROOT / "application" / "alethic"
+def test_prometheus_never_imports_a_concrete_employee_or_adapter() -> None:
+    prometheus_dir = REPO_ROOT / "application" / "prometheus"
     offenders = {
-        str(path.relative_to(REPO_ROOT)): sorted(imported_roots(path) & FORBIDDEN_IN_ALETHIC)
-        for path in sorted(alethic_dir.rglob("*.py"))
+        str(path.relative_to(REPO_ROOT)): sorted(imported_roots(path) & FORBIDDEN_IN_PROMETHEUS)
+        for path in sorted(prometheus_dir.rglob("*.py"))
     }
     offenders = {path: roots for path, roots in offenders.items() if roots}
-    assert not offenders, f"Alethic knows employees only through the registry: {offenders}"
+    assert not offenders, f"Prometheus knows employees only through the registry: {offenders}"
 
 
 def test_sql_does_not_leave_the_persistence_package() -> None:
@@ -138,7 +138,7 @@ def test_the_interface_boundary_owns_no_transport() -> None:
 
 
 def test_the_http_adapter_reaches_the_platform_only_through_the_boundary() -> None:
-    """`app/ui/` is transport. Everything it shows comes from `AlethicService`.
+    """`app/ui/` is transport. Everything it shows comes from `PrometheusService`.
 
     Checked by what it may reach for: the composition root, its own settings,
     the boundary's own types, and the confirmer it must construct because who
@@ -180,7 +180,7 @@ def test_the_http_adapter_reaches_the_platform_only_through_the_boundary() -> No
         )
         if reached:
             offenders[str(path.relative_to(REPO_ROOT))] = reached
-    assert not offenders, f"the HTTP adapter must go through AlethicService: {offenders}"
+    assert not offenders, f"the HTTP adapter must go through PrometheusService: {offenders}"
 
 
 def test_nothing_above_the_tool_boundary_knows_what_mcp_is() -> None:

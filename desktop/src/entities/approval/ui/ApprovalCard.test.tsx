@@ -22,7 +22,7 @@ describe("ApprovalCard", () => {
   it("shows what is about to happen, in the runtime's own words", () => {
     render(<ApprovalCard approval={approval()} />);
 
-    expect(screen.getByText("Alethic wants to send an email")).toBeInTheDocument();
+    expect(screen.getByText("Prometheus wants to send an email")).toBeInTheDocument();
     expect(screen.getByText("client@example.com")).toBeInTheDocument();
     expect(screen.getByText("HIGH")).toBeInTheDocument();
   });

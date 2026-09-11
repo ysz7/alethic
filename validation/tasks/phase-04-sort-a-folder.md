@@ -15,10 +15,10 @@ two invoices, a signed lease, a tax return draft, trip notes and a photo backup
 readme.
 
 ```bash
-export ALETHIC_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
-export ALETHIC_WORKSPACE_DIR=/tmp/desk
+export PROMETHEUS_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
+export PROMETHEUS_WORKSPACE_DIR=/tmp/desk
 uv run alembic upgrade head
-uv run alethic run-task --employee organizer \
+uv run prometheus run-task --employee organizer \
   "Sort the documents in my working directory into sensible folders, then write a short index.md describing where everything went."
 ```
 
@@ -39,7 +39,7 @@ Every file that was there at the start was there at the end, in a folder chosen
 from what the document turned out to be rather than from its name -
 `photos-readme.txt` went to `Photos/` because it says it is a camera-roll
 backup, and `invoice-northwind-feb.txt` to `Invoices/` because it is an invoice.
-`index.md` describes the layout. `sqlite3 alethic.db "select * from tool_calls"`
+`index.md` describes the layout. `sqlite3 prometheus.db "select * from tool_calls"`
 shows all 21 calls with their arguments and latencies.
 
 ### The Definition of Done: the brake
@@ -48,7 +48,7 @@ A second task, run with nothing attached to stdin - which is what a scheduled
 run looks like:
 
 ```bash
-uv run alethic run-task --employee organizer "Replace index.md with a one-line index." < /dev/null
+uv run prometheus run-task --employee organizer "Replace index.md with a one-line index." < /dev/null
 ```
 
 `fs.write` on an existing file assessed the call as HIGH, the gate asked, and
@@ -72,8 +72,8 @@ not the work.
 
 **A rejected action is refused, not queued.** `LocalApprovalService` answers
 immediately, so an unattended run gets a no rather than a question waiting in
-`alethic approvals` for later. The PENDING row is written first and the machinery
-for resolving one later exists (`alethic approve <id>`), but nothing yet parks a
+`prometheus approvals` for later. The PENDING row is written first and the machinery
+for resolving one later exists (`prometheus approve <id>`), but nothing yet parks a
 task on it and resumes when the answer arrives. That belongs with the interface
 in Phase 6.
 

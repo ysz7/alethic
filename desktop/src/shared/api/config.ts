@@ -15,7 +15,7 @@ export const SOURCE = "desktop";
 /**
  * Which runtime this window talks to. Asked once, at startup.
  *
- * The shell is the only one that knows: it is what reads `ALETHIC_BASE_URL`,
+ * The shell is the only one that knows: it is what reads `PROMETHEUS_BASE_URL`,
  * and what started the engine if none was already up. Hard-coding the default
  * here instead - which is what this did until it was tried against a runtime on
  * another port - makes the environment variable a lie that documents itself.

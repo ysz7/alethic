@@ -8,7 +8,7 @@
 # option it had.
 #
 # It does not list `desktop.*`. Those tools exist only when
-# ALETHIC_FLAGS__COMPUTER_USE is on, and an employee that may drive a page must not
+# PROMETHEUS_FLAGS__COMPUTER_USE is on, and an employee that may drive a page must not
 # thereby be able to drive the user's machine; giving it the desktop is an edit
 # to this file plus a flag, and both should be deliberate.
 

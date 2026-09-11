@@ -18,7 +18,7 @@ from domain.workspace.models import DEFAULT_WORKSPACE_ID
 
 
 def _default_data_dir() -> Path:
-    return Path.home() / ".alethic"
+    return Path.home() / ".prometheus"
 
 
 def normalise_database_url(url: str) -> str:
@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        env_prefix="ALETHIC_",
+        env_prefix="PROMETHEUS_",
         env_nested_delimiter="__",
         extra="ignore",
     )
@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     #: Where everything is kept. Unset means the SQLite file in `data_dir`,
     #: which is what `clone && run` gets and what the packaged window needs.
     #: A PostgreSQL URL - including a Supabase one, which is the same thing -
-    #: puts the whole store on a server instead. `alethic storage migrate --to`
+    #: puts the whole store on a server instead. `prometheus storage migrate --to`
     #: is how the data follows.
     database_url: str | None = None
 
@@ -83,17 +83,17 @@ class Settings(BaseSettings):
     #: the *first* workspace: another workspace gets its own root, so that
     #: switching moves what an employee can read (§15.3).
     #:
-    #: `ALETHIC_WORKSPACE_DIR` still sets it. The name was one of three things
+    #: `PROMETHEUS_WORKSPACE_DIR` still sets it. The name was one of three things
     #: the word "workspace" meant, and this is the one that lost the argument -
     #: but an installation that put it in an `.env` file a year ago should not
     #: silently start writing somewhere else.
     file_root: Path | None = Field(
         default=None,
-        validation_alias=AliasChoices("ALETHIC_FILE_ROOT", "ALETHIC_WORKSPACE_DIR"),
+        validation_alias=AliasChoices("PROMETHEUS_FILE_ROOT", "PROMETHEUS_WORKSPACE_DIR"),
     )
     #: Which workspace this machine works in when nothing says otherwise. The
     #: switch itself is a file beside the database, written by
-    #: `alethic workspace use`; this is what an installation that has never
+    #: `prometheus workspace use`; this is what an installation that has never
     #: switched gets, and what a fresh one starts in.
     active_workspace: str = str(DEFAULT_WORKSPACE_ID)
     #: Where workflow declarations are read from. None means the ones that
@@ -108,7 +108,7 @@ class Settings(BaseSettings):
     approval_mode: Literal["prompt", "deny", "allow"] = "prompt"
     #: How long an unanswered approval stays worth answering. A question nobody
     #: came back to is closed as EXPIRED rather than left pending forever,
-    #: because a pending row is a task that `alethic resume` will keep picking up.
+    #: because a pending row is a task that `prometheus resume` will keep picking up.
     #: Zero disables the deadline, which is what a terminal prompt wants: the
     #: person is standing there.
     approval_ttl_seconds: float = 900.0
@@ -161,7 +161,7 @@ class Settings(BaseSettings):
     ui_history_limit: int = 50
 
     # --- Work that starts on its own -----------------------------------------
-    #: How often `alethic serve` looks for a schedule that is due. Well under
+    #: How often `prometheus serve` looks for a schedule that is due. Well under
     #: the shortest interval a schedule may declare, and far enough above zero
     #: that an idle machine is idle.
     scheduler_tick_seconds: float = 30.0
@@ -178,10 +178,10 @@ class Settings(BaseSettings):
     @field_validator("data_dir", "file_root", mode="after")
     @classmethod
     def _expand_home(cls, value: Path | None) -> Path | None:
-        """`~/.alethic` in the environment means the home directory, not a directory called `~`.
+        """`~/.prometheus` in the environment means the home directory, not a directory called `~`.
 
         A shell expands the tilde before the process sees it, but an `.env` file
-        is read by this process, so `ALETHIC_DATA_DIR=~/.alethic` arrives
+        is read by this process, so `PROMETHEUS_DATA_DIR=~/.prometheus` arrives
         literally - and without this the platform quietly writes its database
         into a directory named `~` beside whatever the working directory was.
         """
@@ -265,7 +265,7 @@ class Settings(BaseSettings):
 
     @property
     def stop_file_path(self) -> Path:
-        """The brake. `alethic stop` writes it; every screen action reads it."""
+        """The brake. `prometheus stop` writes it; every screen action reads it."""
         return self.data_dir / "STOP"
 
     def ensure_file_root(self) -> Path:
@@ -275,7 +275,7 @@ class Settings(BaseSettings):
 
     @property
     def db_path(self) -> Path:
-        return self.data_dir / "alethic.db"
+        return self.data_dir / "prometheus.db"
 
     @property
     def resolved_database_url(self) -> str:

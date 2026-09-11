@@ -129,7 +129,7 @@ describe("the desktop window", () => {
     expect(await screen.findByText("What would you like me to do?")).toBeInTheDocument();
 
     await user.type(
-      screen.getByLabelText("Tell Alethic what you need"),
+      screen.getByLabelText("Tell Prometheus what you need"),
       "Sort these files{Enter}",
     );
 
@@ -150,7 +150,7 @@ describe("the desktop window", () => {
     render(<App client={new RuntimeClient(BASE)} />);
 
     expect(await screen.findByText("Researcher")).toBeInTheDocument();
-    expect(screen.getByText("Alethic decides who takes what.")).toBeInTheDocument();
+    expect(screen.getByText("Prometheus decides who takes what.")).toBeInTheDocument();
   });
 
   it("puts a question waiting on the person in front of them", async () => {
@@ -169,7 +169,7 @@ describe("the desktop window", () => {
 
     render(<App client={new RuntimeClient(BASE)} />);
 
-    expect(await screen.findByText("Alethic wants to send an email")).toBeInTheDocument();
+    expect(await screen.findByText("Prometheus wants to send an email")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
   });
 

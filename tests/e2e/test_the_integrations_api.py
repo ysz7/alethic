@@ -29,7 +29,7 @@ SERVER = Path(__file__).resolve().parents[1] / "fakes" / "mcp_server.py"
 def client(tmp_path: Path):
     settings = Settings(
         data_dir=tmp_path,
-        database_url=f"sqlite+aiosqlite:///{tmp_path / 'alethic.db'}",
+        database_url=f"sqlite+aiosqlite:///{tmp_path / 'prometheus.db'}",
         file_root=tmp_path / "workspace",
     )
     _create_schema(settings)

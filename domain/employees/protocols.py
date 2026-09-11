@@ -24,9 +24,9 @@ class Employee(Protocol):
 
 
 class EmployeeRegistry(Protocol):
-    """The only way Alethic learns who exists.
+    """The only way Prometheus learns who exists.
 
-    Adding an employee is a new declaration and zero edits to Alethic.
+    Adding an employee is a new declaration and zero edits to Prometheus.
     """
 
     def list(self, workspace: WorkspaceId = DEFAULT_WORKSPACE_ID) -> list[EmployeeDefinition]: ...

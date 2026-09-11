@@ -7,7 +7,7 @@ worse than configuring:
 * **deny** - nobody is there (a scheduled run, a test, a piped process). The
   action is refused and recorded as refused. Silence is not consent.
 * **allow** - the user has explicitly said they do not want to be asked on this
-  machine. Still recorded, so `alethic approvals` shows what was done under it.
+  machine. Still recorded, so `prometheus approvals` shows what was done under it.
 
 Who gets asked is a separate question from whether to ask, and that is why the
 confirmer is injected. On a terminal it reads stdin; under the local interface
@@ -20,7 +20,7 @@ killed while waiting for a decision leaves a PENDING row, which is what makes
 the question survivable rather than lost.
 
 A question can also have a deadline. That is not a convenience: a PENDING row is
-a task `alethic resume` keeps picking up, so a question nobody ever answers is a
+a task `prometheus resume` keeps picking up, so a question nobody ever answers is a
 run that never finishes. Expiring is a refusal like any other - the rule that an
 unconfirmed action does not happen covers "nobody was there" as much as "they
 said no".

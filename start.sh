@@ -8,9 +8,9 @@
 # is already done, so running this twice costs a few seconds and changes
 # nothing.
 #
-# It does not start `alethic serve`. The Tauri shell does that itself when
+# It does not start `prometheus serve`. The Tauri shell does that itself when
 # nothing is answering on the port, and never kills a runtime it did not start -
-# so a terminal already running `alethic serve` keeps its engine and the window
+# so a terminal already running `prometheus serve` keeps its engine and the window
 # attaches to it. Starting a second one here would take that decision away from
 # whoever is at the keyboard.
 

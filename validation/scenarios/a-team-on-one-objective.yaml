@@ -1,7 +1,7 @@
 # Phase 12's Definition of Done as a request somebody would actually make: work
 # that honestly takes more than one person, stated in one sentence, with nobody
 # named. What is being measured is the decomposition and the hand-off - whether
-# Alethic sees two independent jobs and one that waits for both, and whether the
+# Prometheus sees two independent jobs and one that waits for both, and whether the
 # third employee is told what the first two found.
 #
 # The two gathering tasks are deliberately about different things and are both

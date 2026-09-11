@@ -4,7 +4,7 @@ import pytest
 
 from domain.errors import PermissionDeniedError, ToolNotFoundError
 from infrastructure.tools.registry import InMemoryToolRegistry
-from tests.fakes.actors import alethic, employee, user
+from tests.fakes.actors import employee, prometheus, user
 from tests.fakes.tools import FakeTool
 
 
@@ -44,10 +44,10 @@ def test_a_wildcard_has_to_be_asked_for(registry) -> None:
     assert registry.list_specs(user()) == []
 
 
-def test_alethic_is_not_privileged_by_being_alethic(registry) -> None:
+def test_prometheus_is_not_privileged_by_being_prometheus(registry) -> None:
     # The manager is an actor like any other; delegation never escalates.
     with pytest.raises(PermissionDeniedError):
-        registry.get("fs.delete", alethic("fs.read"))
+        registry.get("fs.delete", prometheus("fs.read"))
 
 
 def test_re_registering_a_name_replaces_the_tool(registry) -> None:

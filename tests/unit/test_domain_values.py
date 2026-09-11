@@ -5,7 +5,7 @@ from domain.employees.definition import EmployeeDefinition, Goal, Role
 from domain.llm.models import ModelProfile
 from domain.policies.models import ActorKind, effective_tools
 from domain.workspace.models import DEFAULT_WORKSPACE_ID, WorkspaceScope
-from tests.fakes.actors import alethic, employee
+from tests.fakes.actors import employee, prometheus
 
 
 def test_local_workspace_is_the_default() -> None:
@@ -60,7 +60,7 @@ def test_model_profile_states_requirements_not_vendors() -> None:
 
 
 def test_delegation_does_not_escalate_privileges() -> None:
-    manager = alethic("browser.search", "fs.write", "email.send")
+    manager = prometheus("browser.search", "fs.write", "email.send")
     executor = employee("researcher", "browser.search", "fs.read")
 
     assert effective_tools(manager, executor) == frozenset({"browser.search"})

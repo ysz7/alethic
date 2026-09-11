@@ -1,7 +1,7 @@
-# A catalog of locally served models. Point ALETHIC_MODEL_CATALOG_PATH at this file
+# A catalog of locally served models. Point PROMETHEUS_MODEL_CATALOG_PATH at this file
 # to run the whole platform without a provider key and without spending anything:
 #
-#   ALETHIC_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml uv run alethic ask "..."
+#   PROMETHEUS_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml uv run prometheus ask "..."
 #
 # It expects a local server on http://127.0.0.1:11434/v1 (Ollama's default) with
 # these models pulled. Costs are zero because they are: the price of a local call
@@ -69,7 +69,7 @@ quality = 0.6
 # Local by default even in the hosted catalog, and that is deliberate: what is
 # embedded here is the contents of documents somebody put on this machine, one
 # call per passage, and there is no reason to send them anywhere. It also costs
-# nothing and needs no key, so `alethic documents` works on a machine that has
+# nothing and needs no key, so `prometheus documents` works on a machine that has
 # never configured a provider.
 #
 # Needs `ollama pull nomic-embed-text`. Without it, retrieval falls back to the

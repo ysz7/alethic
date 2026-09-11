@@ -3,7 +3,7 @@
  *
  * There is no forget button here on purpose: reading memory and forgetting it
  * are two contracts in the core (ADR 0009), and the window holds only the
- * first. Pruning is `alethic memory --prune`, which is a deliberate act at a
+ * first. Pruning is `prometheus memory --prune`, which is a deliberate act at a
  * terminal rather than one click away from a listing.
  */
 

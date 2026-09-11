@@ -1,6 +1,6 @@
 """Phase 12.6: when two employees disagree (§87).
 
-Alethic resolves what the reports themselves settle and escalates the rest. What
+Prometheus resolves what the reports themselves settle and escalates the rest. What
 it must never do is average two contradictory findings into one confident
 paragraph, which is the failure these tests exist to make impossible.
 """
@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import json
 
-from application.alethic.reconciliation import Reconciler
+from application.prometheus.reconciliation import Reconciler
 from domain.workforce.protocols import Objective, ObjectiveStatus
 from tests.fakes.llm import FakeLLM, reply
-from tests.unit.test_alethic_manager import build, intent, plan, verdict
+from tests.unit.test_prometheus_manager import build, intent, plan, verdict
 
 OBJECTIVE = Objective.create("How many were there?")
 

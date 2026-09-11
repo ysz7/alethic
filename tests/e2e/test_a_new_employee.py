@@ -4,7 +4,7 @@
 
 That is a claim about the whole platform, and it is checked here the only way
 that means anything: by adding one - in a temporary directory, with no import,
-no registration and no edit to anything - and then having Alethic find it, choose
+no registration and no edit to anything - and then having Prometheus find it, choose
 it for work that suits it, and run it.
 
 The declaration below is written out in full on purpose. It is the entire
@@ -17,13 +17,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from application.alethic.delegation import CapabilityDelegator
-from application.alethic.intent import IntentReader
-from application.alethic.manager import AlethicManager
-from application.alethic.planner import ObjectivePlanner
-from application.alethic.supervisor import Supervisor
-from application.alethic.synthesis import Synthesizer
-from application.alethic.verification import ObjectiveVerifier
+from application.prometheus.delegation import CapabilityDelegator
+from application.prometheus.intent import IntentReader
+from application.prometheus.manager import PrometheusManager
+from application.prometheus.planner import ObjectivePlanner
+from application.prometheus.supervisor import Supervisor
+from application.prometheus.synthesis import Synthesizer
+from application.prometheus.verification import ObjectiveVerifier
 from domain.capabilities.models import Capability, CapabilityRequirement
 from domain.workforce.protocols import ObjectiveStatus
 from infrastructure.employees.yaml_registry import YamlEmployeeRegistry
@@ -82,8 +82,8 @@ def declare(root: Path, name: str, body: str, *, prompt: str = "") -> Path:
     return directory
 
 
-def manager_for(registry, llm: FakeLLM, execution: RecordingExecution) -> AlethicManager:
-    return AlethicManager(
+def manager_for(registry, llm: FakeLLM, execution: RecordingExecution) -> PrometheusManager:
+    return PrometheusManager(
         intent=IntentReader(llm),
         planner=ObjectivePlanner(llm),
         supervisor=Supervisor(
@@ -147,10 +147,10 @@ def test_the_closest_fit_is_ranked_first(tmp_path: Path) -> None:
     assert [d.name for d in ranked] == ["number-cruncher", "translator"]
 
 
-# --- Alethic uses it, with no edit to Alethic -----------------------------------------
+# --- Prometheus uses it, with no edit to Prometheus -----------------------------------------
 
 
-async def test_alethic_gives_work_to_a_newly_declared_employee(tmp_path: Path) -> None:
+async def test_prometheus_gives_work_to_a_newly_declared_employee(tmp_path: Path) -> None:
     declare(tmp_path, "translator", TRANSLATOR)
     registry = YamlEmployeeRegistry(tmp_path)
     execution = RecordingExecution()

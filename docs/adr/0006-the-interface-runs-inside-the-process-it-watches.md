@@ -21,7 +21,7 @@ tool-call log after every call. Both are written to be read afterwards. Polling
 either one gives a page that lags by a step and cannot show a plan, a stage, or a
 question - none of which are rows.
 
-**What "stop" means.** There is already a brake: `alethic stop` writes a STOP file
+**What "stop" means.** There is already a brake: `prometheus stop` writes a STOP file
 that every screen action reads (ADR 0005). It stops the machine, from a second
 terminal, immediately. That is the right design for a hand on a mouse and the
 wrong one for "this task is not going anywhere, end it and keep what it found".
@@ -30,7 +30,7 @@ wrong one for "this task is not going anywhere, end it and keep what it found".
 
 ### The interface is the platform, not a client of it
 
-`alethic serve` starts one process. The FastAPI app, the container, the employee
+`prometheus serve` starts one process. The FastAPI app, the container, the employee
 runtime and the SQLite file are the same process, and the run of a task is an
 `asyncio` task on the same event loop that serves the requests.
 
@@ -45,7 +45,7 @@ It binds to `127.0.0.1` and has no authentication. Those are one decision, not
 two: this surface starts tasks, approves irreversible actions and can drive the
 machine's screen, and it is safe without a password precisely because nothing
 off this machine can reach it. The host is a setting rather than a flag so that
-binding it elsewhere is a deliberate edit, and `alethic serve` warns when the address
+binding it elsewhere is a deliberate edit, and `prometheus serve` warns when the address
 is not loopback.
 
 ### Progress is announced by the runtime, not derived from storage
@@ -76,12 +76,12 @@ to be taught to ignore.
 
 Two brakes, because they answer different questions:
 
-| | `alethic stop` | cancel a task |
+| | `prometheus stop` | cancel a task |
 |---|---|---|
 | scope | the machine's screen | one task |
 | asked by | anyone, from any terminal | the interface running it |
 | read | before each physical action | between steps, before each tool call |
-| stored | a file under `$ALETHIC_DATA_DIR` | in memory, for this process |
+| stored | a file under `$PROMETHEUS_DATA_DIR` | in memory, for this process |
 | outcome | actions refused | task CANCELLED, partial result kept |
 
 Cancellation is **cooperative**. A coroutine killed mid-tool leaves the outside

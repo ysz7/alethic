@@ -59,7 +59,7 @@ context would then depend on scheduling - two runs of the same plan would give
 different employees different information - and a plan's results would be
 irreproducible for reasons nobody could see in the plan.
 
-**Let Alethic choose per task what to pass down, with a model call.** A judgement
+**Let Prometheus choose per task what to pass down, with a model call.** A judgement
 call per task, paid for per task, to re-derive something the plan already
 states. It also fails in the expensive direction: a manager that under-shares
 produces a task that cannot be done, and it would have no way to find out.

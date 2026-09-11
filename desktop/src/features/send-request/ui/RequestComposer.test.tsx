@@ -8,7 +8,7 @@ describe("RequestComposer", () => {
   it("sends what was typed and clears the field", async () => {
     const onSend = vi.fn();
     render(<RequestComposer onSend={onSend} />);
-    const field = screen.getByLabelText("Tell Alethic what you need");
+    const field = screen.getByLabelText("Tell Prometheus what you need");
 
     await userEvent.type(field, "Find three papers on X{Enter}");
 
@@ -21,7 +21,7 @@ describe("RequestComposer", () => {
     render(<RequestComposer onSend={onSend} />);
 
     await userEvent.type(
-      screen.getByLabelText("Tell Alethic what you need"),
+      screen.getByLabelText("Tell Prometheus what you need"),
       "first{Shift>}{Enter}{/Shift}second",
     );
 
@@ -32,7 +32,7 @@ describe("RequestComposer", () => {
     const onSend = vi.fn();
     render(<RequestComposer onSend={onSend} />);
 
-    await userEvent.type(screen.getByLabelText("Tell Alethic what you need"), "   {Enter}");
+    await userEvent.type(screen.getByLabelText("Tell Prometheus what you need"), "   {Enter}");
 
     expect(onSend).not.toHaveBeenCalled();
   });

@@ -1,6 +1,6 @@
-# What Alethic can actually do
+# What Prometheus can actually do
 
-Generated from 106 recorded run(s) on 2026-09-09 by `alethic validation-report`. Every line below is a verdict on scenarios declared in `validation/scenarios/`, measured against criteria written before each run.
+Generated from 106 recorded run(s) on 2026-09-09 by `prometheus validation-report`. Every line below is a verdict on scenarios declared in `validation/scenarios/`, measured against criteria written before each run.
 
 - Completed to the stated standard: **58%** of attempts
 - Spent across every attempt: **$0.0000**
@@ -46,7 +46,7 @@ The list the roadmap is argued from: the categories at the top are where the nex
 
 ## The regression set
 
-Scenarios that have passed here at least once. Each is expected to keep passing; `alethic validate --regression` runs exactly these.
+Scenarios that have passed here at least once. Each is expected to keep passing; `prometheus validate --regression` runs exactly these.
 
 - `research-from-the-web`
 - `sort-a-folder`

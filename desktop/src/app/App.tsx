@@ -3,45 +3,79 @@ import { useState } from "react";
 import { ChatPage } from "../pages/chat";
 import { SettingsPage } from "../pages/settings";
 import { RuntimeProvider, type RuntimeClient } from "../shared/api";
-import { WorkspaceBar } from "../widgets/workspace-bar";
+import { Sidebar } from "../widgets/sidebar";
+
+/** Below this the sidebar is a drawer over the page rather than a column beside it. */
+const NARROW = 900;
+
+const narrow = () => typeof window !== "undefined" && window.innerWidth < NARROW;
 
 /**
- * The application: one provider, two screens, and which workspace they are of.
+ * The application: one provider, a sidebar, a page, and which workspace they
+ * are of.
  *
- * The app layer holds two pieces of state and no rules: which page is shown,
- * and a number that changes when the workspace does. The second one remounts
- * the page, because everything on it - the thread, the history, the documents -
- * belongs to a workspace, and a screen left over from the previous one would be
- * showing another context's work under the new context's name.
+ * The app layer holds state and no rules: which page is shown, which thread is
+ * open (none is a new task), whether the sidebar is out, and two counters - one
+ * that changes when the workspace does and one that changes when the page did
+ * something the sidebar should show at once. The first remounts everything,
+ * because the thread, the history and the documents all belong to a workspace,
+ * and a screen left over from the previous one would be showing another
+ * context's work under the new context's name.
  */
 export function App({ client, baseUrl }: { client?: RuntimeClient; baseUrl?: string }) {
   const [showing, setShowing] = useState<"work" | "settings">("work");
   const [workspace, setWorkspace] = useState(0);
-  const switched = () => setWorkspace((count) => count + 1);
+  const [open, setOpen] = useState<string | null>(null);
+  const [railOpen, setRailOpen] = useState(() => !narrow());
+  const [heard, setHeard] = useState(0);
+
+  const switched = () => {
+    setWorkspace((count) => count + 1);
+    setOpen(null);
+  };
+  const go = (page: "work" | "settings", thread: string | null = open) => {
+    setShowing(page);
+    setOpen(thread);
+    if (narrow()) setRailOpen(false);
+  };
+
   return (
     <RuntimeProvider client={client} baseUrl={baseUrl}>
-      <nav className="places">
-        <button
-          type="button"
-          className={showing === "work" ? "here" : ""}
-          onClick={() => setShowing("work")}
-        >
-          Work
-        </button>
-        <button
-          type="button"
-          className={showing === "settings" ? "here" : ""}
-          onClick={() => setShowing("settings")}
-        >
-          Settings
-        </button>
-        <WorkspaceBar onSwitched={switched} />
-      </nav>
-      {showing === "work" ? (
-        <ChatPage key={workspace} />
-      ) : (
-        <SettingsPage key={workspace} onSwitched={switched} />
-      )}
+      <div className={railOpen ? "app" : "app rail-closed"}>
+        <Sidebar
+          key={`rail-${workspace}`}
+          selected={showing === "work" ? open : null}
+          settingsOpen={showing === "settings"}
+          refresh={heard}
+          onSelect={(thread) => go("work", thread)}
+          onNew={() => go("work", null)}
+          onSettings={() => go("settings")}
+          onClose={() => setRailOpen(false)}
+        />
+        <div
+          className={railOpen ? "scrim on" : "scrim"}
+          aria-hidden="true"
+          onClick={() => setRailOpen(false)}
+        />
+        {showing === "work" ? (
+          <ChatPage
+            key={workspace}
+            conversationId={open}
+            onOpened={setOpen}
+            onChanged={() => setHeard((count) => count + 1)}
+            onSwitched={switched}
+            railOpen={railOpen}
+            onOpenRail={() => setRailOpen(true)}
+          />
+        ) : (
+          <SettingsPage
+            key={workspace}
+            onSwitched={switched}
+            railOpen={railOpen}
+            onOpenRail={() => setRailOpen(true)}
+          />
+        )}
+      </div>
     </RuntimeProvider>
   );
 }

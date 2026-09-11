@@ -10,9 +10,9 @@ Against `gpt-oss:20b` on this machine, so the phase could be validated without a
 provider key.
 
 ```bash
-export ALETHIC_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
+export PROMETHEUS_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
 uv run alembic upgrade head
-uv run alethic run-task --employee researcher \
+uv run prometheus run-task --employee researcher \
   "Summarize what SQLite WAL mode changes about concurrent reads and writes, and say where that comes from."
 ```
 
@@ -20,7 +20,7 @@ uv run alethic run-task --employee researcher \
 
 The task planned in three steps, executed, was verified, and completed. The
 output was a table contrasting rollback-journal and WAL locking, a paragraph of
-synthesis, and a source list. `alethic spend` recorded three model calls: planning
+synthesis, and a source list. `prometheus spend` recorded three model calls: planning
 and execution on `gpt-oss:20b`, verification on `lfm2.5:8b` - each stage routed
 by its own task kind, as configured.
 
@@ -36,7 +36,7 @@ plan steps: 5 steps, saved
 messages: 4 | observations: ['browser.search failed: Unknown tool: browser.search']
 ```
 
-`uv run alethic resume` then made **one** execution call and one verification call
+`uv run prometheus resume` then made **one** execution call and one verification call
 and completed the task at step 2. No `task.planned` event appears in the resume
 log: it continued from the saved transcript rather than starting over, and did
 not pay for a second plan.

@@ -37,7 +37,7 @@ DEADLINE_SECONDS = 10.0
 def settings_for(tmp_path: Path) -> Settings:
     return Settings(
         data_dir=tmp_path,
-        database_url=f"sqlite+aiosqlite:///{tmp_path / 'alethic.db'}",
+        database_url=f"sqlite+aiosqlite:///{tmp_path / 'prometheus.db'}",
         file_root=tmp_path / "workspace",
         employees_dir=REPO_ROOT / "employees",
         ui_approval_timeout_seconds=5.0,

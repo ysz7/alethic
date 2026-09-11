@@ -1,6 +1,6 @@
 """A question with a deadline (Phase 10, §10.4).
 
-The reason this exists is not tidiness. A PENDING row is a task `alethic resume`
+The reason this exists is not tidiness. A PENDING row is a task `prometheus resume`
 keeps picking up, so a question nobody ever answers is a run that never
 finishes - and the answer to "nobody was there" has to be the same as the answer
 to "they said no".

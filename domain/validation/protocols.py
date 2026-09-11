@@ -32,7 +32,7 @@ class ScenarioRegistry(Protocol):
 
 
 class ObjectiveExecution(Protocol):
-    """Alethic, seen from outside: state a goal, get an answer.
+    """Prometheus, seen from outside: state a goal, get an answer.
 
     Narrower than `WorkforceManager` on purpose. The harness needs the two calls
     the CLI makes and nothing else, and asking for the whole manager contract

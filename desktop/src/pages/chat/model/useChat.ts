@@ -1,11 +1,16 @@
 /**
- * The window's state, and the only place that holds any.
+ * The page's state, and the only place that holds any.
  *
- * Thin on purpose: a thread of turns, the activity of the run currently
- * happening, the questions waiting on the person, and who is available. Every
- * one of those is *read* from the runtime rather than derived here - there is
- * no local model of a task's lifecycle, no optimistic status and no rule about
- * when work is finished. The runtime says; this remembers what it last said.
+ * Thin on purpose: the thread on screen, what each run in it was seen doing,
+ * the questions waiting on the person, and who is available. Every one of those
+ * is *read* from the runtime rather than derived here - there is no local model
+ * of a task's lifecycle, no optimistic status and no rule about when work is
+ * finished. The runtime says; this remembers what it last said.
+ *
+ * Which thread is on screen is the frame's to say (`conversationId`), because
+ * the sidebar lists them. A new task has none until its first request: a thread
+ * is opened when there is something to put in it, not when a window starts -
+ * the version that opened one per start filled the list with blank rows.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -30,7 +35,10 @@ export interface ChatState {
   problem: string;
   thread: Thread | null;
   messages: Message[];
+  /** What the running turn is doing now. */
   activity: ActivityEvent[];
+  /** What each turn was seen doing, by objective, for as long as this page is up. */
+  trails: Record<string, ActivityEvent[]>;
   approvals: Approval[];
   employees: Employee[];
   busy: boolean;
@@ -39,15 +47,37 @@ export interface ChatState {
   decide: (approvalId: string, approved: boolean) => Promise<void>;
 }
 
-export function useChat(client: RuntimeClient): ChatState {
+export interface ChatHooks {
+  /** A thread was opened for the first request of a new task. */
+  onOpened?: (conversationId: string) => void;
+  /** Something the sidebar lists changed: a request was made, or a run ended. */
+  onChanged?: () => void;
+}
+
+export function useChat(
+  client: RuntimeClient,
+  conversationId: string | null = null,
+  hooks: ChatHooks = {},
+): ChatState {
   const [ready, setReady] = useState(false);
   const [problem, setProblem] = useState("");
   const [thread, setThread] = useState<Thread | null>(null);
-  const [activity, setActivity] = useState<ActivityEvent[]>([]);
+  const [trails, setTrails] = useState<Record<string, ActivityEvent[]>>({});
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const watching = useRef<string | null>(null);
   const unwatch = useRef<(() => void) | null>(null);
+  // Which thread is on screen, readable from callbacks that outlive a render: a
+  // re-read that arrives after the person opened another thread must not put
+  // the old one back.
+  const shown = useRef<string | null>(null);
+  const told = useRef(hooks);
+  told.current = hooks;
+
+  const adopt = useCallback((next: Thread | null) => {
+    shown.current = next?.id ?? null;
+    setThread(next);
+  }, []);
 
   const running = useMemo(
     () => thread?.messages.find((message) => !message.answered) ?? null,
@@ -65,9 +95,10 @@ export function useChat(client: RuntimeClient): ChatState {
   }, []);
 
   const reread = useCallback(
-    async (conversationId: string) => {
+    async (id: string) => {
       try {
-        setThread(await conversationApi.thread(client, conversationId));
+        const read = await conversationApi.thread(client, id);
+        if (shown.current === id) setThread(read);
       } catch (error) {
         fail(error);
       }
@@ -75,16 +106,14 @@ export function useChat(client: RuntimeClient): ChatState {
     [client, fail],
   );
 
-  // A thread is opened as soon as the engine answers. Greeting somebody before
-  // the runtime is up would take a request the window cannot deliver.
+  // Ready once the engine answers. Taking a request before then would take one
+  // the window cannot deliver.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const opened = await conversationApi.open(client);
         const workforce = await employeeApi.all(client);
         if (cancelled) return;
-        setThread({ ...opened, messages: [] });
         setEmployees(workforce);
         setReady(true);
       } catch (error) {
@@ -96,21 +125,44 @@ export function useChat(client: RuntimeClient): ChatState {
     };
   }, [client, fail]);
 
+  // The thread the frame names. Nothing is loaded for one this page opened
+  // itself - it is already on screen.
+  useEffect(() => {
+    if (conversationId === shown.current) return;
+    setProblem("");
+    if (!conversationId) {
+      adopt(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const read = await conversationApi.thread(client, conversationId);
+        if (!cancelled) adopt(read);
+      } catch (error) {
+        if (!cancelled) fail(error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [client, conversationId, adopt, fail]);
+
   // Follow whatever is running. One subscription at a time: the trace shown is
   // the trace of the request the person is waiting on.
   useEffect(() => {
     const objectiveId = running?.id;
-    const conversationId = thread?.id;
-    if (!objectiveId || !conversationId || watching.current === objectiveId) return;
+    const threadId = thread?.id;
+    if (!objectiveId || !threadId || watching.current === objectiveId) return;
     unwatch.current?.();
-    setActivity([]);
     watching.current = objectiveId;
     unwatch.current = watchObjective(client, objectiveId, (event) => {
-      setActivity((seen) => [...seen, event]);
+      setTrails((seen) => ({ ...seen, [objectiveId]: [...(seen[objectiveId] ?? []), event] }));
       // The answer is written to the store by the runtime, not carried in the
       // stream. The final event says when it is worth reading again.
       if (event.kind === "RESULT" && event.objective_id === objectiveId) {
-        void reread(conversationId);
+        void reread(threadId);
+        told.current.onChanged?.();
       }
     });
     return () => {
@@ -124,9 +176,9 @@ export function useChat(client: RuntimeClient): ChatState {
   // stream is lossy by design - a dropped connection must not be the difference
   // between seeing the answer and not seeing it.
   useEffect(() => {
-    const conversationId = thread?.id;
-    if (!conversationId || !busy) return;
-    const timer = setInterval(() => void reread(conversationId), THREAD_POLL_MS);
+    const threadId = thread?.id;
+    if (!threadId || !busy) return;
+    const timer = setInterval(() => void reread(threadId), THREAD_POLL_MS);
     return () => clearInterval(timer);
   }, [thread?.id, busy, reread]);
 
@@ -147,18 +199,26 @@ export function useChat(client: RuntimeClient): ChatState {
 
   const send = useCallback(
     async (request: string) => {
-      if (!thread) return;
       setProblem("");
       try {
-        const message = await conversationApi.send(client, thread.id, request);
-        setThread((current) =>
-          current ? { ...current, messages: [...current.messages, message] } : current,
+        let current = thread;
+        if (!current) {
+          const opened = await conversationApi.open(client);
+          current = { ...opened, messages: [] };
+          adopt(current);
+          told.current.onOpened?.(opened.id);
+        }
+        const into = current.id;
+        const message = await conversationApi.send(client, into, request);
+        setThread((now) =>
+          now && now.id === into ? { ...now, messages: [...now.messages, message] } : now,
         );
+        told.current.onChanged?.();
       } catch (error) {
         fail(error);
       }
     },
-    [client, thread, fail],
+    [client, thread, adopt, fail],
   );
 
   const stop = useCallback(async () => {
@@ -166,6 +226,7 @@ export function useChat(client: RuntimeClient): ChatState {
     try {
       await stopObjective(client, running.id);
       await reread(thread.id);
+      told.current.onChanged?.();
     } catch (error) {
       fail(error);
     }
@@ -188,7 +249,8 @@ export function useChat(client: RuntimeClient): ChatState {
     problem,
     thread,
     messages: thread?.messages ?? [],
-    activity,
+    activity: running ? (trails[running.id] ?? []) : [],
+    trails,
     approvals,
     employees,
     busy,

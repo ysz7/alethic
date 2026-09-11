@@ -11,7 +11,7 @@ inside an installed application: nobody opens a TOML file in a window, and
 
 So the catalog gains a second source, and the file becomes the seed. A fresh
 installation copies the shipped entries in and then belongs to the user;
-`ALETHIC_MODEL_CATALOG_PATH` still overrides everything, because validation and
+`PROMETHEUS_MODEL_CATALOG_PATH` still overrides everything, because validation and
 CI need a catalog they can state in one environment variable and not a database
 they would have to populate first.
 

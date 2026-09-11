@@ -1,4 +1,4 @@
-"""Alethic accepts a result on the evidence, not on the report (§88).
+"""Prometheus accepts a result on the evidence, not on the report (§88).
 
 The employee runtime already verifies each task against its own goal, and that
 is necessary and not sufficient: the witness is the run that would report

@@ -1,6 +1,6 @@
 """One object every interface talks to.
 
-`AlethicService` is a facade and is written to stay one. It decides nothing: it
+`PrometheusService` is a facade and is written to stay one. It decides nothing: it
 does not plan, does not choose an employee, does not call a tool and does not
 judge whether an action is allowed. Every method here is a short arrangement of
 things that already exist - the manager, the task runner, the repositories, the
@@ -11,7 +11,7 @@ regression this package exists to prevent.
 Two consequences worth stating.
 
 **There is one way to start work, and this is not a second one.** A request
-becomes an objective through `AlethicManager`, exactly as `ask-alethic`, a workflow
+becomes an objective through `PrometheusManager`, exactly as `ask-prometheus`, a workflow
 step and a schedule firing do. A method here that ran a task itself would be a
 second execution engine wearing a convenience name.
 
@@ -50,7 +50,7 @@ from domain.capabilities.models import Capability
 from domain.conversations.models import Conversation
 from domain.conversations.repository import ConversationRepository
 from domain.employees.protocols import EmployeeRegistry
-from domain.errors import AlethicError, ConfigurationError, IntegrationNotFoundError
+from domain.errors import ConfigurationError, IntegrationNotFoundError, PrometheusError
 from domain.integrations.models import IntegrationKind
 from domain.knowledge.models import KnowledgeQuery
 from domain.knowledge.protocols import Retriever
@@ -74,19 +74,19 @@ log = structlog.get_logger(__name__)
 DEFAULT_LIMIT = 50
 
 
-class ApprovalsDisabledError(AlethicError):
+class ApprovalsDisabledError(PrometheusError):
     """Asked to decide something on a configuration with no approvals at all."""
 
 
-class IntegrationsDisabledError(AlethicError):
+class IntegrationsDisabledError(PrometheusError):
     """Asked about connected services on a machine where they are switched off."""
 
 
-class WorkspacesDisabledError(AlethicError):
+class WorkspacesDisabledError(PrometheusError):
     """Asked to switch context on an interface built without workspaces."""
 
 
-class KnowledgeDisabledError(AlethicError):
+class KnowledgeDisabledError(PrometheusError):
     """Asked about documents on a machine where knowledge is switched off."""
 
 
@@ -139,7 +139,7 @@ class ServiceDependencies:
     history_limit: int = DEFAULT_LIMIT
 
 
-class AlethicService:
+class PrometheusService:
     """The application-level operations an interface is allowed to perform."""
 
     def __init__(self, dependencies: ServiceDependencies) -> None:
@@ -173,7 +173,20 @@ class AlethicService:
         found = await self._d.conversations.list_recent(
             await self._here(), limit=limit or self._d.history_limit
         )
-        return [views.conversation(item) for item in found]
+        listed = []
+        for item in found:
+            # One read per thread, bounded by the history limit: a list that
+            # cannot say which thread is still working sends a person opening
+            # each one to find out.
+            thread = await self._d.objectives.for_conversation(item.id)
+            listed.append(
+                views.conversation(
+                    item,
+                    messages=len(thread),
+                    status=thread[-1].status.value if thread else None,
+                )
+            )
+        return listed
 
     async def get_conversation(self, conversation_id: UUID) -> dict[str, Any] | None:
         """A thread and everything said in it, oldest first.
@@ -186,7 +199,11 @@ class AlethicService:
             return None
         thread = await self._d.objectives.for_conversation(conversation_id)
         return {
-            **views.conversation(conversation, messages=len(thread)),
+            **views.conversation(
+                conversation,
+                messages=len(thread),
+                status=thread[-1].status.value if thread else None,
+            ),
             "messages": [
                 views.message(item, thinking=self._d.runs.is_thinking(item.id))
                 for item in thread
@@ -350,7 +367,7 @@ class AlethicService:
         """
         text = request.text
         if not text:
-            raise AlethicError("An empty request has nothing to work on.")
+            raise PrometheusError("An empty request has nothing to work on.")
 
         conversation = await self._thread_for(request)
         objective = await self._d.runs.ask(
@@ -782,7 +799,7 @@ def _capability(value: str) -> Capability:
         return Capability(value)
     except ValueError as error:
         known = ", ".join(sorted(str(c) for c in Capability))
-        raise AlethicError(
+        raise PrometheusError(
             f"'{value}' is not a capability this platform knows. Known: {known}."
         ) from error
 
@@ -799,7 +816,7 @@ def _effect(value: str) -> Effect:
         return Effect(value)
     except ValueError as error:
         known = ", ".join(effect.value for effect in Effect)
-        raise AlethicError(
+        raise PrometheusError(
             f"'{value}' is not an effect. A capability does one of: {known}. "
             "Risk is not set here; it follows from the effect."
         ) from error
@@ -816,4 +833,4 @@ def _task_kind(value: str) -> TaskKind:
         return TaskKind(value.strip().upper())
     except ValueError as error:
         known = ", ".join(sorted(kind.value for kind in TaskKind))
-        raise AlethicError(f"Unknown kind of work '{value}'. Known: {known}.") from error
+        raise PrometheusError(f"Unknown kind of work '{value}'. Known: {known}.") from error

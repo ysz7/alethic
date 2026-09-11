@@ -209,7 +209,7 @@ async def test_an_approved_action_is_not_audited_twice() -> None:
 
 
 async def test_the_task_is_parked_while_a_person_is_being_asked() -> None:
-    """`alethic tasks` should say what a run is doing, not show it as RUNNING
+    """`prometheus tasks` should say what a run is doing, not show it as RUNNING
     with nothing happening."""
     seen: list[TaskStatus] = []
 

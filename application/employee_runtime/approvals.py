@@ -11,7 +11,7 @@ something an employee was declared not to do turns the declaration into a
 suggestion.
 
 **Waiting is a state of the task, not of the coroutine.** A task parked on a
-person is moved to WAITING_FOR_APPROVAL and back, so `alethic tasks` says what a
+person is moved to WAITING_FOR_APPROVAL and back, so `prometheus tasks` says what a
 run is actually doing rather than showing it as RUNNING with nothing happening.
 
 **The refusals are recorded here, and only the refusals.** A denied action and

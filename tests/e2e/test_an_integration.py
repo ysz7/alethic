@@ -284,7 +284,7 @@ async def test_a_fresh_process_offers_a_connected_service_before_any_work(
 
     settings = Settings(
         data_dir=tmp_path,
-        database_url=f"sqlite+aiosqlite:///{tmp_path / 'alethic.db'}",
+        database_url=f"sqlite+aiosqlite:///{tmp_path / 'prometheus.db'}",
         file_root=tmp_path / "workspace",
     )
     engine = create_engine(settings.resolved_database_url)

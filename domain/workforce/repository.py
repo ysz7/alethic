@@ -1,6 +1,6 @@
 """Persistence contracts for the manager's own record.
 
-What the user asked for, what Alethic decided it meant, and who was asked to do
+What the user asked for, what Prometheus decided it meant, and who was asked to do
 what. No SQL crosses this boundary.
 """
 
@@ -65,7 +65,7 @@ class PlanRepository(Protocol):
     async def for_objective(self, objective_id: UUID) -> list[Plan]:
         """Every revision, newest first. A superseded plan is kept, not deleted.
 
-        What Alethic thought on the first attempt is the only evidence of why a
+        What Prometheus thought on the first attempt is the only evidence of why a
         second was needed.
         """
         ...

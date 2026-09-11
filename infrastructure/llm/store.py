@@ -2,7 +2,7 @@
 
 Three rules, and each rejects an alternative that looked simpler.
 
-**A named path wins outright.** `ALETHIC_MODEL_CATALOG_PATH` is how validation
+**A named path wins outright.** `PROMETHEUS_MODEL_CATALOG_PATH` is how validation
 and CI say which models to use, in one environment variable and without a
 database somebody would have to populate first. When it is set, the file is the
 catalog and the store is not consulted - not merged with, not overridden by.

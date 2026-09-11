@@ -30,13 +30,13 @@ async def test_a_runaway_program_is_stopped() -> None:
 
 async def test_the_environment_is_not_inherited(monkeypatch) -> None:
     """A key on this machine must not be readable by code the model wrote."""
-    monkeypatch.setenv("ALETHIC_LLM_API_KEY", "sk-do-not-leak")
+    monkeypatch.setenv("PROMETHEUS_LLM_API_KEY", "sk-do-not-leak")
 
     result = await CodeExecutionTool().execute(
         {"code": "import os; print(list(os.environ.keys()))"}
     )
 
-    assert "ALETHIC_LLM_API_KEY" not in result.output["stdout"]
+    assert "PROMETHEUS_LLM_API_KEY" not in result.output["stdout"]
 
 
 async def test_output_is_truncated_rather_than_flooding_the_context() -> None:

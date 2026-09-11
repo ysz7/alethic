@@ -215,7 +215,7 @@ def objective_summary(item: Objective, *, thinking: bool = False) -> dict[str, A
 def objective_detail(
     item: Objective, *, thinking: bool = False, plans: list[Plan] | None = None
 ) -> dict[str, Any]:
-    """One request, opened: what Alethic made of it, and what it did about it.
+    """One request, opened: what Prometheus made of it, and what it did about it.
 
     Every revision is shown, not only the last. A superseded plan is the only
     evidence of why a second attempt was needed, and hiding it would leave the
@@ -260,11 +260,21 @@ def plan_view(plan: Plan) -> dict[str, Any]:
 # --- Conversations ------------------------------------------------------------
 
 
-def conversation(item: Conversation, *, messages: int = 0) -> dict[str, Any]:
+def conversation(
+    item: Conversation, *, messages: int = 0, status: str | None = None
+) -> dict[str, Any]:
+    """A thread, as a line in a list of them.
+
+    `status` is where the latest request in it stands, so a list can mark a
+    thread that is still working without opening it. It is read off the
+    objectives by the caller rather than stored on the conversation: a status
+    kept in two places is the one that goes stale.
+    """
     return {
         "id": str(item.id),
         "title": item.title,
         "messages": messages,
+        "status": status,
         "created_at": item.created_at.isoformat(),
         "updated_at": item.updated_at.isoformat(),
     }

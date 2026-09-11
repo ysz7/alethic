@@ -16,7 +16,7 @@ viewer, a control that only answers to a mouse. The DOM has one element and no
 text at all, which the run establishes for itself rather than being told:
 
 ```
-uv run alethic run-task --employee operator "Open file:///tmp/alethic-phase5/ws/keypad.html
+uv run prometheus run-task --employee operator "Open file:///tmp/prometheus-phase5/ws/keypad.html
   with browser.open and then read it with browser.extract. Report exactly what
   browser.extract returned."
 
@@ -35,11 +35,11 @@ the router is asked for `VISION` and answers from the catalog.
 
 ```bash
 ollama pull gpt-oss:20b && ollama pull qwen2.5vl:7b
-export ALETHIC_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
-export ALETHIC_WORKSPACE_DIR=/tmp/alethic-phase5/ws
+export PROMETHEUS_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
+export PROMETHEUS_WORKSPACE_DIR=/tmp/prometheus-phase5/ws
 uv run alembic upgrade head
-uv run alethic run-task --employee operator \
-  "Open file:///tmp/alethic-phase5/ws/keypad.html and enter the code 4 7 2 on the keypad,
+uv run prometheus run-task --employee operator \
+  "Open file:///tmp/prometheus-phase5/ws/keypad.html and enter the code 4 7 2 on the keypad,
    then press OK. The page is a canvas: browser.extract returns nothing, so you must
    work from the screen. Look up each key's coordinates with computer.screen before
    clicking it, and confirm at the end that the screen shows ACCEPTED."
@@ -80,11 +80,11 @@ it does only for `472`.
 ### The Definition of Done: the flag, and what survives it
 
 ```
-$ alethic tools                                # computer use off, the default
+$ prometheus tools                                # computer use off, the default
 computer.click  MEDIUM  COMPUTER_USE  operator
 ...
 
-$ ALETHIC_FLAGS__COMPUTER_USE=true alethic tools   # and on
+$ PROMETHEUS_FLAGS__COMPUTER_USE=true prometheus tools   # and on
 desktop.click   HIGH    DESKTOP       nobody  [needs approval]
 desktop.screen  LOW     DESKTOP       nobody
 ...

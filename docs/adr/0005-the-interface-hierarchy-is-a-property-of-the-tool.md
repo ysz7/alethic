@@ -90,7 +90,7 @@ Two of its defaults are worth stating because they are refusals:
 
 ### The stop word is a file
 
-`alethic stop` writes `~/.alethic/STOP`, and every action on a screen reads it
+`prometheus stop` writes `~/.prometheus/STOP`, and every action on a screen reads it
 first. Not a signal to a process: the run may be busy, may have the screen, and
 the terminal that started it may be gone. A file works from a second terminal,
 survives the process it stops, and is how Phase 6's interface will pull the same

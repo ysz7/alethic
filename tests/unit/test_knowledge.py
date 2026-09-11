@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from application.knowledge.service import KnowledgeService
-from domain.errors import AlethicError
+from domain.errors import PrometheusError
 from domain.knowledge.chunking import chunk
 from domain.knowledge.models import DocumentStatus, KnowledgeQuery
 from domain.knowledge.ranking import blend, cosine, normalise
@@ -193,7 +193,7 @@ async def test_a_file_with_nothing_in_it_is_refused(tmp_path: Path) -> None:
     empty = tmp_path / "empty.md"
     empty.write_text("   ", encoding="utf-8")
 
-    with pytest.raises(AlethicError):
+    with pytest.raises(PrometheusError):
         await service().add_file(empty)
 
 

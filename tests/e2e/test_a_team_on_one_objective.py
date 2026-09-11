@@ -17,14 +17,14 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
-from application.alethic.delegation import CapabilityDelegator
-from application.alethic.intent import IntentReader
-from application.alethic.manager import AlethicManager
-from application.alethic.planner import ObjectivePlanner
-from application.alethic.reconciliation import Reconciler
-from application.alethic.supervisor import Supervisor
-from application.alethic.synthesis import Synthesizer
-from application.alethic.verification import ObjectiveVerifier
+from application.prometheus.delegation import CapabilityDelegator
+from application.prometheus.intent import IntentReader
+from application.prometheus.manager import PrometheusManager
+from application.prometheus.planner import ObjectivePlanner
+from application.prometheus.reconciliation import Reconciler
+from application.prometheus.supervisor import Supervisor
+from application.prometheus.synthesis import Synthesizer
+from application.prometheus.verification import ObjectiveVerifier
 from domain.tasks.task import Task, TaskResult, TaskStatus
 from domain.workforce.assignment import TaskAssignment
 from domain.workforce.protocols import ObjectiveStatus
@@ -90,9 +90,9 @@ class TimedExecution(RecordingExecution):
 
 def manager_for(
     llm: FakeLLM, execution: RecordingExecution, chooser: FakeLLM | None = None
-) -> AlethicManager:
+) -> PrometheusManager:
     registry = YamlEmployeeRegistry(EMPLOYEES)
-    return AlethicManager(
+    return PrometheusManager(
         intent=IntentReader(llm),
         planner=ObjectivePlanner(llm),
         supervisor=Supervisor(

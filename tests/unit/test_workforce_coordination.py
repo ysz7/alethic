@@ -2,7 +2,7 @@
 
 Three claims, and each is the plan's own words turned into a test. Independent
 tasks run at once (12.1). What one employee learns reaches another only through
-the coordinator, and only where the plan said so (12.2, 12.3, 12.5). And Alethic
+the coordinator, and only where the plan said so (12.2, 12.3, 12.5). And Prometheus
 accepts a result on the evidence rather than on the report (12.7).
 """
 
@@ -12,8 +12,8 @@ import asyncio
 from dataclasses import replace
 from uuid import uuid4
 
-from application.alethic.delegation import CapabilityDelegator
-from application.alethic.supervisor import Supervisor
+from application.prometheus.delegation import CapabilityDelegator
+from application.prometheus.supervisor import Supervisor
 from application.workforce.coordinator import WorkforceCoordinator
 from domain.tasks.task import Task, TaskCreatedBy, TaskResult, TaskStatus
 from domain.workforce.acceptance import accept
@@ -28,7 +28,7 @@ WORKER = definition("worker", tools=frozenset({"fs.read"}))
 
 def task(goal: str, plan_id) -> Task:
     return replace(
-        Task.create(goal, created_by=TaskCreatedBy.ALETHIC), plan_id=plan_id
+        Task.create(goal, created_by=TaskCreatedBy.PROMETHEUS), plan_id=plan_id
     )
 
 
@@ -206,7 +206,7 @@ def test_nothing_but_the_coordinator_builds_context_for_a_task() -> None:
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[2]
-    source = (root / "application" / "alethic" / "supervisor.py").read_text(encoding="utf-8")
+    source = (root / "application" / "prometheus" / "supervisor.py").read_text(encoding="utf-8")
     built = source.count("SharedContext(")
     assert built == 1, "the only SharedContext() in the supervisor is the empty default"
     assert "context or SharedContext()" in source
@@ -254,7 +254,7 @@ def test_a_task_that_used_no_tools_is_accepted() -> None:
 
 
 async def test_a_refused_result_is_reassigned_rather_than_retried() -> None:
-    from application.alethic.supervisor import Recovery, TaskOutcome, recovery_for
+    from application.prometheus.supervisor import Recovery, TaskOutcome, recovery_for
 
     outcome = TaskOutcome(
         task=completed(observations=[observation(False, refused=True)]),

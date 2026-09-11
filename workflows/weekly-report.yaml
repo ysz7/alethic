@@ -13,7 +13,7 @@ description: >
 
 trigger: MANUAL
 
-# Defaults for the placeholders below. `alethic run-workflow weekly-report
+# Defaults for the placeholders below. `prometheus run-workflow weekly-report
 # --input folder=sales` overrides one without editing the file.
 inputs:
   folder: "."

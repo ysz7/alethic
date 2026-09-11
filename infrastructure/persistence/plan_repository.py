@@ -15,7 +15,7 @@ value are the ones the planner proposed and never moved on.
 
 So a plan read back mid-run holds the tasks that have started, in plan order,
 with their current state. Before any of them has, it holds its edges and no
-tasks; what Alethic intends is on the progress stream by then, and what it did is
+tasks; what Prometheus intends is on the progress stream by then, and what it did is
 here afterwards.
 """
 

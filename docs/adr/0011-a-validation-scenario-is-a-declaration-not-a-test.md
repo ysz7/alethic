@@ -13,7 +13,7 @@ two failings that only show up over time.
 **A sentence in a report cannot be re-run.** Phase 4 sorted a folder in
 September. Whether it still sorts a folder is unknown, and finding out means a
 person reading the September report and retyping the request. §11.5 asks for the
-opposite: a task Alethic has done once should keep being done, and something has
+opposite: a task Prometheus has done once should keep being done, and something has
 to check.
 
 **A verdict written by a person is an opinion about the platform.** The phase's
@@ -45,7 +45,7 @@ declaration nobody can read.
 ### The harness holds the platform's three doors and no fourth
 
 `ValidationHarness` is given the manager, the task runner and the workflow
-engine - the same three objects the CLI builds for `ask-alethic`, `run-task` and
+engine - the same three objects the CLI builds for `ask-prometheus`, `run-task` and
 `run-workflow`. It cannot plan, choose an employee, call a tool or approve
 anything. That restraint is the whole reason a run means something: whatever it
 reports is what a person making the same request would have got. A fourth way to
@@ -54,7 +54,7 @@ runtime would make the platform measure itself.
 
 ### Expectations are written before the run, and checked against the store
 
-The discipline Alethic applies to an objective, applied to the scenario. The
+The discipline Prometheus applies to an objective, applied to the scenario. The
 checks are a pure function over evidence gathered from what the platform already
 writes down - the task rows, `tool_calls`, `audit_log`, the approvals table -
 never from the summary the run returned. Phase 10 caught a workflow step that
@@ -79,7 +79,7 @@ thread are both PERMANENT there and are entirely different pieces of work here.
 
 `validation_runs` (migration 010), no foreign keys, for the reason `audit_log`
 has none: the record outlives the tasks it describes, and the question it
-answers is asked months later. `alethic validation-report` computes the phase's
+answers is asked months later. `prometheus validation-report` computes the phase's
 written answer from those rows, and a scenario that has passed exactly once
 reads as SOMETIMES - which is the entire content of the word "reliably".
 
@@ -90,7 +90,7 @@ those. A hand-maintained list would drift, and would drift towards optimism.
 ## Consequences
 
 * Closing a phase gains a mechanical half: the prose report still explains, and
-  `alethic validate` says whether the capability still works.
+  `prometheus validate` says whether the capability still works.
 * The suite costs money and minutes, so it is a command and not something CI
   runs. `uv run pytest` remains free, offline and fast, and measures a different
   thing.
@@ -102,7 +102,7 @@ those. A hand-maintained list would drift, and would drift towards optimism.
   needed `ApprovalRepository.for_task`, which did not exist: `list_pending`
   answers what still needs somebody, and by the time anyone asks about a
   finished run, nothing is pending.
-* `alethic validate` unattended is an honest reading of an unattended machine:
+* `prometheus validate` unattended is an honest reading of an unattended machine:
   anything needing approval is refused, and the report says NEEDED_APPROVAL
   rather than pretending the capability is missing.
 

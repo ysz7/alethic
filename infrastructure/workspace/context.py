@@ -2,7 +2,7 @@
 
 Three decisions are worth the words.
 
-**The active workspace is a file, not a row.** `alethic workspace use work`
+**The active workspace is a file, not a row.** `prometheus workspace use work`
 writes it and every later process reads it, exactly as the stop signal works and
 for the same reason: it is a fact about this machine rather than about the data,
 and a database that is moved to another machine should not bring "which
@@ -38,7 +38,7 @@ log = get_logger(__name__)
 
 ACTIVE_WORKSPACE_FILE_NAME = "ACTIVE_WORKSPACE"
 
-_current: ContextVar[WorkspaceId | None] = ContextVar("alethic_workspace", default=None)
+_current: ContextVar[WorkspaceId | None] = ContextVar("prometheus_workspace", default=None)
 
 
 class LocalWorkspaceContext:

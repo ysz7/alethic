@@ -1,7 +1,7 @@
 # Phase 13 validation - the window as the way in
 
 **Capability under test:** the interface layer. Phase 13's Definition of Done is
-a sentence about a person again: *a person opens Alethic, says what they need,
+a sentence about a person again: *a person opens Prometheus, says what they need,
 and the platform does it* - through a surface that is an adapter over one
 application-level boundary rather than a second copy of the platform.
 
@@ -16,10 +16,10 @@ test suite can see it.
 Against local models, so the phase could be validated without a provider key:
 
 ```bash
-export ALETHIC_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
+export PROMETHEUS_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
 uv run alembic upgrade head
-uv run alethic serve                                   # the runtime
-./desktop/src-tauri/target/release/alethic-desktop      # the window
+uv run prometheus serve                                   # the runtime
+./desktop/src-tauri/target/release/prometheus-desktop      # the window
 ```
 
 The workspace held one file, `notes/standup.md` - eleven lines of meeting notes
@@ -87,14 +87,14 @@ harness. What that person got, however, was bad enough to be its own finding.
 | Time | 92 seconds |
 
 The constraints are the tell: they are the *example values from the prompt*,
-copied verbatim. `prompts/alethic_intent/v2.md` showed
+copied verbatim. `prompts/prometheus_intent/v2.md` showed
 `{"count": 20, "format": "a file", "where": "somewhere named"}` as an
 illustration, and the model returned it as its answer. That is the first
 validation run's third finding exactly - the one that made the v2 verification
 prompts show an empty form - still present in the prompt that reads every
 request the platform receives.
 
-**Fixed** by `prompts/alethic_intent/v3.md` (digest `5597e2e6`): an empty form
+**Fixed** by `prompts/prometheus_intent/v3.md` (digest `5597e2e6`): an empty form
 rather than a filled example, and a section saying in so many words that not
 everything said to a manager is work. `tests/unit/test_prompt_forms.py` now
 fails the build on any current prompt that shows a value a model could copy -
@@ -118,13 +118,13 @@ shipping catalog before deciding whether more prompt work is warranted.
 
 ## 5. The language the user is answered in
 
-`ALETHIC_RESPONSE_LANGUAGE` has existed since Phase 2 and was honoured by
-exactly one CLI command (`alethic ask`). The manager - which writes the answer
+`PROMETHEUS_RESPONSE_LANGUAGE` has existed since Phase 2 and was honoured by
+exactly one CLI command (`prometheus ask`). The manager - which writes the answer
 every user of the window and the page actually reads - never saw it. A request
 typed in Russian came back in English, and the setting documented a behaviour
 the product did not have.
 
-**Fixed** in `application/alethic/language.py`: the instruction is a system
+**Fixed** in `application/prometheus/language.py`: the instruction is a system
 message beside the prompt, applied where the user is answered - `IntentReader`
 (its `answer` field only, because a restatement in another language would reach
 the planner rather than the person) and `Synthesizer` (all of it). English adds
@@ -136,7 +136,7 @@ setting the language returns answers in it.
 Nine defects, none of which any green test could have seen, because every one of
 them lives in a gap between parts that each believed the other was handling:
 
-1. **`ALETHIC_BASE_URL` was a lie.** The shell read it; the page hard-coded the
+1. **`PROMETHEUS_BASE_URL` was a lie.** The shell read it; the page hard-coded the
    default. Documented, tested, and wrong. The window now asks the shell where
    the runtime is (`resolveBaseUrl`), because the shell is the only one that
    knows.

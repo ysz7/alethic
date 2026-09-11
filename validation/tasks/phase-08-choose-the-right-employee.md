@@ -13,7 +13,7 @@ Two ways, because the phase has two claims to answer.
 
 The DoD is a claim about the codebase, and is checked as a test:
 `tests/e2e/test_a_new_employee.py` writes a fifth employee into a temporary
-directory - one `employee.yaml`, nothing else - and has Alethic find it, choose it,
+directory - one `employee.yaml`, nothing else - and has Prometheus find it, choose it,
 and run it. Nothing is imported, registered or edited for it to work.
 
 The routing is a claim about behaviour, and was run against a real model:
@@ -21,9 +21,9 @@ The routing is a claim about behaviour, and was run against a real model:
 this phase.
 
 ```bash
-export ALETHIC_MODEL_CATALOG_PATH=infrastructure/llm/models.anthropic.toml
-uv run alethic employees          # both lists, and what disagrees with this machine
-uv run alethic ask-alethic "<goal>"
+export PROMETHEUS_MODEL_CATALOG_PATH=infrastructure/llm/models.anthropic.toml
+uv run prometheus employees          # both lists, and what disagrees with this machine
+uv run prometheus ask-prometheus "<goal>"
 ```
 
 ## Result - passed, 2026-09-06
@@ -35,14 +35,14 @@ can *compute* an answer rather than read one, and the whole of what makes it so
 is two lines: `code.run` in `allowed_tools`, `CODE` in `capabilities`.
 
 ```
-$ alethic employees
+$ prometheus employees
 analyst  Data Analyst
   tools:  code.run, fs.list, fs.read, fs.write
   can do: CODE, FILE_ACCESS
   limits: 16 steps, $1.0, 300s
 ```
 
-`alethic tools` shows the other half of the same fact: the line for `code.run` read
+`prometheus tools` shows the other half of the same fact: the line for `code.run` read
 `nobody` before this phase and reads `analyst` after it. That is one declaration,
 visible without reading any of them.
 
@@ -52,7 +52,7 @@ visible without reading any of them.
 > revenue.md.
 
 ```
-alethic.delegated  candidates=['analyst']  employee=analyst
+prometheus.delegated  candidates=['analyst']  employee=analyst
                reason='the only employee that declares CODE, FILE_ACCESS'
 ```
 
@@ -66,7 +66,7 @@ The second objective shows the other route:
 > what they said.
 
 ```
-alethic.delegated  candidates=['analyst', 'operator', 'organizer', 'researcher']
+prometheus.delegated  candidates=['analyst', 'operator', 'organizer', 'researcher']
                employee=analyst
                reason="The task requires reading a file on this machine and
                        extracting its raw content, which is the analyst's core function."
@@ -93,12 +93,12 @@ apart rather than merged.
 
 **A dated snapshot was priced at zero.** The API answers with
 `claude-haiku-4-5-20251001` where the catalog says `claude-haiku-4-5`, so the
-price lookup missed and `alethic spend` reported $0.00 for a call that cost money -
+price lookup missed and `prometheus spend` reported $0.00 for a call that cost money -
 against the catalog's own stated rule. The lookup now falls back to the longest
 configured name the answer starts with, and will not let a shorter name price a
 different model.
 
-**A setting that did nothing.** `ALETHIC_LLM_TIMEOUT_SECONDS` was documented in
+**A setting that did nothing.** `PROMETHEUS_LLM_TIMEOUT_SECONDS` was documented in
 `.env.example`, held in `Settings`, and passed to no provider. It reaches them
 now, and unset means each provider's own default - two minutes hosted, ten for a
 model on this machine - which is a better answer than one number for both.
@@ -106,7 +106,7 @@ model on this machine - which is a better answer than one number for both.
 **The gate stopped generated code, unattended.** Run without a terminal
 attached, `code.run` was refused four times: HIGH risk, no approver reachable,
 so the answer is no. The analyst then reported figures it had worked out in its
-head, and Alethic's verifier **refused them** for having no evidence behind them.
+head, and Prometheus's verifier **refused them** for having no evidence behind them.
 Two rules from two earlier phases holding at once, under a real model.
 
 ### 4. And a fix that was a declaration, not code

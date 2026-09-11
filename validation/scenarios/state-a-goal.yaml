@@ -4,7 +4,7 @@
 # only an employee holding the file tools could have produced.
 
 name: state-a-goal
-description: A goal with no employee named, carried to a file on disk by whoever Alethic picks.
+description: A goal with no employee named, carried to a file on disk by whoever Prometheus picks.
 phase: 7
 tags: [manager, files]
 

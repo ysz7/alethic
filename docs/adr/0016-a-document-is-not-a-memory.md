@@ -77,7 +77,7 @@ re-invented, for the same reason and against the same failure (§25).
 
 * Memory keeps its maintenance, its decay and its TTL, and none of it can reach
   a user's documents.
-* `alethic memory` and a future documents view answer different questions and
+* `prometheus memory` and a future documents view answer different questions and
   are not merged into one screen that implies they are the same thing.
 * Deleting a document deletes its chunks and its vectors and leaves memory
   alone; pruning memory leaves documents alone.

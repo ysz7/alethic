@@ -185,7 +185,7 @@ class ProviderFactory:
         if not self._api_key:
             raise ConfigurationError(
                 f"No API key configured for '{choice.provider}'. Add a connection in "
-                "Settings, or set ALETHIC_LLM_API_KEY in .env."
+                "Settings, or set PROMETHEUS_LLM_API_KEY in .env."
             )
         return self._api_key
 

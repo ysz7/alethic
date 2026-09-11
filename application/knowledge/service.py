@@ -35,7 +35,7 @@ from uuid import UUID
 
 import structlog
 
-from domain.errors import AlethicError, NotFoundError
+from domain.errors import NotFoundError, PrometheusError
 from domain.knowledge.chunking import chunk as split
 from domain.knowledge.models import Chunk, Document, DocumentStatus
 from domain.knowledge.protocols import EmbeddingProvider, KnowledgeStore, TextExtractor
@@ -96,7 +96,7 @@ class KnowledgeService:
         """
         resolved = path.expanduser()
         if not resolved.is_file():
-            raise AlethicError(f"There is no file at {resolved}")
+            raise PrometheusError(f"There is no file at {resolved}")
         text = self._extractors.extract(resolved, media_type)
         return await self.add_text(
             text,
@@ -119,7 +119,7 @@ class KnowledgeService:
     ) -> Document:
         """Store text as a document. What `add_file` becomes once the file is read."""
         if not text.strip():
-            raise AlethicError(f"{title} has no text in it.")
+            raise PrometheusError(f"{title} has no text in it.")
         checksum = sha256(text.encode("utf-8")).hexdigest()
         existing = await self._store.by_checksum(checksum, workspace_id=workspace_id)
         document = (
@@ -154,7 +154,7 @@ class KnowledgeService:
         stored = await self._store.chunks_for(document_id)
         text = "\n\n".join(chunk.content for chunk in stored)
         if not text.strip():
-            raise AlethicError(f"{document.title} has no stored text to re-index.")
+            raise PrometheusError(f"{document.title} has no stored text to re-index.")
         return await self._index(document, text)
 
     async def delete(self, document_id: UUID) -> bool:

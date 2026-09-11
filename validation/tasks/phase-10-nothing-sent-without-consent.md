@@ -18,7 +18,7 @@ part being tested and drops the part that is not: what matters is that reading
 and drafting proceed on their own and that delivering waits for a person, and
 the effect of a tool decides that, not what the tool is called.
 
-Four messages in `~/.alethic/workspace/inbox/` - an overdue invoice, a meeting
+Four messages in `~/.prometheus/workspace/inbox/` - an overdue invoice, a meeting
 being moved, a newsletter, and a question about a contract clause. Three of them
 deserve an answer.
 
@@ -27,9 +27,9 @@ Against locally served models, no provider key and nothing spent:
 verification and extraction (`infrastructure/llm/models.local.toml`).
 
 ```bash
-export ALETHIC_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
-uv run alethic run-workflow inbox-triage
-uv run alethic audit
+export PROMETHEUS_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
+uv run prometheus run-workflow inbox-triage
+uv run prometheus audit
 ```
 
 `workflows/inbox-triage.yaml` is the whole declaration: triage with the
@@ -39,7 +39,7 @@ employee file was touched to add it, and no Python exists behind it.
 A second run exercised the same brake outside a workflow:
 
 ```bash
-uv run alethic run-task --employee analyst \
+uv run prometheus run-task --employee analyst \
   "Read every message in inbox/ and work out, by running code, the total amount
    of money mentioned across all of them."
 ```

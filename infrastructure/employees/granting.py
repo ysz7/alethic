@@ -7,7 +7,7 @@ registry reads declarations, which is a property of the repository; whether
 mixing them would make reading an employee file depend on a database.
 
 So this wraps any `EmployeeRegistry` and hands out the same employees with their
-grants expanded (`domain.integrations.grants`). Everything above - Alethic's
+grants expanded (`domain.integrations.grants`). Everything above - Prometheus's
 capability search, the delegator, the runtime, the tool registry's own least
 privilege check - keeps working on an `EmployeeDefinition` and learns nothing.
 

@@ -238,7 +238,7 @@ class EmployeeRuntime:
 
         async def waiting(status: TaskStatus) -> None:
             # The task really does stop running when a person is asked, and
-            # `alethic tasks` should be able to say so. Persisted rather than
+            # `prometheus tasks` should be able to say so. Persisted rather than
             # kept in memory, because the question outlives the process that
             # asked it: a run killed while parked comes back parked.
             nonlocal current

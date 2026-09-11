@@ -1,6 +1,6 @@
 """Phase 11's Definition of Done, as a test that adds a scenario and runs it.
 
-*There is a written answer to the question of what Alethic does reliably, what it
+*There is a written answer to the question of what Prometheus does reliably, what it
 does sometimes, and what it does not do at all.* The answer is only worth
 anything if producing it takes no code - so this declares a scenario in a
 temporary directory, runs it through the harness, and reads the answer back out.

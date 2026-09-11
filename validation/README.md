@@ -24,18 +24,18 @@ adjusted after seeing the output.
 Merging the two would give either a report nobody can re-run or a declaration
 nobody can read.
 
-**`REPORT.md`** is generated, not written. `alethic validation-report` computes
+**`REPORT.md`** is generated, not written. `prometheus validation-report` computes
 it from the recorded runs; editing it by hand would turn a measurement back into
 an opinion.
 
 ## Running them
 
 ```bash
-alethic scenarios                 # what is declared, and how each has gone here
-alethic validate                  # all of them, recording every attempt
-alethic validate sort-a-folder    # one
-alethic validate --regression     # only what has passed here before (§11.5)
-alethic validation-report --write validation/REPORT.md
+prometheus scenarios                 # what is declared, and how each has gone here
+prometheus validate                  # all of them, recording every attempt
+prometheus validate sort-a-folder    # one
+prometheus validate --regression     # only what has passed here before (§11.5)
+prometheus validation-report --write validation/REPORT.md
 ```
 
 This is not the test suite. `uv run pytest` is free, offline and fast, and says
@@ -45,7 +45,7 @@ and says whether that is worth anything on a request somebody actually made.
 Against locally served models it costs nothing:
 
 ```bash
-export ALETHIC_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
+export PROMETHEUS_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
 ```
 
 A run with nobody watching refuses everything that needs approval, and the

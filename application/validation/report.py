@@ -1,6 +1,6 @@
 """The phase's Definition of Done, rendered from what actually ran.
 
-*"There is a written answer to the question: what does Alethic do reliably, what
+*"There is a written answer to the question: what does Prometheus do reliably, what
 does it do through gritted teeth, and what does it not do at all."* The answer
 has to be written, and it must not be written by hand - a hand-written answer is
 an opinion about the platform, and the whole phase is an argument for measuring
@@ -73,10 +73,10 @@ def render(report: Report, *, now: datetime | None = None) -> str:
     """The whole document, as Markdown."""
     stamp = (now or datetime.now(UTC)).strftime("%Y-%m-%d")
     lines: list[str] = [
-        "# What Alethic can actually do",
+        "# What Prometheus can actually do",
         "",
         f"Generated from {report.total_runs} recorded run(s) on {stamp} by "
-        "`alethic validation-report`. Every line below is a verdict on scenarios "
+        "`prometheus validation-report`. Every line below is a verdict on scenarios "
         "declared in `validation/scenarios/`, measured against criteria written "
         "before each run.",
         "",
@@ -111,7 +111,7 @@ def render(report: Report, *, now: datetime | None = None) -> str:
         "## The regression set",
         "",
         "Scenarios that have passed here at least once. Each is expected to keep "
-        "passing; `alethic validate --regression` runs exactly these.",
+        "passing; `prometheus validate --regression` runs exactly these.",
         "",
     ]
     lines += [f"- `{name}`" for name in regression] or ["Nothing has passed here yet."]

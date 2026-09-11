@@ -5,7 +5,7 @@ protocol. It is everything around it:
 
 * **No key.** There is nothing to authenticate to.
 * **No cost.** Calls are priced at zero in the catalog, which is true rather
-  than a placeholder. `alethic spend` stays meaningful either way.
+  than a placeholder. `prometheus spend` stays meaningful either way.
 * **Slow.** A 20B model on a laptop answers in tens of seconds, not hundreds of
   milliseconds, so the default timeout is much larger than a hosted one.
 * **A server that may not be running.** That is a configuration problem with a

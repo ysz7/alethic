@@ -1,5 +1,5 @@
 /**
- * Settings: the contexts of work, what they know, and the services Alethic can reach.
+ * Settings: the contexts of work, what they know, and the services Prometheus can reach.
  *
  * Deliberately not an administration console. Everything else configurable is
  * a file on this machine that the runtime already reads, and a screen that
@@ -32,6 +32,7 @@ import {
 } from "../../../features/manage-providers";
 import { NewWorkspaceForm } from "../../../features/switch-workspace";
 import { useRuntime } from "../../../shared/api";
+import { PageHead } from "../../../shared/ui";
 import { useWorkspaces } from "../../../widgets/workspace-bar";
 import { useDocuments } from "../model/useDocuments";
 import { useIntegrations } from "../model/useIntegrations";
@@ -67,7 +68,22 @@ const TASK_KINDS = [
   "EMBEDDING",
 ];
 
-export function SettingsPage({ onSwitched }: { onSwitched?: () => void } = {}) {
+/** Where each part of the page starts, for the row of chips across its top. */
+const SECTIONS = [
+  { id: "workspaces", label: "Workspaces" },
+  { id: "documents", label: "Documents" },
+  { id: "memory", label: "Memory" },
+  { id: "models", label: "Models" },
+  { id: "integrations", label: "Integrations" },
+];
+
+interface Props {
+  onSwitched?: () => void;
+  railOpen?: boolean;
+  onOpenRail?: () => void;
+}
+
+export function SettingsPage({ onSwitched, railOpen = true, onOpenRail }: Props = {}) {
   const client = useRuntime();
   const { ready, available, problem, integrations, add, connect, enable, disable, remove } =
     useIntegrations(client);
@@ -77,8 +93,18 @@ export function SettingsPage({ onSwitched }: { onSwitched?: () => void } = {}) {
   const providers = useProviders(client);
 
   return (
-    <section className="settings" aria-label="Settings">
-      <h2>Workspaces</h2>
+    <main className="main">
+      <PageHead title="Settings" railOpen={railOpen} onOpenRail={onOpenRail} />
+      <div className="stream">
+      <section className="col settings" aria-label="Settings">
+      <nav className="section-nav" aria-label="Parts of settings">
+        {SECTIONS.map((section) => (
+          <a key={section.id} className="dockchip" href={`#${section.id}`}>
+            {section.label}
+          </a>
+        ))}
+      </nav>
+      <h2 id="workspaces">Workspaces</h2>
       <p className="note">
         A workspace separates one context of work from another: its own files,
         its own documents, its own history. Switching moves what the employees
@@ -111,14 +137,14 @@ export function SettingsPage({ onSwitched }: { onSwitched?: () => void } = {}) {
       ))}
       <NewWorkspaceForm onAdd={workspaces.add} disabled={!workspaces.ready} />
 
-      <h2>Documents</h2>
+      <h2 id="documents">Documents</h2>
       <p className="note">
         What this workspace knows because you put it here. Employees quote these
         with their source; they are not the platform's own notes.
       </p>
       {!documents.available && documents.ready && (
         <p className="note">
-          Documents are switched off on this machine (ALETHIC_FLAGS__KNOWLEDGE=false).
+          Documents are switched off on this machine (PROMETHEUS_FLAGS__KNOWLEDGE=false).
         </p>
       )}
       {documents.problem && (
@@ -148,7 +174,7 @@ export function SettingsPage({ onSwitched }: { onSwitched?: () => void } = {}) {
         </>
       )}
 
-      <h2>What is remembered here</h2>
+      <h2 id="memory">What is remembered here</h2>
       <p className="note">
         Written by the platform about its own work, and shown rather than
         editable: forgetting is a separate thing to be able to do, and this
@@ -164,7 +190,7 @@ export function SettingsPage({ onSwitched }: { onSwitched?: () => void } = {}) {
         </ul>
       )}
 
-      <h2>Providers and models</h2>
+      <h2 id="models">Providers and models</h2>
       <p className="note">
         A provider is a kind; a connection is an account. Two keys to one vendor
         are two connections, and a model says which one it is reached through.
@@ -231,11 +257,11 @@ export function SettingsPage({ onSwitched }: { onSwitched?: () => void } = {}) {
         onRoute={providers.route}
       />
 
-      <h2>Integrations</h2>
+      <h2 id="integrations">Integrations</h2>
       {!available && ready && (
         <p className="note">
           Integrations are switched off on this machine
-          (ALETHIC_FLAGS__INTEGRATIONS=false).
+          (PROMETHEUS_FLAGS__INTEGRATIONS=false).
         </p>
       )}
       {problem && (
@@ -267,11 +293,13 @@ export function SettingsPage({ onSwitched }: { onSwitched?: () => void } = {}) {
           ))}
           <AddIntegrationForm onAdd={add} disabled={!ready} known={CAPABILITIES} />
           <p className="note">
-            A capability marked <strong>!</strong> waits for you before it runs. Alethic
+            A capability marked <strong>!</strong> waits for you before it runs. Prometheus
             decides that, not this window.
           </p>
         </>
       )}
-    </section>
+      </section>
+      </div>
+    </main>
   );
 }

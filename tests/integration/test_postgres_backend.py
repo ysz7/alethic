@@ -4,9 +4,9 @@ The same rule `test_local_provider.py` follows: a test that needs something
 outside this repository says so and steps aside, rather than failing a suite
 whose whole promise is no network and no key.
 
-Point `ALETHIC_TEST_POSTGRES_URL` at an empty database to run it:
+Point `PROMETHEUS_TEST_POSTGRES_URL` at an empty database to run it:
 
-    ALETHIC_TEST_POSTGRES_URL=postgresql://localhost/alethic_test uv run pytest
+    PROMETHEUS_TEST_POSTGRES_URL=postgresql://localhost/prometheus_test uv run pytest
 
 Note the missing path. Since Phase 19 that variable moves the *whole* suite onto
 the second dialect - `tests/conftest.py` builds `session_factory` there instead
@@ -36,8 +36,8 @@ from infrastructure.persistence.models import Base, TaskEventRow, TaskRow
 from infrastructure.persistence.session import create_engine, create_session_factory
 
 pytestmark = pytest.mark.skipif(
-    not os.environ.get("ALETHIC_TEST_POSTGRES_URL", ""),
-    reason="No PostgreSQL server configured (ALETHIC_TEST_POSTGRES_URL)",
+    not os.environ.get("PROMETHEUS_TEST_POSTGRES_URL", ""),
+    reason="No PostgreSQL server configured (PROMETHEUS_TEST_POSTGRES_URL)",
 )
 
 

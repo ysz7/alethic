@@ -27,7 +27,7 @@ fn runtime_status(handle: State<'_, RuntimeHandle>) -> RuntimeStatus {
     // running: everything else the shell does happens whether the page loaded
     // or not, and a blank window with a healthy runtime looks identical to a
     // working one from outside.
-    println!("alethic: the window is using {}", status.base_url);
+    println!("prometheus: the window is using {}", status.base_url);
     status
 }
 
@@ -36,11 +36,11 @@ fn runtime_status(handle: State<'_, RuntimeHandle>) -> RuntimeStatus {
 /// that drew nothing, and both look like a healthy runtime from outside.
 #[tauri::command]
 fn window_problem(message: String) {
-    eprintln!("alethic: the window reported a problem: {message}");
+    eprintln!("prometheus: the window reported a problem: {message}");
 }
 
 fn base_url() -> String {
-    std::env::var("ALETHIC_BASE_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string())
+    std::env::var("PROMETHEUS_BASE_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string())
 }
 
 fn main() {
@@ -55,7 +55,7 @@ fn main() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("failed to build the Alethic shell")
+        .expect("failed to build the Prometheus shell")
         .run(|app, event| {
             if let RunEvent::Exit = event {
                 app.state::<RuntimeHandle>().shutdown();

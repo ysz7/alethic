@@ -1,4 +1,4 @@
-//! Starting the local Alethic runtime, and getting out of its way.
+//! Starting the local Prometheus runtime, and getting out of its way.
 //!
 //! The shell is an interface. It does not plan, does not call a model, does not
 //! touch the database and does not know what an employee is - it owns a window
@@ -9,7 +9,7 @@
 //! Three decisions are worth stating.
 //!
 //! **A runtime that is already up is used, never replaced.** A developer with
-//! `alethic serve` running in a terminal opens this and gets that engine, with
+//! `prometheus serve` running in a terminal opens this and gets that engine, with
 //! its database and its running work. Starting a second one against the same
 //! SQLite file would be two writers and one file.
 //!
@@ -18,7 +18,7 @@
 //! running work down with a window they merely closed.
 //!
 //! **The command is configurable and defaults to the repository.** A packaged
-//! application will point `ALETHIC_RUNTIME_CMD` at an installed interpreter;
+//! application will point `PROMETHEUS_RUNTIME_CMD` at an installed interpreter;
 //! during development the default is what a developer already has working.
 
 use std::process::{Child, Command, Stdio};
@@ -92,8 +92,8 @@ impl RuntimeHandle {
     }
 
     fn spawn(&self) -> bool {
-        let command = std::env::var("ALETHIC_RUNTIME_CMD")
-            .unwrap_or_else(|_| "uv run alethic serve".to_string());
+        let command = std::env::var("PROMETHEUS_RUNTIME_CMD")
+            .unwrap_or_else(|_| "uv run prometheus serve".to_string());
         let mut parts = command.split_whitespace();
         let Some(program) = parts.next() else {
             return false;
@@ -112,7 +112,7 @@ impl RuntimeHandle {
                 // Not fatal. The window says the runtime is not answering and
                 // the person can start it themselves - which is a better
                 // outcome than a shell that refuses to open.
-                eprintln!("alethic: could not start the runtime: {error}");
+                eprintln!("prometheus: could not start the runtime: {error}");
                 false
             }
         }

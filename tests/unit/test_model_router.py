@@ -162,8 +162,8 @@ def test_no_floor_leaves_the_cheapest_entry_routable(router) -> None:
 
 def test_both_verifiers_will_not_take_the_bottom_of_a_catalog() -> None:
     """Stated where the routing is declared, so no catalog can undo it."""
-    from application.alethic.verification import ObjectiveVerifier
     from application.employee_runtime.verifier import Verifier
+    from application.prometheus.verification import ObjectiveVerifier
 
     for routing in (ObjectiveVerifier.routing, Verifier.routing):
         _, requirement, _ = routing()

@@ -9,15 +9,6 @@ is for. See docs/adr/0001.
 from __future__ import annotations
 
 from app.config.settings import Settings, get_settings
-from application.alethic.delegation import CapabilityDelegator
-from application.alethic.intent import IntentReader
-from application.alethic.language import DEFAULT_LANGUAGE
-from application.alethic.manager import AlethicManager
-from application.alethic.planner import ObjectivePlanner
-from application.alethic.reconciliation import Reconciler
-from application.alethic.supervisor import Supervisor
-from application.alethic.synthesis import Synthesizer
-from application.alethic.verification import ObjectiveVerifier
 from application.computer.screen_reader import LLMScreenReader
 from application.employee_runtime.approvals import ApprovalGate
 from application.employee_runtime.executor import Executor
@@ -29,7 +20,7 @@ from application.interface.activity import Activity
 from application.interface.runs import Runs
 from application.interface.service import (
     DEFAULT_LIMIT,
-    AlethicService,
+    PrometheusService,
     ServiceDependencies,
 )
 from application.knowledge.service import KnowledgeService
@@ -39,6 +30,15 @@ from application.memory.consolidation import Consolidator
 from application.memory.distiller import OutcomeDistiller
 from application.memory.recorder import MemoryRecorder
 from application.memory.workspace import WorkspaceMemory
+from application.prometheus.delegation import CapabilityDelegator
+from application.prometheus.intent import IntentReader
+from application.prometheus.language import DEFAULT_LANGUAGE
+from application.prometheus.manager import PrometheusManager
+from application.prometheus.planner import ObjectivePlanner
+from application.prometheus.reconciliation import Reconciler
+from application.prometheus.supervisor import Supervisor
+from application.prometheus.synthesis import Synthesizer
+from application.prometheus.verification import ObjectiveVerifier
 from application.providers.service import ProviderService
 from application.task_runner import TaskRunner
 from application.validation.harness import ValidationHarness
@@ -46,7 +46,7 @@ from application.workflows.engine import WorkflowEngine
 from application.workspaces.service import WorkspaceService
 from domain.approvals.protocols import ApprovalWaiter
 from domain.employees.definition import EmployeeDefinition
-from domain.errors import AlethicError
+from domain.errors import PrometheusError
 from infrastructure.container import Container
 from infrastructure.knowledge.extraction import Extractors
 from infrastructure.llm.discovery import installed_models
@@ -103,7 +103,7 @@ async def load_grants(container: Container) -> None:
     """
     try:
         container.refresh_grants(await container.integration_repository.list())
-    except AlethicError as error:
+    except PrometheusError as error:
         container.logger.warning("integrations.not_read", error=str(error))
 
 
@@ -125,7 +125,7 @@ async def _restore_credentials(container: Container) -> None:
         names = await legacy.names()
         if names:
             await credentials.import_from(legacy, names)  # type: ignore[attr-defined]
-    except AlethicError as error:
+    except PrometheusError as error:
         container.logger.warning("credentials.not_restored", error=str(error))
 
 
@@ -142,7 +142,7 @@ async def _load_catalog(container: Container) -> None:
         return
     try:
         container.use_catalog(await container.catalog_source.load())
-    except AlethicError as error:
+    except PrometheusError as error:
         container.logger.warning("catalog.not_loaded", error=str(error))
 
 
@@ -180,7 +180,7 @@ async def prepare(container: Container) -> None:
             restored = await integrations.restore()
             if restored:
                 container.logger.info("integrations.restored", count=restored)
-        except AlethicError as error:
+        except PrometheusError as error:
             container.logger.warning("integrations.not_restored", error=str(error))
     await container.sync_employees()
 
@@ -267,8 +267,8 @@ async def build_runtime(container: Container, definition: EmployeeDefinition) ->
     )
 
 
-def build_manager(container: Container) -> AlethicManager:
-    """Assemble Alethic.
+def build_manager(container: Container) -> PrometheusManager:
+    """Assemble Prometheus.
 
     Six model-facing components, each routed for what it is: comprehension and
     decomposition get a good model, choosing from a short list gets a cheap one,
@@ -283,7 +283,7 @@ def build_manager(container: Container) -> AlethicManager:
     # The one setting the manager needs. Read here rather than inside
     # `application/`, which is not allowed to know a settings object exists.
     language = getattr(container.settings, "response_language", DEFAULT_LANGUAGE)
-    return AlethicManager(
+    return PrometheusManager(
         intent=IntentReader(
             container.llm_for(*IntentReader.routing()), language=language
         ),
@@ -361,7 +361,7 @@ def build_knowledge(container: Container) -> KnowledgeService | None:
 
 def build_service(
     container: Container, waiter: ApprovalWaiter, *, history_limit: int = DEFAULT_LIMIT
-) -> AlethicService:
+) -> PrometheusService:
     """Assemble the boundary every interface talks to.
 
     The waiter is passed in rather than read off the container because it is a
@@ -370,7 +370,7 @@ def build_service(
     arriving later, and whoever built the surface is the only one who knows
     which. Nothing else here differs between one interface and the next.
     """
-    return AlethicService(
+    return PrometheusService(
         ServiceDependencies(
             runs=Runs(
                 runner=build_task_runner(container),
@@ -411,7 +411,7 @@ def build_workflow_engine(container: Container) -> WorkflowEngine:
     """A workflow runs through the same runner every other task does.
 
     That is the whole point of the engine being three lines: a predefined
-    process and a plan Alethic invented differ in where the decomposition came
+    process and a plan Prometheus invented differ in where the decomposition came
     from and in nothing below it - same employees, same limits, same gate.
     """
     return WorkflowEngine(
@@ -451,7 +451,7 @@ def build_harness(container: Container) -> ValidationHarness:
     """Assemble the validation harness with all three of the platform's doors.
 
     It gets the manager, the task runner and the workflow engine - the same
-    three objects the CLI builds for `ask-alethic`, `run-task` and
+    three objects the CLI builds for `ask-prometheus`, `run-task` and
     `run-workflow` - and nothing else that can do work. Everything else handed
     in here is a way of reading what happened afterwards.
     """

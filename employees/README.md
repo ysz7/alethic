@@ -1,8 +1,8 @@
 # Employees
 
-An employee is a **declaration**, not code. Adding `Alethic Legal` or
-`Alethic Recruiter` means adding a directory here - and nothing in `application/`,
-`infrastructure/` or Alethic itself may need to change for it.
+An employee is a **declaration**, not code. Adding `Prometheus Legal` or
+`Prometheus Recruiter` means adding a directory here - and nothing in `application/`,
+`infrastructure/` or Prometheus itself may need to change for it.
 
 All employees share one runtime (`application/employee_runtime/`). They differ
 only in role, goals, allowed tools, declared capabilities, policies, model
@@ -23,13 +23,13 @@ load rather than becoming an employee with no tools.
 ## The two lists, and what each is for
 
 `allowed_tools` is **least privilege**: an employee gets what it lists and
-nothing else, and `alethic tools` shows the resulting grants per tool. A tool nobody
+nothing else, and `prometheus tools` shows the resulting grants per tool. A tool nobody
 lists is a tool nobody can call.
 
 `capabilities` is **discovery**: what kind of work this employee can be given.
-Alethic searches by these, so a capability left out is work that never arrives, and
+Prometheus searches by these, so a capability left out is work that never arrives, and
 one claimed with no tool behind it is work that arrives and cannot be started.
-`alethic employees` prints both, and says which declarations disagree with the tools
+`prometheus employees` prints both, and says which declarations disagree with the tools
 this machine actually has.
 
 The distinction matters because the two answer different questions - *may it?*
@@ -46,4 +46,4 @@ and *can it?* - and a single list would silently answer one of them wrong.
 
 Four, not thirty. Each is one file plus a prompt, and none of them has a line of
 Python behind it - `tests/e2e/test_a_new_employee.py` proves that by declaring a
-fifth in a temporary directory and having Alethic use it.
+fifth in a temporary directory and having Prometheus use it.

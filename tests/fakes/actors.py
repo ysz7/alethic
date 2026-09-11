@@ -9,8 +9,8 @@ def user(*tools: str) -> SimpleActor:
     return SimpleActor("user", ActorKind.USER, frozenset(tools))
 
 
-def alethic(*tools: str) -> SimpleActor:
-    return SimpleActor("alethic", ActorKind.ALETHIC, frozenset(tools))
+def prometheus(*tools: str) -> SimpleActor:
+    return SimpleActor("prometheus", ActorKind.PROMETHEUS, frozenset(tools))
 
 
 def employee(employee_id: str, *tools: str) -> SimpleActor:

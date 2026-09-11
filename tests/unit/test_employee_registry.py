@@ -159,8 +159,8 @@ def test_the_directory_is_the_employees_identity(tmp_path: Path) -> None:
 
 
 def test_employees_are_found_by_what_they_can_do(tmp_path: Path) -> None:
-    # This is how Alethic will discover a new employee in Phase 7 without anyone
-    # editing Alethic.
+    # This is how Prometheus will discover a new employee in Phase 7 without anyone
+    # editing Prometheus.
     write_employee(tmp_path, "analyst", MINIMAL)
     write_employee(tmp_path, "writer", "name: writer\nrole: Writer\n")
     registry = YamlEmployeeRegistry(tmp_path)

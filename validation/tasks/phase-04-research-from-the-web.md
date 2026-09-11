@@ -10,9 +10,9 @@ Against `gpt-oss:20b`, with Playwright's Chromium installed
 (`uv sync --extra browser && uv run playwright install chromium`).
 
 ```bash
-export ALETHIC_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
-export ALETHIC_WORKSPACE_DIR=/tmp/research
-uv run alethic run-task --employee researcher \
+export PROMETHEUS_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
+export PROMETHEUS_WORKSPACE_DIR=/tmp/research
+uv run prometheus run-task --employee researcher \
   "Find out what SQLite's WAL mode changes about concurrent reads and writes. Search for it, open the official documentation page, and quote what it actually says. Save your answer to wal.md."
 ```
 

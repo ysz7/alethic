@@ -1,6 +1,6 @@
 """The written answer Phase 11 exists to produce, computed rather than asserted.
 
-Its Definition of Done is a sentence: *what does Alethic do reliably, what does
+Its Definition of Done is a sentence: *what does Prometheus do reliably, what does
 it do through gritted teeth, and what does it not do at all.* That sentence is
 worth something only if it is derived from recorded runs, so this derives it -
 and refuses to call anything reliable on the strength of a single success.

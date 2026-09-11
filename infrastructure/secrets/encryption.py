@@ -6,7 +6,7 @@ filesystem loses a file and keeps its database. That is only safe if what
 reaches the database is unreadable without something the database does not have.
 
 **The master key is that something, and it never goes near the store.**
-`ALETHIC_MASTER_KEY` first - that is how a server is configured, and it is the
+`PROMETHEUS_MASTER_KEY` first - that is how a server is configured, and it is the
 only sensible answer for a process with no persistent disk. Without it, a key is
 generated once into a 0600 file beside the data, which is the desktop's answer.
 The code is the same in both; only where the key came from differs.
@@ -36,7 +36,7 @@ from domain.errors import ConfigurationError, StorageError
 log = structlog.get_logger(__name__)
 
 #: Where a deployment says what the key is.
-MASTER_KEY_ENV = "ALETHIC_MASTER_KEY"
+MASTER_KEY_ENV = "PROMETHEUS_MASTER_KEY"
 #: Owner read/write, nothing for anybody else.
 FILE_MODE = 0o600
 DIRECTORY_MODE = 0o700

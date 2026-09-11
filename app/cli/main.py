@@ -1,6 +1,6 @@
 """The command line, and the command that opens the local interface.
 
-Since Phase 6 the CLI is no longer the only surface: `alethic serve` starts the
+Since Phase 6 the CLI is no longer the only surface: `prometheus serve` starts the
 local interface, which is where a task is normally run and watched. Everything
 here still works on its own, because a machine with no browser, or a run started
 from a script, must not need one.
@@ -31,7 +31,7 @@ from app.config.container import (
 from app.config.settings import get_settings, normalise_database_url
 from domain.approvals.models import ApprovalState
 from domain.capabilities.models import Capability
-from domain.errors import AlethicError, StorageNotInitializedError
+from domain.errors import PrometheusError, StorageNotInitializedError
 from domain.integrations.specs import spec_for
 from domain.llm.catalog import ModelEntry
 from domain.llm.models import LLMRequest, Message, RoutingHints, TaskKind
@@ -45,8 +45,8 @@ from domain.workspace.models import WorkspaceId
 from infrastructure.persistence.session import create_engine
 
 app = typer.Typer(
-    name="alethic",
-    help="Alethic - run digital employees on your own machine.",
+    name="prometheus",
+    help="Prometheus - run digital employees on your own machine.",
     no_args_is_help=True,
     add_completion=False,
 )
@@ -54,14 +54,14 @@ app = typer.Typer(
 
 def _version() -> str:
     try:
-        return package_version("alethic")
+        return package_version("prometheus")
     except PackageNotFoundError:
         return "0.1.0"
 
 
 def _version_callback(value: bool) -> None:
     if value:
-        typer.echo(f"alethic {_version()}")
+        typer.echo(f"prometheus {_version()}")
         raise typer.Exit
 
 
@@ -76,7 +76,7 @@ def main(
         is_eager=True,
     ),
 ) -> None:
-    """Alethic command line."""
+    """Prometheus command line."""
 
 
 @app.command()
@@ -88,7 +88,7 @@ def config() -> None:
     typer.echo(f"file root:     {settings.resolved_file_root}  (of the first workspace)")
     typer.echo(f"workspace:     {_active_workspace_name(settings)}")
     typer.echo(f"approvals:     {settings.approval_mode}")
-    typer.echo(f"interface:     http://{settings.ui_host}:{settings.ui_port}  (alethic serve)")
+    typer.echo(f"interface:     http://{settings.ui_host}:{settings.ui_port}  (prometheus serve)")
     typer.echo(
         f"computer use:  {'on' if settings.computer_use_enabled else 'off'} "
         f"(desktop; the browser surface follows the browser tools)"
@@ -169,7 +169,7 @@ def ask(
                 f" - ${usage.cost_usd:.6f} - {usage.latency_ms} ms",
                 fg="cyan",
             )
-        except AlethicError as error:
+        except PrometheusError as error:
             typer.secho(f"{type(error).__name__}: {error}", fg="red", err=True)
             raise typer.Exit(code=1) from error
         finally:
@@ -221,11 +221,11 @@ def models() -> None:
         typer.echo("No defaults configured.")
 
 
-@app.command(name="ask-alethic")
-def ask_alethic(
+@app.command(name="ask-prometheus")
+def ask_prometheus(
     objective: str = typer.Argument(..., help="What you want, in your own words."),
 ) -> None:
-    """Give Alethic a goal. It decides what has to happen and who does it.
+    """Give Prometheus a goal. It decides what has to happen and who does it.
 
     This is the normal way in from Phase 7 on: `run-task` still exists and still
     hands work to a named employee, but choosing the employee is the manager's
@@ -238,13 +238,13 @@ def ask_alethic(
             await prepare(container)
             manager = build_manager(container)
             # The workspace the machine is in, not the default one: a request
-            # typed after `alethic workspace-use work` belongs to `work`, and
+            # typed after `prometheus workspace-use work` belongs to `work`, and
             # everything it reads and remembers follows from that.
             active = await build_workspaces(container).active()
             received = await manager.receive(objective, workspace_id=active.id)
             result = await manager.handle_objective(received)
             _report_objective(result)
-        except AlethicError as error:
+        except PrometheusError as error:
             typer.secho(f"{type(error).__name__}: {error}", fg="red", err=True)
             raise typer.Exit(code=1) from error
         finally:
@@ -255,7 +255,7 @@ def ask_alethic(
 
 @app.command()
 def objectives() -> None:
-    """What has been asked of Alethic here, newest first."""
+    """What has been asked of Prometheus here, newest first."""
 
     async def _run() -> None:
         container = build_container()
@@ -301,7 +301,7 @@ def memory(
         try:
             store = container.memory
             if store is None:
-                typer.echo("Memory is switched off (ALETHIC_FLAGS__MEMORY=false).")
+                typer.echo("Memory is switched off (PROMETHEUS_FLAGS__MEMORY=false).")
                 return
             if prune:
                 maintenance = container.memory_maintenance
@@ -349,7 +349,7 @@ def run_task(
             active = await build_workspaces(container).active()
             task = await runner.submit_and_run(goal, employee, workspace_id=active.id)
             _report(task)
-        except AlethicError as error:
+        except PrometheusError as error:
             typer.secho(f"{type(error).__name__}: {error}", fg="red", err=True)
             raise typer.Exit(code=1) from error
         finally:
@@ -375,7 +375,7 @@ def resume() -> None:
             for task in pending:
                 typer.secho(f"\n-> {task.goal}", fg="cyan")
                 _report(await runner.resume(task))
-        except AlethicError as error:
+        except PrometheusError as error:
             typer.secho(f"{type(error).__name__}: {error}", fg="red", err=True)
             raise typer.Exit(code=1) from error
         finally:
@@ -476,7 +476,7 @@ def stop(
         return
     path = signal.engage(reason)
     typer.secho(f"Computer use stopped: {signal.reason}", fg="yellow")
-    typer.echo(f"Release it with: alethic stop --clear   ({path})")
+    typer.echo(f"Release it with: prometheus stop --clear   ({path})")
 
 
 @app.command()
@@ -496,7 +496,7 @@ def serve(
     settings = get_settings()
     bind = host or settings.ui_host
     on = port or settings.ui_port
-    typer.secho(f"Alethic on http://{bind}:{on}", fg="cyan")
+    typer.secho(f"Prometheus on http://{bind}:{on}", fg="cyan")
     if bind not in ("127.0.0.1", "localhost", "::1"):
         # Said once, plainly. The interface starts tasks and approves
         # irreversible actions, and it has no authentication because nothing
@@ -547,7 +547,7 @@ def approvals() -> None:
 
 @app.command()
 def approve(
-    approval_id: str = typer.Argument(..., help="The id shown by `alethic approvals`."),
+    approval_id: str = typer.Argument(..., help="The id shown by `prometheus approvals`."),
     comment: str = typer.Option("", "--comment", "-c", help="Why."),
 ) -> None:
     """Approve a pending action."""
@@ -556,7 +556,7 @@ def approve(
 
 @app.command()
 def reject(
-    approval_id: str = typer.Argument(..., help="The id shown by `alethic approvals`."),
+    approval_id: str = typer.Argument(..., help="The id shown by `prometheus approvals`."),
     comment: str = typer.Option("", "--comment", "-c", help="Why."),
 ) -> None:
     """Reject a pending action."""
@@ -598,7 +598,7 @@ def audit(
 ) -> None:
     """What was done on this machine, newest first.
 
-    Distinct from `alethic spend`, which is what the models cost, and from the
+    Distinct from `prometheus spend`, which is what the models cost, and from the
     trace, which is what one run did. This is the list that includes the actions
     that did *not* happen - the ones a policy denied or the user refused.
     """
@@ -662,7 +662,7 @@ def workflows() -> None:
     """
     settings = get_settings()
     if not settings.workflows_enabled:
-        typer.echo("Workflows are switched off (ALETHIC_FLAGS__WORKFLOWS=false).")
+        typer.echo("Workflows are switched off (PROMETHEUS_FLAGS__WORKFLOWS=false).")
         return
     container = build_container()
     declared = {d.name for d in container.employee_registry.list()}
@@ -696,7 +696,7 @@ def integrations() -> None:
     """
     settings = get_settings()
     if not settings.integrations_enabled:
-        typer.echo("Integrations are switched off (ALETHIC_FLAGS__INTEGRATIONS=false).")
+        typer.echo("Integrations are switched off (PROMETHEUS_FLAGS__INTEGRATIONS=false).")
         return
     container = build_container()
     service = container.integrations
@@ -771,13 +771,13 @@ _INPUT_OPTION = typer.Option(
 
 @app.command(name="run-workflow")
 def run_workflow(
-    name: str = typer.Argument(..., help="The workflow to run, from `alethic workflows`."),
+    name: str = typer.Argument(..., help="The workflow to run, from `prometheus workflows`."),
     inputs: list[str] = _INPUT_OPTION,
 ) -> None:
     """Run a predefined process and report what each step produced."""
 
     if not get_settings().workflows_enabled:
-        typer.secho("Workflows are switched off (ALETHIC_FLAGS__WORKFLOWS=false).", fg="red")
+        typer.secho("Workflows are switched off (PROMETHEUS_FLAGS__WORKFLOWS=false).", fg="red")
         raise typer.Exit(code=1)
 
     async def _run() -> None:
@@ -802,7 +802,7 @@ def run_workflow(
                     typer.echo(f"      {step.summary.splitlines()[0][:100]}")
             if not run.succeeded:
                 raise typer.Exit(code=1)
-        except AlethicError as error:
+        except PrometheusError as error:
             typer.secho(f"{type(error).__name__}: {error}", fg="red", err=True)
             raise typer.Exit(code=1) from error
         finally:
@@ -893,7 +893,7 @@ def validate(
             await prepare(container)
             chosen = await _chosen(container, name, regression=regression, tag=tag, phase=phase)
             if not chosen:
-                typer.echo("Nothing matched. `alethic scenarios` lists what is declared.")
+                typer.echo("Nothing matched. `prometheus scenarios` lists what is declared.")
                 raise typer.Exit(code=1)
 
             harness = build_harness(container)
@@ -928,7 +928,7 @@ def validate(
         except StorageNotInitializedError as error:
             typer.secho(f"{error} Run: uv run alembic upgrade head", fg="red", err=True)
             raise typer.Exit(code=1) from error
-        except AlethicError as error:
+        except PrometheusError as error:
             typer.secho(f"{type(error).__name__}: {error}", fg="red", err=True)
             raise typer.Exit(code=1) from error
         finally:
@@ -1050,7 +1050,7 @@ def _resolve(approval_id: str, decision: ApprovalState, comment: str) -> None:
         except ValueError as error:
             typer.secho(f"'{approval_id}' is not an approval id.", fg="red", err=True)
             raise typer.Exit(code=1) from error
-        except AlethicError as error:
+        except PrometheusError as error:
             typer.secho(f"{type(error).__name__}: {error}", fg="red", err=True)
             raise typer.Exit(code=1) from error
         finally:
@@ -1116,7 +1116,7 @@ def schedules() -> None:
     """The standing instructions on this machine, and when each next fires.
 
     A schedule holds a request in the user's own words, the same sentence
-    `ask-alethic` would take. It never names an employee: choosing one is the
+    `ask-prometheus` would take. It never names an employee: choosing one is the
     manager's job at the moment the work runs, not the user's months earlier.
     """
 
@@ -1127,7 +1127,7 @@ def schedules() -> None:
             if not found:
                 typer.echo(
                     "Nothing is scheduled here. Add one with "
-                    '`alethic schedule "<request>" --every 3600`.'
+                    '`prometheus schedule "<request>" --every 3600`.'
                 )
                 return
             for schedule in found:
@@ -1149,7 +1149,7 @@ def schedules() -> None:
 
 @app.command()
 def schedule(
-    request: str = typer.Argument(..., help="What to ask Alethic for, in your own words."),
+    request: str = typer.Argument(..., help="What to ask Prometheus for, in your own words."),
     name: str = typer.Option("", "--name", help="A short name, for reading the list."),
     every: int = typer.Option(0, "--every", help="Seconds between runs. Minimum 60."),
     daily_at: str = typer.Option("", "--daily-at", help="A time of day in UTC, HH:MM."),
@@ -1199,7 +1199,7 @@ def schedule(
 
 @app.command()
 def unschedule(
-    schedule_id: str = typer.Argument(..., help="The id from `alethic schedules`."),
+    schedule_id: str = typer.Argument(..., help="The id from `prometheus schedules`."),
     pause: bool = typer.Option(False, "--pause", help="Stop it without deleting it."),
 ) -> None:
     """Delete a schedule, or pause it and keep what it has done."""
@@ -1305,7 +1305,7 @@ def workspace_new(
                 name, description=description, file_root=files or None
             )
             typer.secho(f"{created.name} ({created.id})", fg="green")
-            typer.echo(f"Switch to it with: alethic workspace-use {created.id}")
+            typer.echo(f"Switch to it with: prometheus workspace-use {created.id}")
         finally:
             await container.aclose()
 
@@ -1333,7 +1333,7 @@ def workspace_use(
 
 @app.command(name="workspace-remove")
 def workspace_remove(
-    workspace_id: str = typer.Argument(..., help="The workspace id, from `alethic workspaces`."),
+    workspace_id: str = typer.Argument(..., help="The workspace id, from `prometheus workspaces`."),
 ) -> None:
     """Remove the record. What it owns - history, memory, files - is kept.
 
@@ -1366,7 +1366,7 @@ def documents() -> None:
         try:
             service = build_knowledge(container)
             if service is None:
-                typer.echo("Knowledge is switched off (ALETHIC_FLAGS__KNOWLEDGE=false).")
+                typer.echo("Knowledge is switched off (PROMETHEUS_FLAGS__KNOWLEDGE=false).")
                 return
             workspaces = build_workspaces(container)
             active = await workspaces.active()
@@ -1374,7 +1374,7 @@ def documents() -> None:
             if not found:
                 typer.echo(
                     f"No documents in {active.name}. Add one with:\n"
-                    "  alethic document-add <path>"
+                    "  prometheus document-add <path>"
                 )
                 return
             for item in found:
@@ -1404,7 +1404,7 @@ def document_add(
 
     A machine with no embedding model still gets a searchable document: the text
     is stored and found lexically, the status says EXTRACTED rather than
-    INDEXED, and `alethic document-reindex` finishes the job once a model is
+    INDEXED, and `prometheus document-reindex` finishes the job once a model is
     configured.
     """
 
@@ -1423,7 +1423,7 @@ def document_add(
             if document.status.value == "EXTRACTED":
                 typer.echo(
                     "Searchable by words but not by meaning: no embedding model "
-                    "answered. Configure one and run `alethic document-reindex`."
+                    "answered. Configure one and run `prometheus document-reindex`."
                 )
         finally:
             await container.aclose()
@@ -1433,7 +1433,7 @@ def document_add(
 
 @app.command(name="document-reindex")
 def document_reindex(
-    document_id: str = typer.Argument(..., help="From `alethic documents`."),
+    document_id: str = typer.Argument(..., help="From `prometheus documents`."),
 ) -> None:
     """Cut and embed a document again, with whatever model is configured now."""
 
@@ -1455,7 +1455,7 @@ def document_reindex(
 
 @app.command(name="document-remove")
 def document_remove(
-    document_id: str = typer.Argument(..., help="From `alethic documents`."),
+    document_id: str = typer.Argument(..., help="From `prometheus documents`."),
 ) -> None:
     """Remove a document and its passages. What was learned while using it stays."""
 
@@ -1498,8 +1498,8 @@ def providers() -> None:
             if not connections:
                 typer.echo(
                     "No providers connected. The machine is using whatever\n"
-                    "ALETHIC_LLM_API_KEY and the shipped catalog give it.\n"
-                    "Add one with: alethic provider-add <name> --kind openai"
+                    "PROMETHEUS_LLM_API_KEY and the shipped catalog give it.\n"
+                    "Add one with: prometheus provider-add <name> --kind openai"
                 )
             for connection in connections:
                 held = await container.credential_store.names()
@@ -1763,8 +1763,8 @@ def storage_migrate(
             total = sum(table.source_rows for table in checked.tables)
             typer.secho(f"Verified {total} row(s), row by row.", fg="green")
             typer.echo(
-                "Point ALETHIC_DATABASE_URL at the new store to work from it:\n"
-                f"  export ALETHIC_DATABASE_URL='{to}'"
+                "Point PROMETHEUS_DATABASE_URL at the new store to work from it:\n"
+                f"  export PROMETHEUS_DATABASE_URL='{to}'"
             )
             if not erase:
                 typer.echo(
@@ -1811,7 +1811,7 @@ def _guarded(coroutine_factory) -> None:
         except StorageNotInitializedError as error:
             typer.secho(f"{error} Run `alembic upgrade head` first.", fg="red", err=True)
             raise typer.Exit(code=1) from error
-        except AlethicError as error:
+        except PrometheusError as error:
             typer.secho(f"{type(error).__name__}: {error}", fg="red", err=True)
             raise typer.Exit(code=1) from error
 

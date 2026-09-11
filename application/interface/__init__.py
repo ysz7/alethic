@@ -19,14 +19,14 @@ from application.interface.contracts import (
     RequestSource,
     UserRequest,
 )
-from application.interface.service import AlethicService
+from application.interface.service import PrometheusService
 
 __all__ = [
     "Activity",
     "ActivityEvent",
-    "AlethicService",
     "Attachment",
     "InputType",
+    "PrometheusService",
     "RequestSource",
     "UserRequest",
 ]

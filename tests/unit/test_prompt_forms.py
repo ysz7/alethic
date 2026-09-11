@@ -38,7 +38,7 @@ FORM = re.compile(r"```json\n(.*?)```", re.DOTALL)
 #: these forms are what weaker models lean on to produce a shape at all, and
 #: swapping them for empty ones is a behaviour change that had to be measured
 #: rather than assumed. Four of them lost their example and gained prose
-#: describing the shape; `alethic_reconciliation` lost the field instead, because
+#: describing the shape; `prometheus_reconciliation` lost the field instead, because
 #: its one value was a `true` that meant "nothing to report" and is now read off
 #: the list of contradictions being empty.
 #:

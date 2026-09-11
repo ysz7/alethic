@@ -34,11 +34,11 @@ different employee on a machine with the browser extra uninstalled.
 
 ```yaml
 allowed_tools: [fs.read, code.run]   # may it?   least privilege
-capabilities: [CODE, FILE_ACCESS]    # can it?   what Alethic searches by
+capabilities: [CODE, FILE_ACCESS]    # can it?   what Prometheus searches by
 ```
 
 `allowed_tools` is a permission and is enforced: a tool nobody lists is a tool
-nobody can call. `capabilities` is an advertisement and is routed on: Alethic narrows
+nobody can call. `capabilities` is an advertisement and is routed on: Prometheus narrows
 the field by it before choosing, so a capability left out is work that never
 arrives, and one claimed with no tool behind it is work that arrives and cannot
 be started.
@@ -74,7 +74,7 @@ would be wrong rather than merely noisy.
 
 `domain/employees/validation.py` is given the tools as data, so it runs anywhere
 the two are known: the container at start-up (logged, never raised - a workforce
-of four with one bad declaration should run the other three), `alethic employees`,
+of four with one bad declaration should run the other three), `prometheus employees`,
 and a test that checks the shipped declarations against the shipped tools.
 
 Structural validity is separate and *is* raised, at load, naming the file: an
@@ -97,10 +97,10 @@ employees with one name impossible, which was previously a runtime check.
   employee that declares CODE, FILE_ACCESS"*.
 * **A requirement nobody declares is discarded, not obeyed.** It is usually a
   missing declaration rather than a missing employee, and a task routed
-  imperfectly beats one routed nowhere. It is logged as `alethic.no_one_declares`.
+  imperfectly beats one routed nowhere. It is logged as `prometheus.no_one_declares`.
 * **Adding an employee is still one directory**, and now includes advertising
   what it is for. `tests/e2e/test_a_new_employee.py` declares one in a temporary
-  directory and has Alethic find, choose and run it.
+  directory and has Prometheus find, choose and run it.
 * **`capabilities` is a promise the platform does not enforce.** An employee
   claiming FILE_ACCESS with `fs.read` can be given work needing `fs.write`, and
   will fail at the gate like anything else. The check catches the claim that

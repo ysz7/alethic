@@ -5,7 +5,7 @@
 ## Context
 
 Until Phase 13 the platform had two surfaces - the CLI and the local page - and
-they did not overlap enough for the difference to hurt. `alethic ask-alethic`
+they did not overlap enough for the difference to hurt. `prometheus ask-prometheus`
 awaits an objective in the foreground; the page could not, so `app/ui/runs.py`
 grew the background carrier for objectives and tasks, `app/ui/views.py` grew the
 projection of every domain value into JSON, and the route bodies grew the rest:
@@ -24,7 +24,7 @@ hypothetical.
 ## Decision
 
 **One application-level boundary, and interfaces are adapters over it.**
-`application/interface/` holds `UserRequest` (what comes in), `AlethicService`
+`application/interface/` holds `UserRequest` (what comes in), `PrometheusService`
 (the operations), `Activity` (what is happening), `Runs` (what this process is
 carrying) and `views` (domain values as data). It imports `domain/` and the rest
 of `application/`, like every other application module, and it knows nothing

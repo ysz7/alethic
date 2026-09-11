@@ -90,7 +90,7 @@ def can_transition(from_status: TaskStatus, to_status: TaskStatus) -> bool:
 
 class TaskCreatedBy(StrEnum):
     USER = "user"
-    ALETHIC = "alethic"
+    PROMETHEUS = "prometheus"
     SCHEDULE = "schedule"
     WORKFLOW = "workflow"
 

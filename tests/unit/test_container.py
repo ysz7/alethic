@@ -18,7 +18,7 @@ class StubSettings:
 
     @property
     def resolved_database_url(self) -> str:
-        return f"sqlite+aiosqlite:///{self.data_dir / 'alethic.db'}"
+        return f"sqlite+aiosqlite:///{self.data_dir / 'prometheus.db'}"
 
     def ensure_data_dir(self) -> Path:
         self.ensured = True

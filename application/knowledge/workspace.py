@@ -1,7 +1,7 @@
 """The manager's half of knowledge: what this workspace has been given to read.
 
 `WorkspaceMemory` is the same shape one layer over, and the parallel is
-deliberate. Alethic reads at a different grain from an employee: an employee
+deliberate. Prometheus reads at a different grain from an employee: an employee
 retrieves against the task it was handed, and the manager retrieves against the
 request as the person wrote it - before there is a plan, and before anybody has
 been chosen. Without this, a question whose answer is in an uploaded document

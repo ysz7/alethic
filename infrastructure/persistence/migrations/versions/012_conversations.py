@@ -9,7 +9,7 @@ One table and one column, and the column is the interesting half.
 **A conversation stores no messages.** The obvious schema here is
 `conversations` + `messages`, with a row per user turn and a row per answer.
 That would be a second history of work the platform already records in full:
-`objectives` holds the user's verbatim sentence, what Alethic read out of it, the
+`objectives` holds the user's verbatim sentence, what Prometheus read out of it, the
 acceptance criteria, the plans, the tasks and the answer. Two histories of one
 run disagree the first time a process is killed between writing them - and the
 one an interface reads would be the one that is wrong.

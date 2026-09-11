@@ -1,6 +1,6 @@
 """Running a process somebody already knows the shape of.
 
-Alethic plans an objective it has never seen before. A workflow is the opposite
+Prometheus plans an objective it has never seen before. A workflow is the opposite
 case - the decomposition is known, was written down, and should not be
 rediscovered by a model every Monday. What must *not* differ is everything
 below the decomposition: the same employees, the same runtime, the same tool

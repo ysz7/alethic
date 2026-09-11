@@ -15,7 +15,7 @@ system's own keychain, which would be the stronger answer on a laptop, does not
 exist on the server the same backend has to run on.
 
 So the row holds AES-GCM ciphertext and the key that opens it is never in the
-database: `ALETHIC_MASTER_KEY` on a deployment, a 0600 file on a desktop. A
+database: `PROMETHEUS_MASTER_KEY` on a deployment, a 0600 file on a desktop. A
 backup, a dump and `storage-migrate` therefore carry something unreadable rather
 than a set of live API keys - which is the only thing that makes storing them
 here better than storing them beside.

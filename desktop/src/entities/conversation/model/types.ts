@@ -40,8 +40,14 @@ export interface Conversation {
   id: string;
   title: string;
   messages: number;
+  /** Where the latest request in it stands, as the runtime says. None before the first. */
+  status?: ObjectiveStatus | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ConversationList {
+  conversations: Conversation[];
 }
 
 export interface Thread extends Omit<Conversation, "messages"> {

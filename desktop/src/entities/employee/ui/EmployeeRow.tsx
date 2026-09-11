@@ -11,9 +11,9 @@ import type { Employee } from "../model/types";
 
 export function EmployeeRow({ employee }: { employee: Employee }) {
   return (
-    <li>
-      <span className="who">{employee.title || employee.name}</span>
-      <span className="what">{employee.description}</span>
+    <li className="filerow person">
+      <b>{employee.title || employee.name}</b>
+      <span>{employee.description}</span>
     </li>
   );
 }

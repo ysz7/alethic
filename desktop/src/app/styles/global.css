@@ -1,654 +1,138 @@
 /*
- * Calm, spacious, native-feeling. The window is mostly empty on purpose: the
- * request is the only thing on it that matters, and every element that is not
- * the request competes with it.
+ * Quiet, dense where it has to be, and white. Taken from the Prometheus design
+ * (development/prometheus-codex.html): a sidebar of threads, one narrow column
+ * of conversation, and a composer floating over its foot. Everything the
+ * design did not draw - settings, forms, the workforce, an error - is built out
+ * of the pieces it did: the result card, the file row, the chip, the gate.
  *
  * It follows the system theme rather than offering a switch. A local
  * application that looks unlike everything else on the machine reads as a web
- * page in a frame, which is exactly what this must not feel like.
+ * page in a frame, which is exactly what this must not feel like. The design is
+ * light; the dark palette is the same tokens turned over, not a second design.
  */
 
 :root {
-  --ink: #1b1b1f;
-  --muted: #6c6c78;
-  --line: rgba(0, 0, 0, 0.08);
-  --ground: #fbfbfd;
-  --raised: #ffffff;
-  --accent: #3a3a44;
-  --warn: #9a3d1f;
-  --radius: 14px;
+  --bg: #ffffff;
+  --ink: #111113;
+  --on-ink: #ffffff;
+  --text: #1d1d1f;
+  --grey: #6e6e73;
+  --grey-2: #8e8e93;
+  --panel: #f5f5f7;
+  --panel-2: #fafafa;
+  --hair: #e7e7ea;
+  --hair-2: #d6d6da;
+  --hover: rgba(0, 0, 0, 0.05);
+  --selected: #efeff1;
+  --field: #ffffff;
+  --add: #137333;
+  --del: #b42318;
+  --del-bg: #fef3f2;
+  --del-line: #f7d4cf;
+  --wait: #a55a00;
+  --wait-strong: #8c4c00;
+  --wait-bg: #fdf6ec;
+  --wait-line: #f0dcc0;
+  --wait-text: #7a4a08;
+  --placeholder: #aeaeb2;
+  --send-off: #dddde0;
+  --font: "Onest", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --rail: 272px;
   color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --ink: #ececf1;
-    --muted: #9a9aa6;
-    --line: rgba(255, 255, 255, 0.1);
-    --ground: #131316;
-    --raised: #1b1b20;
-    --accent: #d8d8e0;
-    --warn: #e0a189;
+    --bg: #161618;
+    --ink: #f2f2f4;
+    --on-ink: #111113;
+    --text: #ededf0;
+    --grey: #a1a1a8;
+    --grey-2: #7c7c84;
+    --panel: #232326;
+    --panel-2: #1c1c1f;
+    --hair: #2c2c30;
+    --hair-2: #3a3a3f;
+    --hover: rgba(255, 255, 255, 0.06);
+    --selected: #2a2a2e;
+    --field: #1c1c1f;
+    --add: #5bbf7a;
+    --del: #f07a6a;
+    --del-bg: #2a1716;
+    --del-line: #4a2421;
+    --wait: #e0a04a;
+    --wait-strong: #f0b460;
+    --wait-bg: #2a2115;
+    --wait-line: #4a3920;
+    --wait-text: #e8c089;
+    --placeholder: #6a6a70;
+    --send-off: #3a3a3f;
   }
 }
 
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
 }
 
 body {
   margin: 0;
-  background: var(--ground);
-  color: var(--ink);
-  font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+  letter-spacing: -0.016em;
   -webkit-font-smoothing: antialiased;
-}
-
-.window {
-  display: grid;
-  grid-template-columns: 1fr 232px;
-  height: 100vh;
-}
-
-.stage {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 56px 40px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
-  max-width: 720px;
-  width: 100%;
-  margin: 0 auto;
-}
-
-.stage.empty .scroll {
-  justify-content: center;
-}
-
-/* --- The greeting --------------------------------------------------------- */
-
-.greeting {
-  text-align: center;
-  margin-bottom: 8px;
-}
-
-.greeting h1 {
-  font-size: 30px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  margin: 0 0 6px;
-}
-
-.greeting p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 17px;
-}
-
-/* --- The conversation ----------------------------------------------------- */
-
-.thread {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
-}
-
-.turn .asked {
-  margin: 0 0 12px;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.turn .answer {
-  background: var(--raised);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 14px 16px;
-}
-
-.turn .answer p {
-  margin: 0;
-  white-space: pre-wrap;
-}
-
-.turn .answer.failed,
-.turn .answer.escalated {
-  border-color: var(--warn);
-}
-
-.missing {
-  margin: 10px 0 0;
-  padding-left: 18px;
-  color: var(--warn);
-  font-size: 13px;
-}
-
-.working {
-  margin: 0;
-  color: var(--muted);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.pulse {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: breathe 1.4s ease-in-out infinite;
-}
-
-@keyframes breathe {
-  0%, 100% { opacity: 0.25; }
-  50% { opacity: 1; }
-}
-
-/* --- What it is doing ----------------------------------------------------- */
-
-.trail ol {
-  list-style: none;
-  margin: 0;
-  padding: 0 0 0 14px;
-  border-left: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.trail li {
-  font-size: 13px;
-  color: var(--muted);
-  display: flex;
-  gap: 8px;
-}
-
-.trail .kind {
-  color: var(--accent);
-  flex: none;
-  opacity: 0.75;
-}
-
-.trail .what {
-  overflow-wrap: anywhere;
-}
-
-.trail li.approval .what {
-  color: var(--warn);
-}
-
-/* --- Approvals ------------------------------------------------------------ */
-
-.approval {
-  background: var(--raised);
-  border: 1px solid var(--warn);
-  border-radius: var(--radius);
-  padding: 16px;
-}
-
-.approval header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.approval h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 550;
-}
-
-.approval .risk {
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  color: var(--warn);
-}
-
-.approval .why,
-.approval .stale {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.approval dl {
-  margin: 12px 0 0;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 4px 14px;
-  font-size: 13px;
-}
-
-.approval dl > div {
-  display: contents;
-}
-
-.approval dt {
-  color: var(--muted);
-}
-
-.approval dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.approval footer {
-  margin-top: 16px;
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-/* --- The entry field ------------------------------------------------------ */
-
-.entry {
-  padding: 12px 40px 28px;
-  max-width: 720px;
-  width: 100%;
-  margin: 0 auto;
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-}
-
-.composer {
-  flex: 1;
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  background: var(--raised);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 10px 10px 10px 16px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-}
-
-.composer textarea {
-  flex: 1;
-  border: 0;
-  outline: none;
-  resize: none;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  max-height: 180px;
-  min-height: 24px;
-  padding: 0;
+  overflow: hidden;
 }
 
 button {
   font: inherit;
-  font-size: 13px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--ink);
-  border-radius: 9px;
-  padding: 6px 14px;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
   cursor: pointer;
 }
 
 button:disabled {
-  opacity: 0.4;
   cursor: default;
 }
 
-.approve {
-  background: var(--ink);
-  color: var(--ground);
-  border-color: transparent;
-}
-
-/* --- The workforce -------------------------------------------------------- */
-
-.workforce {
-  border-left: 1px solid var(--line);
-  padding: 56px 20px;
-  overflow-y: auto;
-}
-
-.workforce h2 {
-  margin: 0 0 14px;
-  font-size: 11px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--muted);
-  font-weight: 600;
-}
-
-.workforce ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.workforce li {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.workforce .who {
-  font-size: 14px;
-}
-
-.workforce .what {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.workforce .note {
-  margin-top: 22px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.problem {
-  color: var(--warn);
-}
-
-.waking {
-  color: var(--muted);
-  text-align: center;
-}
-
-/* --- Where you are -------------------------------------------------------- */
-
-.places {
-  display: flex;
-  gap: 4px;
-  padding: 8px 16px 0;
-  background: var(--ground);
-}
-
-.places button {
-  border: 0;
-  background: none;
-  color: var(--muted);
+input,
+select,
+textarea {
   font: inherit;
-  padding: 6px 12px;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
   border-radius: 8px;
-  cursor: pointer;
 }
 
-.places button.here {
-  color: var(--ink);
-  background: var(--raised);
-  box-shadow: inset 0 0 0 1px var(--line);
+.mono {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  letter-spacing: 0;
 }
 
-/* --- Settings ------------------------------------------------------------- */
-
-.settings {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px;
-  max-width: 720px;
-  margin: 0 auto;
-  width: 100%;
-}
-
-.settings h2 {
-  font-size: 1.1rem;
-  margin: 0 0 16px;
-}
-
-.integration {
-  background: var(--raised);
-  border-radius: var(--radius);
-  box-shadow: inset 0 0 0 1px var(--line);
-  padding: 16px;
-  margin-bottom: 12px;
-}
-
-.integration header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.integration h3 {
-  margin: 0;
-  font-size: 1rem;
-}
-
-.integration .state {
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
-/* The status word carries the only colour here, because it is the only thing
-   on the card a person scans for. */
-.integration .state.good { color: #2f7d4f; }
-.integration .state.bad { color: var(--warn); }
-.integration .state.off { color: var(--muted); opacity: 0.7; }
-
-.integration .meta {
-  color: var(--muted);
-  font-size: 0.85rem;
-  margin: 4px 0 0;
-}
-
-.integration footer {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  flex-wrap: wrap;
-}
-
-.integration footer button,
-.add-integration button {
-  font: inherit;
-  padding: 6px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--raised);
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.integration footer button.danger { color: var(--warn); }
-
-.capabilities {
-  list-style: none;
-  margin: 12px 0 0;
-  padding: 0;
-  font-size: 0.9rem;
-}
-
-.capabilities li {
-  display: grid;
-  grid-template-columns: 16px 1fr auto auto auto;
-  gap: 8px;
-  align-items: baseline;
-  padding: 4px 0;
-}
-
-.capabilities .mark { color: var(--muted); }
-.capabilities .mark.asks { color: var(--warn); font-weight: 600; }
-.capabilities .effect,
-.capabilities .asks-label,
-.capabilities .unclassified {
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-.capabilities .asks-label { color: var(--warn); }
-.capabilities .what {
-  grid-column: 2 / -1;
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-
-.add-integration {
-  background: var(--raised);
-  border-radius: var(--radius);
-  box-shadow: inset 0 0 0 1px var(--line);
-  padding: 16px;
-  margin-top: 20px;
-  display: grid;
-  gap: 10px;
-}
-
-.add-integration h3 { margin: 0; font-size: 1rem; }
-
-.add-integration label {
-  display: grid;
-  gap: 4px;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.add-integration input[type="text"],
-.add-integration input:not([type]),
-.add-integration input[type="password"] {
-  font: inherit;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--ground);
-  color: var(--ink);
-}
-
-.capabilities-choice {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.capabilities-choice label {
-  display: inline-flex;
-  gap: 4px;
-  margin-right: 12px;
-  align-items: center;
-}
-
-.confirm {
-  font-size: 0.85rem;
-  display: grid;
-  gap: 8px;
-}
-
-.confirm p { margin: 0; color: var(--muted); }
-
-/* --- Workspaces, documents, memory ---------------------------------------- */
-
-/* The selector sits in the frame rather than on a screen: which context the
-   window is showing is true of everything in it, not of one page. */
-.switcher {
-  margin-left: auto;
-  align-self: center;
-}
-
-.switcher select {
-  font: inherit;
-  color: var(--ink);
-  background: var(--raised);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 4px 8px;
-}
-
-.workspace,
-.document {
-  background: var(--raised);
-  border-radius: var(--radius);
-  box-shadow: inset 0 0 0 1px var(--line);
-  padding: 12px 16px;
-  margin-bottom: 12px;
-}
-
-.workspace.here {
-  box-shadow: inset 0 0 0 1px var(--accent, var(--line));
-}
-
-.workspace header,
-.document header {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.badge {
-  font-size: 0.75rem;
-  color: var(--ink);
-  background: var(--ground);
-  border-radius: 6px;
-  padding: 1px 6px;
-}
-
-.badge.quiet {
-  color: var(--muted);
-}
-
-.actions {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.actions button,
-.new-workspace button,
-.new-document button {
-  font: inherit;
-  padding: 4px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--raised);
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.new-workspace,
-.new-document {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 0 0 24px;
-}
-
-.new-workspace input,
-.new-document input {
-  font: inherit;
-  flex: 1 1 220px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--raised);
-  color: var(--ink);
-}
-
-.memories {
-  list-style: none;
-  margin: 0 0 24px;
-  padding: 0;
-}
-
-.memory {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-/* Present for a screen reader, absent for everyone else: the selector's label
-   is obvious to the eye and is not to a reader that only hears the control. */
+/* Present for a screen reader, absent for everyone else. */
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -656,4 +140,1503 @@ button:disabled {
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+/* ── the frame ─────────────────────────── */
+
+.app {
+  display: grid;
+  grid-template-columns: var(--rail) minmax(0, 1fr);
+  height: 100dvh;
+}
+
+.app.rail-closed {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+
+.app.rail-closed .rail {
+  visibility: hidden;
+  border-right: 0;
+}
+
+.scrim {
+  display: none;
+}
+
+/* The shell draws the traffic lights over the content on macOS, so the first
+   thing on the top row of whichever pane is leftmost has to start after them. */
+html[data-shell="mac"] .rail-top,
+html[data-shell="mac"] .app.rail-closed .head {
+  padding-left: 80px;
+}
+
+/* ── sidebar ───────────────────────────── */
+
+.rail {
+  background: var(--panel-2);
+  border-right: 1px solid var(--hair);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.rail-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 12px 8px;
+  min-height: 52px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.022em;
+  padding: 4px 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.logo svg {
+  flex: none;
+}
+
+.icobtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: var(--grey);
+  transition: background 0.16s, color 0.16s;
+  flex: none;
+}
+
+.icobtn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.icobtn svg {
+  width: 17px;
+  height: 17px;
+}
+
+.newbtn {
+  margin: 4px 12px 12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border-radius: 11px;
+  border: 1px solid var(--hair);
+  background: var(--bg);
+  font-size: 14px;
+  font-weight: 500;
+  transition: border-color 0.16s;
+}
+
+.newbtn:hover {
+  border-color: var(--hair-2);
+}
+
+.newbtn svg {
+  width: 14px;
+  height: 14px;
+  color: var(--grey);
+}
+
+.search {
+  margin: 0 12px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: var(--field);
+  border: 1px solid var(--hair);
+  color: var(--grey-2);
+  font-size: 13.5px;
+}
+
+.search svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13.5px;
+  padding: 0;
+}
+
+.search input::placeholder {
+  color: var(--grey-2);
+}
+
+.threads {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding: 2px 8px 12px;
+}
+
+.tgroup {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--grey-2);
+  padding: 12px 8px 6px;
+  margin: 0;
+}
+
+.tempty {
+  font-size: 13px;
+  color: var(--grey-2);
+  padding: 12px 10px;
+  margin: 0;
+}
+
+.thread {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 10px;
+  transition: background 0.14s;
+}
+
+.thread:hover {
+  background: var(--hover);
+}
+
+.thread.on {
+  background: var(--selected);
+}
+
+.thread-title {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.thread-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--grey-2);
+}
+
+.pip {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--grey-2);
+}
+
+.pip.run {
+  background: var(--ink);
+  animation: pulse 1.6s infinite;
+}
+
+.pip.wait {
+  background: var(--wait);
+}
+
+.pip.fail {
+  background: var(--del);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.rail-foot {
+  border-top: 1px solid var(--hair);
+  padding: 10px 12px;
+}
+
+.acct {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 6px;
+  border-radius: 10px;
+  transition: background 0.16s;
+}
+
+.acct:hover {
+  background: var(--hover);
+}
+
+.acct.on {
+  background: var(--selected);
+}
+
+.avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--on-ink);
+  display: grid;
+  place-items: center;
+  font-size: 11.5px;
+  font-weight: 600;
+  flex: none;
+  letter-spacing: 0;
+}
+
+.acct-meta {
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+}
+
+.acct-meta b {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.acct-meta span {
+  display: block;
+  font-size: 11.5px;
+  color: var(--grey-2);
+}
+
+.acct-gear {
+  width: 14px;
+  height: 14px;
+  color: var(--grey-2);
+  flex: none;
+}
+
+/* ── main ──────────────────────────────── */
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  height: 52px;
+  flex: none;
+  border-bottom: 1px solid var(--hair);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: saturate(180%) blur(18px);
+}
+
+.head h1 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.head-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 12px;
+  color: var(--grey);
+  flex: none;
+}
+
+.head-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stream {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding: 26px 16px 170px;
+}
+
+.col {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.col.empty {
+  padding-top: 11vh;
+}
+
+/* ── the greeting ──────────────────────── */
+
+.greeting {
+  margin-bottom: 26px;
+}
+
+.greeting h1 {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  margin: 0 0 4px;
+}
+
+.greeting p {
+  margin: 0;
+  color: var(--grey);
+  font-size: 16px;
+}
+
+/* ── messages ──────────────────────────── */
+
+.turns {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.turn {
+  margin-bottom: 26px;
+}
+
+.from-user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.bubble {
+  background: var(--panel);
+  border-radius: 18px;
+  padding: 11px 15px;
+  max-width: 84%;
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.assistant p {
+  margin: 0 0 13px;
+  font-size: 15px;
+  line-height: 1.62;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.assistant p:last-child {
+  margin-bottom: 0;
+}
+
+.assistant code {
+  font-family: var(--mono);
+  font-size: 13px;
+  background: var(--panel);
+  padding: 1px 5px;
+  border-radius: 5px;
+}
+
+.worked {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 12px;
+  font-size: 13.5px;
+  color: var(--grey);
+  transition: color 0.16s;
+}
+
+button.worked:hover {
+  color: var(--text);
+}
+
+.worked .cv {
+  width: 9px;
+  height: 9px;
+  transition: transform 0.22s ease;
+}
+
+.worked[aria-expanded="true"] .cv {
+  transform: rotate(90deg);
+}
+
+.steps {
+  margin: 0 0 16px;
+  padding: 2px 0 2px 14px;
+  border-left: 1px solid var(--hair);
+}
+
+.steps ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.step {
+  padding: 7px 0;
+  font-size: 13.5px;
+  color: var(--grey);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.step b {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.step.approval b {
+  color: var(--wait);
+}
+
+.step .call {
+  display: block;
+  margin-top: 5px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--grey);
+  background: var(--panel-2);
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  padding: 6px 9px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* ── result card ───────────────────────── */
+
+.rescard {
+  border: 1px solid var(--hair);
+  border-radius: 14px;
+  overflow: hidden;
+  margin: 4px 0 14px;
+  background: var(--bg);
+}
+
+.res-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  background: var(--panel-2);
+}
+
+.rescard > :not(:first-child) {
+  border-top: 1px solid var(--hair);
+}
+
+.res-ico {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--hair);
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--grey);
+}
+
+.res-ico svg {
+  width: 13px;
+  height: 13px;
+}
+
+.rescard.short .res-ico {
+  color: var(--wait);
+}
+
+.res-meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.res-meta b {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.014em;
+}
+
+.res-meta span {
+  display: block;
+  font-size: 12px;
+  color: var(--grey-2);
+}
+
+.rescard ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.filerow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 13px;
+  border-top: 1px solid var(--hair);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  letter-spacing: 0;
+  color: var(--grey);
+}
+
+.filerow:first-child {
+  border-top: 0;
+}
+
+.filerow.text,
+.filerow.person {
+  font-family: var(--font);
+  font-size: 13.5px;
+  letter-spacing: -0.012em;
+}
+
+.filerow.text {
+  color: var(--text);
+}
+
+/* A grid rather than a row, so every description starts on one line down the
+   card whatever the name before it is called. */
+.filerow.person {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) 1fr;
+  gap: 14px;
+}
+
+.filerow.person b {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.plus {
+  color: var(--add);
+}
+
+.minus {
+  color: var(--del);
+}
+
+.mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--grey);
+  border: 1px solid transparent;
+  transition: background 0.16s, color 0.16s, border-color 0.16s;
+}
+
+.mini:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.mini.bordered {
+  border-color: var(--hair);
+  background: var(--bg);
+}
+
+.mini svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* ── approval gate ─────────────────────── */
+
+.gate {
+  border: 1px solid var(--wait-line);
+  background: var(--wait-bg);
+  border-radius: 14px;
+  padding: 14px;
+  margin: 4px 0 14px;
+}
+
+.gate.ended {
+  opacity: 0.85;
+}
+
+.gate-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 6px;
+  color: var(--wait);
+}
+
+.gate-top svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.gate-top b {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.gate h4 {
+  margin: 0 0 4px;
+  font-size: 14.5px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.gate p {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+  color: var(--wait-text);
+  line-height: 1.5;
+}
+
+.gate-details {
+  margin: 0 0 12px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0;
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+  border: 1px solid var(--wait-line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.gate-details > div {
+  display: contents;
+}
+
+.gate-details dt {
+  color: var(--wait-text);
+}
+
+.gate-details dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.gate-acts {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+/* ── buttons ───────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 980px;
+  font-size: 13.5px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  transition: background 0.16s, border-color 0.16s, color 0.16s;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+}
+
+.btn-ink {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+.btn-wait {
+  background: var(--wait);
+  color: #fff;
+}
+
+.btn-wait:hover {
+  background: var(--wait-strong);
+}
+
+.btn-line {
+  border-color: var(--hair-2);
+  background: var(--bg);
+}
+
+.btn-line:hover {
+  background: var(--panel);
+}
+
+.btn-quiet {
+  color: var(--grey);
+}
+
+.btn-quiet:hover {
+  color: var(--text);
+}
+
+/* ── reactions, working, trouble ───────── */
+
+.react {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 2px;
+  color: var(--grey-2);
+}
+
+.react button {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  transition: background 0.16s, color 0.16s;
+}
+
+.react button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.react svg {
+  width: 14px;
+  height: 14px;
+}
+
+.working {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--grey);
+  font-size: 14px;
+  margin: 0 0 12px;
+}
+
+.spin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex: none;
+  border: 1.6px solid var(--hair-2);
+  border-top-color: var(--ink);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.problem {
+  border: 1px solid var(--del-line);
+  background: var(--del-bg);
+  color: var(--del);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin: 4px 0 14px;
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+/* ── composer ──────────────────────────── */
+
+.dock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 14px 16px 20px;
+  background: linear-gradient(180deg, transparent 0%, var(--bg) 42%);
+  pointer-events: none;
+}
+
+.dock .col {
+  pointer-events: auto;
+}
+
+.composer {
+  border: 1px solid var(--hair);
+  border-radius: 24px;
+  background: var(--field);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 14px 34px -22px rgba(0, 0, 0, 0.45);
+  padding: 6px 8px 8px 8px;
+}
+
+.composer textarea {
+  width: 100%;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  padding: 11px 10px 4px;
+  font-size: 15.5px;
+  line-height: 1.45;
+  color: var(--text);
+  max-height: 180px;
+  display: block;
+}
+
+.composer textarea::placeholder {
+  color: var(--placeholder);
+}
+
+.dock-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 2px 0;
+  min-height: 34px;
+}
+
+.dockchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  color: var(--grey);
+  transition: background 0.16s, color 0.16s;
+  white-space: nowrap;
+}
+
+.dockchip:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.dockchip b {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.dockchip svg {
+  width: 11px;
+  height: 11px;
+  color: var(--grey-2);
+}
+
+.dockchip.switcher {
+  position: relative;
+  cursor: pointer;
+}
+
+.dockchip.switcher select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.send {
+  margin-left: auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--ink);
+  color: var(--on-ink);
+  display: grid;
+  place-items: center;
+  transition: background 0.16s, opacity 0.16s;
+}
+
+.send:disabled {
+  background: var(--send-off);
+  color: var(--on-ink);
+}
+
+.send svg {
+  width: 15px;
+  height: 15px;
+}
+
+.hint {
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--grey-2);
+  margin: 9px 0 0;
+}
+
+/* ── the workforce ─────────────────────── */
+
+.rescard.workforce .filerow span {
+  color: var(--grey);
+}
+
+/* ── settings ──────────────────────────── */
+
+/* The design has no settings screen. This one is made of its parts: sections
+   are headed the way the sidebar groups threads, every record is a result
+   card, every form is a card whose fields are the search box, and the jump
+   links across the top are composer chips. */
+
+.settings {
+  padding-bottom: 40px;
+}
+
+.stream:has(> .settings) {
+  padding-bottom: 60px;
+}
+
+.section-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hair);
+}
+
+.section-nav .dockchip {
+  background: var(--panel);
+  color: var(--text);
+}
+
+.section-nav .dockchip:hover {
+  background: var(--selected);
+}
+
+.settings h2 {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.024em;
+  margin: 34px 0 6px;
+  scroll-margin-top: 16px;
+}
+
+.settings h3 {
+  font-size: 14.5px;
+  font-weight: 600;
+  margin: 22px 0 10px;
+}
+
+.settings .note,
+.settings .meta {
+  color: var(--grey);
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+
+.settings article .note,
+.settings article .meta {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.settings .note strong {
+  color: var(--wait);
+}
+
+.integration,
+.model,
+.workspace,
+.document {
+  border: 1px solid var(--hair);
+  border-radius: 14px;
+  background: var(--bg);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.workspace.here {
+  background: var(--panel-2);
+  border-color: var(--hair-2);
+}
+
+.integration header,
+.model header,
+.workspace header,
+.document header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.integration h3,
+.model h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace strong,
+.document strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.workspace > p:not(.note) {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+}
+
+.state {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--grey);
+  white-space: nowrap;
+}
+
+.state::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.state.good {
+  color: var(--add);
+}
+
+.state.bad {
+  color: var(--del);
+}
+
+.state.off {
+  color: var(--grey-2);
+}
+
+.state.waiting {
+  color: var(--wait);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 7px;
+  background: var(--panel);
+  font-size: 11.5px;
+  color: var(--text);
+}
+
+.badge.quiet {
+  color: var(--grey);
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+article > .actions {
+  margin-top: 10px;
+  justify-content: flex-end;
+}
+
+/* Every plain button on the page is the design's bordered mini button, and
+   every form's submit is its ink pill. */
+.settings article button,
+.settings .actions button,
+.settings .confirm button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--text);
+  border: 1px solid var(--hair);
+  background: var(--bg);
+  transition: background 0.16s, border-color 0.16s;
+}
+
+.settings article button:hover,
+.settings .actions button:hover,
+.settings .confirm button:hover {
+  background: var(--panel);
+  border-color: var(--hair-2);
+}
+
+.settings button.danger {
+  color: var(--del);
+}
+
+.settings button:disabled {
+  opacity: 0.45;
+}
+
+.integration footer {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.confirm {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  width: 100%;
+}
+
+.confirm p {
+  margin: 0;
+  color: var(--grey);
+}
+
+.capabilities {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.capabilities li {
+  display: grid;
+  grid-template-columns: 16px 1fr auto auto auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 8px 11px;
+  border-top: 1px solid var(--hair);
+  font-size: 13px;
+}
+
+.capabilities li:first-child {
+  border-top: 0;
+}
+
+.capabilities .name {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  letter-spacing: 0;
+}
+
+.capabilities .mark {
+  color: var(--grey-2);
+}
+
+.capabilities .mark.asks,
+.capabilities .asks-label {
+  color: var(--wait);
+  font-weight: 600;
+}
+
+.capabilities .effect,
+.capabilities .asks-label,
+.capabilities .unclassified {
+  font-size: 11.5px;
+  color: var(--grey);
+}
+
+.capabilities .what {
+  grid-column: 2 / -1;
+  margin: 0;
+  color: var(--grey);
+  font-size: 12.5px;
+}
+
+/* Forms. */
+
+.add-integration,
+.new-workspace,
+.new-document {
+  border: 1px solid var(--hair);
+  border-radius: 14px;
+  background: var(--panel-2);
+  padding: 12px;
+  margin: 12px 0 0;
+}
+
+.add-integration {
+  display: grid;
+  gap: 10px;
+}
+
+.add-integration h3 {
+  margin: 0;
+}
+
+.new-workspace,
+.new-document {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.add-integration label {
+  display: grid;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--grey);
+}
+
+.add-integration label.checkbox,
+.capabilities-choice label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 14px;
+  color: var(--text);
+}
+
+.settings input:not([type="checkbox"]),
+.settings select {
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: var(--field);
+  color: var(--text);
+  padding: 7px 10px;
+  font-size: 13.5px;
+  outline: none;
+  min-width: 0;
+  transition: border-color 0.16s;
+}
+
+.settings input:not([type="checkbox"]):focus,
+.settings select:focus {
+  border-color: var(--hair-2);
+}
+
+.settings input::placeholder {
+  color: var(--grey-2);
+}
+
+.new-workspace input,
+.new-document input {
+  flex: 1 1 200px;
+}
+
+.settings input[type="checkbox"] {
+  accent-color: var(--ink);
+}
+
+.settings fieldset {
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  padding: 8px 12px 10px;
+  margin: 0;
+  font-size: 13px;
+  background: var(--bg);
+}
+
+.settings legend {
+  padding: 0 4px;
+  font-size: 12.5px;
+  color: var(--grey);
+}
+
+.settings details summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--grey);
+}
+
+.settings details[open] {
+  display: grid;
+  gap: 10px;
+}
+
+.settings .hint {
+  display: inline;
+  font-size: 11.5px;
+  margin: 0 0 0 4px;
+}
+
+.settings form > button[type="submit"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 980px;
+  font-size: 13.5px;
+  font-weight: 500;
+  padding: 7px 16px;
+  background: var(--ink);
+  color: var(--on-ink);
+  justify-self: start;
+}
+
+.settings form > button[type="submit"]:disabled {
+  opacity: 0.35;
+}
+
+.memories {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 1px solid var(--hair);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.memory {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 10px 13px;
+  border-top: 1px solid var(--hair);
+  font-size: 13.5px;
+}
+
+.memory:first-child {
+  border-top: 0;
+}
+
+.memory > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.memory .note {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0;
+  color: var(--grey-2);
+  white-space: nowrap;
+}
+
+.routing {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--hair);
+  border-radius: 14px;
+  overflow: hidden;
+  font-size: 13.5px;
+}
+
+.routing th,
+.routing td {
+  padding: 8px 13px;
+  border-top: 1px solid var(--hair);
+  text-align: left;
+}
+
+.routing tr:first-child th,
+.routing tr:first-child td {
+  border-top: 0;
+}
+
+.routing th {
+  font-weight: 400;
+  color: var(--grey);
+  width: 40%;
+}
+
+.routing select {
+  width: 100%;
+}
+
+/* ── narrow windows ────────────────────── */
+
+@media (max-width: 900px) {
+  .app,
+  .app.rail-closed {
+    grid-template-columns: 1fr;
+  }
+
+  .rail {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(84vw, 300px);
+    z-index: 60;
+    transition: transform 0.28s cubic-bezier(0.28, 0.11, 0.32, 1);
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.2);
+  }
+
+  .app.rail-closed .rail {
+    transform: translateX(-100%);
+    box-shadow: none;
+  }
+
+  .scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 55;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.24s;
+  }
+
+  .scrim.on {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  html[data-shell="mac"] .head {
+    padding-left: 80px;
+  }
+
+  .stream {
+    padding: 20px 14px 190px;
+  }
+
+  .bubble {
+    max-width: 88%;
+  }
+
+  .head {
+    padding: 0 12px;
+  }
+
+  .dock {
+    padding: 12px 12px 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition-duration: 0.001ms !important;
+  }
 }

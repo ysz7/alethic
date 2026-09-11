@@ -5,8 +5,8 @@ dependencies between them. Adding one is adding a file here - no Python, and no
 change to any employee.
 
 ```bash
-uv run alethic workflows                      # what is declared, and whether it can run
-uv run alethic run-workflow <name> --input key=value
+uv run prometheus workflows                      # what is declared, and whether it can run
+uv run prometheus run-workflow <name> --input key=value
 ```
 
 A step reads what earlier steps produced through `{steps.<name>}`, and the run's
@@ -15,7 +15,7 @@ repeating - which depends on what it does, not on the engine - and
 `on_failure: CONTINUE` says a step's failure is survivable. The default is to
 stop, because the step after a failed one usually reads what it produced.
 
-Everything below the decomposition is the same as for work Alethic planned
+Everything below the decomposition is the same as for work Prometheus planned
 itself: the same employees, the same limits, the same approval gate. A workflow
 cannot do anything an employee could not have been asked to do directly.
 

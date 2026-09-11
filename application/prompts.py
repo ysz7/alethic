@@ -5,7 +5,7 @@ them, and a diff on a `.md` file is readable in a way that a diff on an embedded
 triple-quoted string is not.
 
 It sits at the top of `application/` rather than inside the employee runtime
-because the manager writes prompts too, and Alethic reaching into the runtime's
+because the manager writes prompts too, and Prometheus reaching into the runtime's
 package for a file loader would suggest a dependency that does not exist.
 
 **Versioning is the directory, not a field** (§121). `prompts/<name>/v2.md`
@@ -90,7 +90,7 @@ def digest(name: str, version: str = LATEST) -> str:
 
 
 def catalog() -> list[PromptInfo]:
-    """Every prompt that ships here, for `alethic prompts` and for a test that
+    """Every prompt that ships here, for `prometheus prompts` and for a test that
     checks the ones the code asks for are the ones on disk."""
     if not PROMPTS_DIR.is_dir():
         return []

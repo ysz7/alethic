@@ -270,9 +270,9 @@ class ApprovalRow(Base):
 
 
 class ObjectiveRow(Base):
-    """What the user asked Alethic for, and what became of it.
+    """What the user asked Prometheus for, and what became of it.
 
-    The user's own sentence is `text` and is never rewritten. What Alethic read out
+    The user's own sentence is `text` and is never rewritten. What Prometheus read out
     of it - the constraints, what would count as done - is stored beside it, so
     a misreading stays visible next to the thing it misread.
     """
@@ -322,7 +322,7 @@ class ConversationRow(Base):
 
 
 class PlanRow(Base):
-    """One revision of Alethic's decomposition of an objective.
+    """One revision of Prometheus's decomposition of an objective.
 
     Superseded plans are kept. What the manager thought on the first attempt is
     the only evidence of why a second was needed.
@@ -356,7 +356,7 @@ class PlanTaskDependencyRow(Base):
     checked. Edges can be checked for a cycle, and they say which tasks could
     run at the same time - which is what Phase 12 needs and what a list loses.
 
-    The task columns carry no foreign key. A plan is recorded when Alethic proposes
+    The task columns carry no foreign key. A plan is recorded when Prometheus proposes
     it, and a task becomes a row when somebody is given it, so the edges legally
     precede both ends they point at. See migration 006.
     """
@@ -522,7 +522,7 @@ class ValidationRunRow(Base):
 
 
 class ScheduleRow(Base):
-    """A standing instruction to ask Alethic for something (§12.9).
+    """A standing instruction to ask Prometheus for something (§12.9).
 
     It holds a request in words, not a plan and not an employee: a schedule
     outlives the workforce it was written against, and one that named an
@@ -765,7 +765,7 @@ class ModelEntryRow(Base):
     """One catalog entry: a model, and the connection it is reached through.
 
     The catalog was a TOML file and stays one on disk - the shipped file is what
-    a fresh installation is seeded from, and `ALETHIC_MODEL_CATALOG_PATH` still
+    a fresh installation is seeded from, and `PROMETHEUS_MODEL_CATALOG_PATH` still
     overrides everything for a machine with no window. What this table adds is
     the entry a *person* added, which cannot live in a file inside an installed
     application.
@@ -819,7 +819,7 @@ class SecretRow(Base):
     In the store rather than in a file beside it because the backend has to be
     deployable: a container that restarts with an empty filesystem loses a file
     and keeps its database. What lands here is AES-GCM ciphertext, and the key
-    that opens it comes from `ALETHIC_MASTER_KEY` or a 0600 file - so a backup,
+    that opens it comes from `PROMETHEUS_MASTER_KEY` or a 0600 file - so a backup,
     a dump, or `storage-migrate` carries something unreadable rather than a set
     of live API keys.
 

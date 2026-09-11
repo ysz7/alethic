@@ -68,7 +68,7 @@ this phase exists to fix.
 The engine ignores a name it does not recognise, so `no_sendng` would be a
 restriction that reads as enforced and is nothing at all.
 `domain/employees/validation.py` reports it as an error - wrong on every machine
-- and `alethic employees --strict` exits non-zero on it. A wrong tool name loses
+- and `prometheus employees --strict` exits non-zero on it. A wrong tool name loses
 an employee a tool it can see it does not have; a wrong policy name loses it a
 restriction nobody can see is gone.
 
@@ -94,7 +94,7 @@ the machine.
 ### A question can have a deadline
 
 An unanswered approval leaves a PENDING row, and a PENDING row is a task
-`alethic resume` keeps picking up - so a question nobody ever answers is a run
+`prometheus resume` keeps picking up - so a question nobody ever answers is a run
 that never finishes. Expiring is a refusal like any other: the rule that an
 unconfirmed action does not happen covers "nobody was there" as much as "they
 said no". Expiry is applied where the rows are, because the process that asked
@@ -108,7 +108,7 @@ waiting.
 
 `WorkflowEngine` decides nothing about how work is done. It resolves a declared
 dependency graph and hands each step to `StepExecution` - the contract the
-manager uses for the same purpose - so a predefined process and a plan Alethic
+manager uses for the same purpose - so a predefined process and a plan Prometheus
 invented differ in where the decomposition came from and in nothing below it.
 Adding one is adding a file under `workflows/`, and
 `tests/e2e/test_governance.py` proves it by declaring one in a temporary
@@ -123,13 +123,13 @@ for the least forgiving step.
 * Adding a tool means answering "what does this do to the world", and the risk
   follows. Getting it wrong is now a wrong answer to a question with seven
   possible values, not a number nobody reviews.
-* `alethic policies` prints the table and the catalog with who opted into what,
+* `prometheus policies` prints the table and the catalog with who opted into what,
   because a policy documented in prose and absent from the catalog enforces
   nothing.
 * The four shipped employees keep behaving as they did:
   `no_irreversible_actions` restates the threshold for them, and now does so as
   an enforced rule rather than an unread field.
-* `alethic audit` shows the actions that did not happen, which is the list that
+* `prometheus audit` shows the actions that did not happen, which is the list that
   did not exist before.
 
 ## Alternatives considered

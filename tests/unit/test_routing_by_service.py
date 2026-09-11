@@ -18,9 +18,9 @@ from __future__ import annotations
 import json
 from uuid import uuid4
 
-from application.alethic.delegation import CapabilityDelegator
-from application.alethic.planner import ObjectivePlanner
-from application.alethic.workforce import describe
+from application.prometheus.delegation import CapabilityDelegator
+from application.prometheus.planner import ObjectivePlanner
+from application.prometheus.workforce import describe
 from domain.capabilities.models import Capability, CapabilityRequirement
 from domain.tasks.task import Task
 from domain.workforce.protocols import Objective

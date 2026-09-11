@@ -5,18 +5,36 @@
  * have. The field is never disabled while work is running: someone who has
  * thought of the next thing should be able to write it down, and nothing is
  * queued behind a disabled textarea.
+ *
+ * The row under the field takes whatever the page puts in it (`extras`): the
+ * workspace a request will run in is another feature's control, and a feature
+ * does not import another.
  */
 
-import { useState, type KeyboardEvent } from "react";
+import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+
+import { ArrowUpIcon } from "../../../shared/ui";
+
+/** Past this the field scrolls rather than pushing the conversation off the screen. */
+const MAX_HEIGHT = 180;
 
 interface Props {
   onSend: (request: string) => void | Promise<void>;
   disabled?: boolean;
   placeholder?: string;
+  extras?: ReactNode;
 }
 
-export function RequestComposer({ onSend, disabled = false, placeholder }: Props) {
+export function RequestComposer({ onSend, disabled = false, placeholder, extras }: Props) {
   const [text, setText] = useState("");
+  const field = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    const element = field.current;
+    if (!element) return;
+    element.style.height = "auto";
+    element.style.height = `${Math.min(MAX_HEIGHT, element.scrollHeight)}px`;
+  }, [text]);
 
   const submit = async () => {
     const request = text.trim();
@@ -41,17 +59,26 @@ export function RequestComposer({ onSend, disabled = false, placeholder }: Props
       }}
     >
       <textarea
-        aria-label="Tell Alethic what you need"
-        placeholder={placeholder ?? "Tell Alethic what you need…"}
+        ref={field}
+        aria-label="Tell Prometheus what you need"
+        placeholder={placeholder ?? "Give it a goal."}
         rows={1}
         value={text}
         disabled={disabled}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={onKeyDown}
       />
-      <button type="submit" disabled={disabled || text.trim().length === 0}>
-        Send
-      </button>
+      <div className="dock-row">
+        {extras}
+        <button
+          type="submit"
+          className="send"
+          aria-label="Send"
+          disabled={disabled || text.trim().length === 0}
+        >
+          <ArrowUpIcon />
+        </button>
+      </div>
     </form>
   );
 }

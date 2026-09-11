@@ -1,6 +1,6 @@
 """Doubles for the manager's collaborators.
 
-Alethic is the one component whose whole job is deciding, so its tests need a
+Prometheus is the one component whose whole job is deciding, so its tests need a
 workforce that does not exist and an executor that does not run - which is
 exactly what `EmployeeRegistry` and `TaskExecution` being contracts buys.
 """

@@ -10,7 +10,7 @@ is written by hand and read by nobody until a run goes wrong. `step` instead of
 otherwise show up as a run that quietly did less than the author intended.
 
 What it does not check is the machine: whether the employees a workflow names
-are declared here is a question for the employee registry, and `alethic workflows`
+are declared here is a question for the employee registry, and `prometheus workflows`
 asks it there.
 """
 

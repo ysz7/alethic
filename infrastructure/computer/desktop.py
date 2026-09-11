@@ -5,7 +5,7 @@ tools cannot leave one directory, the browser cannot leave its tab. This one
 can click anywhere, so it is the one place where the confinement has to be
 argued rather than assumed. Four things stand between it and the machine:
 
-1. **A flag.** `ALETHIC_FLAGS__COMPUTER_USE` is off by default, and with it off this
+1. **A flag.** `PROMETHEUS_FLAGS__COMPUTER_USE` is off by default, and with it off this
    class is never built - the container does not import it.
 2. **An optional dependency.** The native driver is an extra, imported at call
    time like Playwright, so installing the platform does not install a robot.
@@ -98,7 +98,7 @@ class DesktopComputer:
         if not self._enabled:
             raise ConfigurationError(
                 "Computer use on the desktop is switched off. Set "
-                "ALETHIC_FLAGS__COMPUTER_USE=true to turn it on."
+                "PROMETHEUS_FLAGS__COMPUTER_USE=true to turn it on."
             )
         if self._driver is not None:
             return self._driver

@@ -1,10 +1,12 @@
 /**
- * What Alethic is doing, while it does it.
+ * What Prometheus is doing, while it does it.
  *
  * It renders the six kinds the runtime announces and translates nothing: no
  * friendlier verb for a tool name, and no decision that some steps are too
  * technical to show. A person watching their own machine act on their behalf is
  * entitled to see what it did, and a curated version is one they cannot check.
+ * A tool call is set in the monospace block for that reason: it is the call as
+ * made, not a description of it.
  *
  * What is absent is deliberate too. The employee's transcript - the model's own
  * working notes - is never sent to any interface, so there is nothing here to
@@ -25,12 +27,19 @@ const LABEL: Record<ActivityEvent["kind"], string> = {
 export function ActivityTrail({ events }: { events: ActivityEvent[] }) {
   if (events.length === 0) return null;
   return (
-    <section className="trail" aria-label="Activity">
+    <section className="steps" aria-label="Activity">
       <ol>
         {events.map((event, index) => (
-          <li key={`${event.task_id}-${index}`} className={event.kind.toLowerCase()}>
-            {LABEL[event.kind] && <span className="kind">{LABEL[event.kind]}</span>}
-            <span className="what">{event.message}</span>
+          <li key={`${event.task_id}-${index}`} className={`step ${event.kind.toLowerCase()}`}>
+            {LABEL[event.kind] && <b>{LABEL[event.kind]}</b>}
+            {event.kind === "TOOL_CALL" ? (
+              <span className="call">{event.message}</span>
+            ) : (
+              <>
+                {LABEL[event.kind] && " — "}
+                <span className="what">{event.message}</span>
+              </>
+            )}
           </li>
         ))}
       </ol>

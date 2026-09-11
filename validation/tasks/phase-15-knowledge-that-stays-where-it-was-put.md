@@ -20,11 +20,11 @@ here is the contents of the user's own documents, and there is no reason to send
 them anywhere.
 
 ```bash
-export ALETHIC_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
-export ALETHIC_DATA_DIR=... ALETHIC_APPROVAL_MODE=deny
+export PROMETHEUS_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
+export PROMETHEUS_DATA_DIR=... PROMETHEUS_APPROVAL_MODE=deny
 uv run alembic upgrade head
-uv run alethic validate answer-from-a-document
-uv run alethic validate knowledge-stays-in-its-workspace
+uv run prometheus validate answer-from-a-document
+uv run prometheus validate knowledge-stays-in-its-workspace
 ```
 
 Both scenarios carry their own documents (`knowledge:` in the declaration), so
@@ -59,7 +59,7 @@ exactly where this lived.
 retrieval, the shape `WorkspaceMemory` already had, read once per objective
 beside it. The two are kept apart all the way into the prompt - a recollection
 is a lead that may be stale, a passage of the user's own document is evidence
-with a source attached - and `prompts/alethic_intent/v4.md` says the second may
+with a source attached - and `prompts/prometheus_intent/v4.md` says the second may
 be answered from directly, naming the document.
 
 ## The second run - passed, 2026-09-08
@@ -98,7 +98,7 @@ differs. That is the phase.
 ## A defect the Definition of Done found in its own harness
 
 The first passing run of `knowledge-stays-in-its-workspace` did not appear in
-`alethic validation-report` at all - it was listed as never attempted. The run
+`prometheus validation-report` at all - it was listed as never attempted. The run
 had been recorded in the workspace the *scenario* named, and the report reads
 the workspace the machine is in, so a scenario about crossing a boundary filed
 its own result on the other side of one.

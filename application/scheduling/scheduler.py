@@ -1,7 +1,7 @@
 """The loop that starts work nobody asked for, right now (§12.9).
 
 It is deliberately the least clever thing in the platform. It wakes up, asks
-what is due, and hands each one to the manager exactly as `ask-alethic` would.
+what is due, and hands each one to the manager exactly as `ask-prometheus` would.
 Everything that makes an objective safe - the policies, the approval gate, the
 STOP file, the budget - is below this line and is not re-implemented above it.
 A scheduler that knew how to run a task would be a second way to run one.
@@ -12,7 +12,7 @@ Four decisions, and each rejects a plausible alternative.
 a fixed tick that asks the store what is due. A process that is killed loses
 nothing, because the answer lives in the row rather than in a timer somebody has
 to re-arm; and "due" is then a question a person can also ask, which is what
-`alethic schedules` prints.
+`prometheus schedules` prints.
 
 **A schedule that is still running does not start again.** The commonest
 scheduling failure is a job whose period is shorter than its duration, and the
@@ -107,7 +107,7 @@ class Scheduler:
         return tuple(results)
 
     async def run_forever(self, stop: asyncio.Event | None = None) -> None:
-        """Tick until asked to stop. The entry point `alethic serve` starts."""
+        """Tick until asked to stop. The entry point `prometheus serve` starts."""
         signal = stop or asyncio.Event()
         log.info("scheduler.started", tick_seconds=self._tick)
         while not signal.is_set():

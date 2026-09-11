@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Alethic",
+  "productName": "Prometheus",
   "version": "0.1.0",
-  "identifier": "app.alethic.desktop",
+  "identifier": "app.prometheus.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Alethic",
+        "title": "Prometheus",
         "width": 1040,
         "height": 720,
         "minWidth": 720,

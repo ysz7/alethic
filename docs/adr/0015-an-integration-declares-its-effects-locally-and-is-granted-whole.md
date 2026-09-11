@@ -85,7 +85,7 @@ employee can be checked against.
 
 What a server offers is written to the database at discovery. Listing tools,
 validating an employee declaration and planning a task read the cache; a
-subprocess is started when a call is actually made. Otherwise `alethic tools`
+subprocess is started when a call is actually made. Otherwise `prometheus tools`
 spawns every configured server in order to print a list, and an employee
 declaration cannot be checked on a machine where a server is not running.
 

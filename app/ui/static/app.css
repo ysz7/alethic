@@ -169,7 +169,7 @@ button.secondary { background: transparent; color: var(--ink); border-color: var
 .trace li.kind-RESULT .message { font-weight: 600; }
 .trace .interface { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); }
 
-/* --- What Alethic decided ----------------------------------------------------- */
+/* --- What Prometheus decided ----------------------------------------------------- */
 
 .hint { color: var(--muted); font-size: 0.8rem; margin: 0.5rem 0 0; }
 

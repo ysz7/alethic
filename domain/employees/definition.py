@@ -1,7 +1,7 @@
 """An employee is a declaration, not code.
 
-Adding `Alethic Legal` or `Alethic Recruiter` means adding a definition. It must not
-require a change in `application/`, `infrastructure/`, or in Alethic itself.
+Adding `Prometheus Legal` or `Prometheus Recruiter` means adding a definition. It must not
+require a change in `application/`, `infrastructure/`, or in Prometheus itself.
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ class EmployeeDefinition:
     role: Role
     goals: tuple[Goal, ...] = ()
     allowed_tools: frozenset[str] = field(default_factory=frozenset)
-    #: What kinds of work this employee can take on - the vocabulary Alethic
+    #: What kinds of work this employee can take on - the vocabulary Prometheus
     #: searches by. Distinct from `model_profile.capabilities`, which is what it
     #: needs *from a model*: an employee that reads files needs no more of a
     #: model than one that does not, and what makes it able to is the tools it

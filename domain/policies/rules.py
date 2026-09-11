@@ -39,7 +39,7 @@ _SEVERITY: dict[Decision, int] = {
 
 class PolicyCategory(StrEnum):
     """§69. The category is documentation, not behaviour - it is what a person
-    reads in `alethic policies` to see why a rule exists."""
+    reads in `prometheus policies` to see why a rule exists."""
 
     SECURITY = "SECURITY"
     FINANCIAL = "FINANCIAL"

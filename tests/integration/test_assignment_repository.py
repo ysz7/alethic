@@ -64,7 +64,7 @@ async def test_an_assignment_round_trips(repository, task) -> None:
 
 async def test_closing_an_assignment_records_the_result(repository, task) -> None:
     assignment = TaskAssignment.create(
-        task_id=task.id, employee_id=EMPLOYEE.id, assigned_by=ActorKind.ALETHIC
+        task_id=task.id, employee_id=EMPLOYEE.id, assigned_by=ActorKind.PROMETHEUS
     )
     await repository.save(assignment)
     await repository.save(
@@ -88,7 +88,7 @@ async def test_a_tasks_assignments_come_back_newest_first(repository, task) -> N
         TaskAssignment.create(task.id, EMPLOYEE.id, ActorKind.USER),
         assigned_at=now - timedelta(hours=1),
     )
-    second = TaskAssignment.create(task.id, EMPLOYEE.id, ActorKind.ALETHIC)
+    second = TaskAssignment.create(task.id, EMPLOYEE.id, ActorKind.PROMETHEUS)
     await repository.save(first)
     await repository.save(second)
 

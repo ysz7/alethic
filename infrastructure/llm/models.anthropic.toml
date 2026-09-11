@@ -1,13 +1,13 @@
 # A catalog that talks to Anthropic directly, rather than through a router.
 #
-#   ALETHIC_MODEL_CATALOG_PATH=infrastructure/llm/models.anthropic.toml
-#   ALETHIC_LLM_API_KEY=sk-ant-...
+#   PROMETHEUS_MODEL_CATALOG_PATH=infrastructure/llm/models.anthropic.toml
+#   PROMETHEUS_LLM_API_KEY=sk-ant-...
 #
 # The bundled `models.toml` reaches the same models through OpenRouter, which is
 # one key for many vendors. This one is for an Anthropic key, and is the reason
 # `infrastructure/llm/anthropic.py` exists.
 #
-# Costs are per 1000 tokens in USD and price every call, so `alethic spend` is only
+# Costs are per 1000 tokens in USD and price every call, so `prometheus spend` is only
 # as honest as they are.
 
 [models.balanced]

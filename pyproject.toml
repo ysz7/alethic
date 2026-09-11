@@ -1,7 +1,7 @@
 [project]
-name = "alethic"
+name = "prometheus"
 version = "0.1.0"
-description = "Alethic - a local-first platform where an AI manager runs digital employees on your machine."
+description = "Prometheus - a local-first platform where an AI manager runs digital employees on your machine."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -50,7 +50,7 @@ documents = ["pypdf>=5.1"]
 postgres = ["asyncpg>=0.30"]
 
 [project.scripts]
-alethic = "app.cli.main:app"
+prometheus = "app.cli.main:app"
 
 [dependency-groups]
 dev = [
@@ -107,9 +107,9 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "Alethic knows the workforce contracts only, never infrastructure or a concrete employee"
+name = "Prometheus knows the workforce contracts only, never infrastructure or a concrete employee"
 type = "forbidden"
-source_modules = ["application.alethic"]
+source_modules = ["application.prometheus"]
 forbidden_modules = ["infrastructure", "app", "employees"]
 
 # §9.10. The layering contract above already forbids this; it is named on its own

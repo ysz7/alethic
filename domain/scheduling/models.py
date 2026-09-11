@@ -98,7 +98,7 @@ class Recurrence:
 
 @dataclass(frozen=True, slots=True)
 class Schedule:
-    """A standing instruction to ask Alethic for something.
+    """A standing instruction to ask Prometheus for something.
 
     It holds a request in the user's own words, not a plan and not an employee.
     That is the same rule the whole platform runs on and it matters more here:

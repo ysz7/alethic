@@ -192,13 +192,13 @@ correction (`memory/sql.py`, `knowledge/store.py`) and the rest is
 `persistence/`.
 
 One change is outside all of it and is not about dialects at all:
-`alethic validate` computed its closing line as *total minus failures*, so the
+`prometheus validate` computed its closing line as *total minus failures*, so the
 scenario this machine cannot attempt was counted as a scenario that worked, and
 the run above reported "5/13 passed" with four passes. It is the one number a
 person takes away from the command, so it is now counted rather than inferred.
 
 `tests/conftest.py` is where the phase's real leverage turned out to be:
-`ALETHIC_TEST_POSTGRES_URL` now moves the *whole* suite onto the second dialect
+`PROMETHEUS_TEST_POSTGRES_URL` now moves the *whole* suite onto the second dialect
 instead of enabling three hand-written tests. Thirteen repositories cannot be
 covered by three tests, and the three that were there agreed with everything
 while two of the defects above sat in the schema. 1089 tests pass on

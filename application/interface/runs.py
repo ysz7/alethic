@@ -14,7 +14,7 @@ for a task the database has never heard of would be lying, and a process killed
 one second later would have nothing to resume.
 
 **An objective is carried the same way, one level up.** Since Phase 7 the page
-asks Alethic for an outcome rather than handing a task to an employee, and Alethic's own
+asks Prometheus for an outcome rather than handing a task to an employee, and Prometheus's own
 work - reading the request, planning, delegating, checking - takes as long as
 the tasks it starts. So it too goes on the loop and the request returns an
 objective id, which is what the page then watches.
@@ -40,7 +40,7 @@ from uuid import UUID
 
 import structlog
 
-from application.alethic.manager import AlethicManager
+from application.prometheus.manager import PrometheusManager
 from application.task_runner import TaskRunner
 from domain.approvals.protocols import ApprovalWaiter
 from domain.tasks.cancellation import Cancellations
@@ -64,7 +64,7 @@ class Runs:
         self,
         *,
         runner: TaskRunner,
-        manager: AlethicManager,
+        manager: PrometheusManager,
         tasks: TaskRepository,
         cancellations: Cancellations,
         approvals: ApprovalWaiter,
@@ -83,7 +83,7 @@ class Runs:
         """Record the task, schedule the work, and hand the task straight back."""
         task, assignment = await self._runner.submit(goal, employee_name)
         run = asyncio.create_task(
-            self._runner.run(task, assignment), name=f"alethic-task-{task.id}"
+            self._runner.run(task, assignment), name=f"prometheus-task-{task.id}"
         )
         self._running[task.id] = run
         run.add_done_callback(lambda _: self._finished(task.id))
@@ -96,7 +96,7 @@ class Runs:
         conversation_id: UUID | None = None,
         workspace_id: WorkspaceId = DEFAULT_WORKSPACE_ID,
     ) -> Objective:
-        """Record the objective, schedule Alethic, and hand the objective back.
+        """Record the objective, schedule Prometheus, and hand the objective back.
 
         The workspace is passed through rather than defaulted here. It was
         declared on `UserRequest` in Phase 13 and dropped on this line, which
@@ -107,7 +107,7 @@ class Runs:
             request, workspace_id=workspace_id, conversation_id=conversation_id
         )
         work = asyncio.create_task(
-            self._manager.handle_objective(objective), name=f"alethic-objective-{objective.id}"
+            self._manager.handle_objective(objective), name=f"prometheus-objective-{objective.id}"
         )
         self._objectives[objective.id] = work
         work.add_done_callback(lambda _: self._objectives.pop(objective.id, None))
@@ -161,7 +161,7 @@ class Runs:
         return cancelled
 
     async def cancel_objective(self, objective_id: UUID) -> bool:
-        """Stop Alethic working on one objective, and every task it has running.
+        """Stop Prometheus working on one objective, and every task it has running.
 
         The objective's own coroutine is cancelled outright - it holds no
         outside state, only the decision about what to do next - while its tasks

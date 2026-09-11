@@ -1,7 +1,7 @@
 """What is happening, in a shape an interface can render without knowing the runtime.
 
 Everything here is a *projection*. The platform already announces progress -
-`domain/tasks/progress.py`, emitted by the employee runtime and by Alethic, fanned
+`domain/tasks/progress.py`, emitted by the employee runtime and by Prometheus, fanned
 out in memory - and this adds no second stream, no bus and no new emitter. What
 it adds is the part every interface would otherwise write for itself: following
 one objective across the tasks it delegates, and saying what an event means in
@@ -16,7 +16,7 @@ rather than remove it. So an activity event carries the kind, a headline the
 runtime already wrote, and the payload - and an interface that understands six
 kinds understands every tool that will ever be added.
 
-**Following an objective is the real work.** Alethic stamps its own events with the
+**Following an objective is the real work.** Prometheus stamps its own events with the
 objective; its employees do not, because they are running tasks and know
 nothing about a manager. So the set of task ids belonging to an objective is
 discovered as it goes: seeded from the plans that already exist, extended

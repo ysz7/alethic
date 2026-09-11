@@ -25,7 +25,7 @@ from domain.computer.protocols import Computer, ScreenReader, StopSignal
 from domain.conversations.repository import ConversationRepository
 from domain.employees.protocols import EmployeeRegistry
 from domain.employees.validation import Issue, check_all
-from domain.errors import AlethicError
+from domain.errors import PrometheusError
 from domain.integrations.repository import IntegrationRepository
 from domain.knowledge.protocols import EmbeddingProvider, KnowledgeStore, Retriever
 from domain.llm.models import RoutingHints, TaskKind
@@ -107,7 +107,7 @@ class Container:
     def logger(self):
         # structlog's bound logger type is not stable enough to annotate.
         self.configure()
-        return get_logger("alethic")
+        return get_logger("prometheus")
 
     @cached_property
     def progress(self) -> InMemoryProgressBroadcaster:
@@ -217,7 +217,7 @@ class Container:
             return not kind_named(entry.provider).needs_credential or bool(
                 self.settings.llm_api_key
             )
-        except AlethicError:
+        except PrometheusError:
             # A provider this build has no adapter for. Nothing can call it, so
             # nothing should route to it - and the settings page still shows it.
             return False
@@ -318,7 +318,7 @@ class Container:
 
         Read off the same snapshot the grants come from rather than from the
         database, because this is called where a declaration is checked - at
-        start-up and from `alethic employees` - and both already have it.
+        start-up and from `prometheus employees` - and both already have it.
         """
         registry = self.employee_registry
         integrations = getattr(registry, "integrations", ())
@@ -469,7 +469,7 @@ class Container:
         user's.
         """
         # The reader is passed as a way to get one, not as one: listing the
-        # registry must not route a model, and `alethic tools` does nothing else.
+        # registry must not route a model, and `prometheus tools` does nothing else.
         def reader() -> ScreenReader:
             return self.screen_reader
 
@@ -635,7 +635,7 @@ class Container:
                 RoutingHints(),
             )
             return self.llm_factory.for_embeddings(choice)
-        except AlethicError as error:
+        except PrometheusError as error:
             self.logger.info("knowledge.no_embedding_model", reason=str(error))
             return None
 

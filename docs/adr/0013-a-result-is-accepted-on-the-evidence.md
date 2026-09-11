@@ -4,7 +4,7 @@
 
 ## Context
 
-§88 asks Alethic to validate an employee's output before accepting it, and notes
+§88 asks Prometheus to validate an employee's output before accepting it, and notes
 that an employee verifying its own work is necessary but not sufficient. Until
 Phase 12 the platform had the necessary half twice - the employee runtime
 verifies each task against its goal, and the manager verifies the objective

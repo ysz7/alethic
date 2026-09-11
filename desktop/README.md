@@ -1,4 +1,4 @@
-# Alethic Desktop
+# Prometheus Desktop
 
 The desktop interface: a window, and the local runtime behind it.
 
@@ -11,7 +11,7 @@ browser page uses. See `docs/adr/0014-an-interface-is-an-adapter-over-one-applic
 Tauri window
   └── React (this directory)
         └── HTTP + server-sent events on 127.0.0.1
-              └── alethic serve  ─ the same process that runs the work
+              └── prometheus serve  ─ the same process that runs the work
 ```
 
 ## Running it
@@ -25,22 +25,22 @@ npm install
 npm run tauri dev        # builds the window; starts the runtime if none is up
 ```
 
-The shell starts `uv run alethic serve` itself unless something is already
+The shell starts `uv run prometheus serve` itself unless something is already
 answering on `127.0.0.1:8765`. A runtime you started in a terminal is used as
 it is - and is **not** killed when the window closes, because it was not this
 process's to stop.
 
 | Variable | Default | What it changes |
 |---|---|---|
-| `ALETHIC_BASE_URL` | `http://127.0.0.1:8765` | Where the window looks for the runtime |
-| `ALETHIC_RUNTIME_CMD` | `uv run alethic serve` | How the shell starts one when none is up |
+| `PROMETHEUS_BASE_URL` | `http://127.0.0.1:8765` | Where the window looks for the runtime |
+| `PROMETHEUS_RUNTIME_CMD` | `uv run prometheus serve` | How the shell starts one when none is up |
 
 The window asks the shell for that address before it draws, and the shell waits
 for the engine to answer before replying - a page that fired its first request
 into a port still being bound would show an error for the whole session.
 
 A window that cannot draw, or whose request fails, prints why on the terminal
-that started it (`alethic: the window reported a problem: ...`). A blank window
+that started it (`prometheus: the window reported a problem: ...`). A blank window
 is otherwise indistinguishable from a working one with nothing to show.
 
 Without the shell, the browser page at `http://127.0.0.1:8765` is the same

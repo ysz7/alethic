@@ -110,7 +110,7 @@ class CodeExecutionTool:
 
         source = str(arguments["code"])
         timeout = min(float(arguments.get("timeout_seconds", self._timeout)), self._timeout)
-        directory = Path(tempfile.mkdtemp(prefix="alethic-code-"))
+        directory = Path(tempfile.mkdtemp(prefix="prometheus-code-"))
         try:
             return await self._run(source, directory, timeout)
         finally:

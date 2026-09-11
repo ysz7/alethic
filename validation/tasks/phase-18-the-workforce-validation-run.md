@@ -38,9 +38,9 @@ the text.
 **Fixed the way Phase 16 fixed it for tasks, one level up.** The objective
 verifier is now shown what the platform recorded as having happened, and a
 direct answer's record is that there is none - said in a full sentence rather
-than left as an empty heading (`NOTHING_WAS_DONE`, `alethic_verifier/v3.md`).
+than left as an empty heading (`NOTHING_WAS_DONE`, `prometheus_verifier/v3.md`).
 The rule beside it is that a criterion asking for something to *exist* is unmet
-unless that section shows it being made. `alethic_intent/v5.md` says the other
+unless that section shows it being made. `prometheus_intent/v5.md` says the other
 half in the reading: what you remember is not what is there, and resolving a
 reference to earlier work is not doing the work again.
 
@@ -134,10 +134,10 @@ written.
 Five prompts still showed a form with values in it, held back because replacing
 one is a behaviour change that has to be measured rather than assumed, and a
 validation run was already happening here. All five were rewritten:
-`alethic_planner`, `alethic_delegation`, `planner` and `screen_reader` lost their
+`prometheus_planner`, `prometheus_delegation`, `planner` and `screen_reader` lost their
 examples and gained prose describing the shape of an entry.
 
-`alethic_reconciliation` was the interesting one. Its single value was
+`prometheus_reconciliation` was the interesting one. Its single value was
 `"consistent": true`, and that was the deliberate side to copy - an unreadable
 answer must mean *consistent*, because a check that escalates whenever its model
 stutters teaches the user to ignore it. Emptying the form meant dropping the
@@ -157,7 +157,7 @@ two tasks depending on nothing. It still chains them. `MAX_PARALLEL_TASKS`,
 `WorkforceCoordinator`'s edges and `asyncio.gather` remain confirmed by unit
 tests only.
 
-`alethic.wave` was added for this - the trace could not answer "did anybody
+`prometheus.wave` was added for this - the trace could not answer "did anybody
 actually work at the same time" - and its first job was to say no.
 
 **Reconciliation has never fired on real work.** It needs two succeeded reports,
@@ -169,7 +169,7 @@ resting on fakes.
 that reached for tools, had every one refused, and still reported success -
 which is the case `domain/workforce/acceptance.py` exists for.
 
-**`alethic employees` says an integration's tools are not offered here.**
+**`prometheus employees` says an integration's tools are not offered here.**
 Listing must not start a server, so the tool registry has not been given them at
 that moment, and a correct declaration reads as a broken one. Cosmetic, and it
 is the second time this listing has told somebody something untrue about a

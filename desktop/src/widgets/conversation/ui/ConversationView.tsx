@@ -1,11 +1,14 @@
 /**
  * The conversation, and what is happening because of it.
  *
- * A widget composes; it fetches nothing and decides nothing. The trail appears
- * only while something is running, because an interface that keeps a log panel
- * open at all times is a log viewer, which is the thing the local surface was
- * built to stop anybody needing.
+ * A widget composes; it fetches nothing and decides nothing. The live trail is
+ * open under the turn that is running and only while it runs, because an
+ * interface that keeps a log open at all times is a log viewer, which is the
+ * thing the local surface was built to stop anybody needing. A finished turn
+ * keeps the trail this window saw behind its "Worked for" line.
  */
+
+import type { ReactNode } from "react";
 
 import { ActivityTrail, type ActivityEvent } from "../../../entities/activity";
 import { MessageTurn, type Message } from "../../../entities/conversation";
@@ -13,20 +16,38 @@ import { Greeting } from "./Greeting";
 
 interface Props {
   messages: Message[];
+  /** What the running turn is doing now. */
   activity: ActivityEvent[];
   busy: boolean;
+  /** What each finished turn was seen doing, by objective, where this window watched it. */
+  trails?: Record<string, ActivityEvent[]>;
+  /** Shown under the greeting while nothing has been asked. */
+  empty?: ReactNode;
 }
 
-export function ConversationView({ messages, activity, busy }: Props) {
-  if (messages.length === 0) return <Greeting />;
+export function ConversationView({ messages, activity, busy, trails = {}, empty }: Props) {
+  if (messages.length === 0) {
+    return (
+      <>
+        <Greeting />
+        {empty}
+      </>
+    );
+  }
+  const running = messages.find((message) => !message.answered)?.id;
   return (
-    <>
-      <ol className="thread">
-        {messages.map((message) => (
-          <MessageTurn key={message.id} message={message} />
-        ))}
-      </ol>
-      {busy && <ActivityTrail events={activity} />}
-    </>
+    <ol className="turns">
+      {messages.map((message) => {
+        const events =
+          message.id === running ? (busy ? activity : []) : (trails[message.id] ?? []);
+        return (
+          <MessageTurn
+            key={message.id}
+            message={message}
+            work={events.length > 0 ? <ActivityTrail events={events} /> : undefined}
+          />
+        );
+      })}
+    </ol>
   );
 }

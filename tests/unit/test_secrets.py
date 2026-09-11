@@ -20,7 +20,7 @@ def test_a_secret_does_not_print_itself() -> None:
 
 
 def test_the_platform_prefix_wins_over_a_bare_variable() -> None:
-    resolver = EnvSecretResolver({"ALETHIC_SECRET_TOKEN": "scoped", "TOKEN": "global"})
+    resolver = EnvSecretResolver({"PROMETHEUS_SECRET_TOKEN": "scoped", "TOKEN": "global"})
 
     assert resolver.get("token").reveal() == "scoped"
 
@@ -30,7 +30,7 @@ def test_an_existing_variable_is_used_when_there_is_no_scoped_one() -> None:
 
 
 def test_a_missing_credential_says_which_variable_to_set() -> None:
-    with pytest.raises(SecretNotFoundError, match="ALETHIC_SECRET_TOKEN"):
+    with pytest.raises(SecretNotFoundError, match="PROMETHEUS_SECRET_TOKEN"):
         EnvSecretResolver({}).get("token")
 
 

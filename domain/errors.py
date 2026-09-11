@@ -8,14 +8,14 @@ to know which provider failed.
 from __future__ import annotations
 
 
-class AlethicError(Exception):
+class PrometheusError(Exception):
     """Base class for every error the platform raises on purpose."""
 
 
 # --- Configuration and wiring -------------------------------------------------
 
 
-class ConfigurationError(AlethicError):
+class ConfigurationError(PrometheusError):
     """The platform is misconfigured and cannot start or serve a request."""
 
 
@@ -26,7 +26,7 @@ class DependencyNotConfiguredError(ConfigurationError):
 # --- Domain rules -------------------------------------------------------------
 
 
-class DomainError(AlethicError):
+class DomainError(PrometheusError):
     """A domain rule was violated."""
 
 
@@ -136,7 +136,7 @@ class ApprovalDeniedError(DomainError):
 # --- Execution ----------------------------------------------------------------
 
 
-class ExecutionError(AlethicError):
+class ExecutionError(PrometheusError):
     """A task could not be carried out."""
 
 
@@ -181,7 +181,7 @@ class VerificationFailedError(ExecutionError):
 # --- Storage ------------------------------------------------------------------
 
 
-class StorageError(AlethicError):
+class StorageError(PrometheusError):
     """The local store could not be read or written."""
 
 
@@ -192,7 +192,7 @@ class StorageNotInitializedError(StorageError):
 # --- External providers -------------------------------------------------------
 
 
-class ProviderError(AlethicError):
+class ProviderError(PrometheusError):
     """An external provider failed. Base class for adapter-level failures."""
 
     transient: bool = False
@@ -217,7 +217,7 @@ class ProviderUnavailableError(ProviderError):
 # --- Integrations -------------------------------------------------------------
 
 
-class IntegrationError(AlethicError):
+class IntegrationError(PrometheusError):
     """An external integration failed.
 
     Mirrors `ProviderError` rather than inventing a second vocabulary: what the

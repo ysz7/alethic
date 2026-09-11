@@ -3,7 +3,7 @@
 # It is the first that can *compute* an answer rather than read one. That is a
 # different kind of trust from the others, and it shows up in exactly two lines
 # below - `code.run` in the tools, and CODE in the capabilities. There is no
-# analyst class, no branch on this name anywhere, and nothing in Alethic that knows
+# analyst class, no branch on this name anywhere, and nothing in Prometheus that knows
 # it exists; it was added as this directory and nothing else.
 
 name: analyst

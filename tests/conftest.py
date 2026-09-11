@@ -14,7 +14,7 @@ from infrastructure.persistence.models import Base
 from infrastructure.persistence.session import create_engine, create_session_factory
 from infrastructure.persistence.task_repository import SqlTaskRepository
 
-POSTGRES_URL = os.environ.get("ALETHIC_TEST_POSTGRES_URL", "")
+POSTGRES_URL = os.environ.get("PROMETHEUS_TEST_POSTGRES_URL", "")
 
 
 #: Rebuilt once per pytest session, on first use, and inside whichever event
@@ -50,7 +50,7 @@ async def session_factory(tmp_path: Path) -> AsyncIterator[async_sessionmaker[As
     The point of these tests is that work survives a restart, and a shared
     in-memory database would not exercise that.
 
-    With `ALETHIC_TEST_POSTGRES_URL` set the same tests run against the second
+    With `PROMETHEUS_TEST_POSTGRES_URL` set the same tests run against the second
     dialect instead - which is what Phase 19 needed and what three hand-written
     PostgreSQL tests could not give: thirteen repositories, one fixture, either
     backend. Unset, nothing changes and the suite still needs no server.

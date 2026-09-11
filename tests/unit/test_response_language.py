@@ -1,6 +1,6 @@
 """The user is answered in the language they were promised.
 
-`ALETHIC_RESPONSE_LANGUAGE` existed from Phase 2 and reached exactly one CLI
+`PROMETHEUS_RESPONSE_LANGUAGE` existed from Phase 2 and reached exactly one CLI
 command. Everything a person reads through the manager - the reply to a request
 that needs no work, and the answer at the end of one that did - ignored it, so a
 request typed in Russian came back in English. A window makes that a bug you
@@ -14,10 +14,10 @@ from __future__ import annotations
 
 import json
 
-from application.alethic.intent import IntentReader
-from application.alethic.language import instruction
-from application.alethic.supervisor import TaskOutcome
-from application.alethic.synthesis import Synthesizer
+from application.prometheus.intent import IntentReader
+from application.prometheus.language import instruction
+from application.prometheus.supervisor import TaskOutcome
+from application.prometheus.synthesis import Synthesizer
 from domain.llm.models import Role
 from domain.tasks.task import Task, TaskResult, TaskStatus
 from domain.workforce.protocols import Objective

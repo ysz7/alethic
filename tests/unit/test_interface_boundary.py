@@ -25,13 +25,13 @@ from application.interface.contracts import (
 )
 from application.interface.runs import Runs
 from application.interface.service import (
-    AlethicService,
     ApprovalsDisabledError,
+    PrometheusService,
     ServiceDependencies,
 )
 from domain.approvals.models import ApprovalRequest
 from domain.conversations.models import TITLE_LIMIT, Conversation
-from domain.errors import AlethicError
+from domain.errors import PrometheusError
 from domain.llm.telemetry import SpendSummary
 from domain.tasks.progress import ProgressEvent, ProgressKind
 from domain.tasks.task import Task, TaskResult, TaskStatus
@@ -44,7 +44,7 @@ from tests.fakes.workforce import FakeRegistry
 
 
 class RecordingManager:
-    """Enough of `AlethicManager` to see what the boundary hands it.
+    """Enough of `PrometheusManager` to see what the boundary hands it.
 
     Deliberately not a real manager: what is under test is the interface layer,
     and a test that needed a planner to check that a request was carried would
@@ -136,7 +136,9 @@ class Stream:
         yield queue
 
 
-def build(*, waiter: NoWaiter | None = None, approval_service=None) -> tuple[AlethicService, dict]:
+def build(
+    *, waiter: NoWaiter | None = None, approval_service=None
+) -> tuple[PrometheusService, dict]:
     objectives = InMemoryObjectiveRepository()
     conversations = InMemoryConversationRepository()
     tasks = InMemoryTaskRepository()
@@ -148,7 +150,7 @@ def build(*, waiter: NoWaiter | None = None, approval_service=None) -> tuple[Ale
         "manager": manager,
         "waiter": waiter or NoWaiter(),
     }
-    service = AlethicService(
+    service = PrometheusService(
         ServiceDependencies(
             runs=Runs(
                 runner=None,  # type: ignore[arg-type]
@@ -268,7 +270,7 @@ async def test_the_workspace_a_request_names_reaches_the_objective() -> None:
 async def test_an_empty_request_is_refused_before_anything_is_recorded() -> None:
     service, parts = build()
 
-    with pytest.raises(AlethicError):
+    with pytest.raises(PrometheusError):
         await service.submit(UserRequest(content="   "))
 
     assert parts["manager"].received == []

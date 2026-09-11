@@ -22,7 +22,7 @@ class ApprovalState(StrEnum):
 class ApprovalRequest:
     """A human decision an irreversible action is waiting on.
 
-    Only a human resolves these. Alethic can ask; it can never approve its own work.
+    Only a human resolves these. Prometheus can ask; it can never approve its own work.
     """
 
     id: UUID

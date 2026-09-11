@@ -10,7 +10,7 @@ hiding.
 ## What the recorded runs actually said
 
 Every approval in the store - all 55 of them across 24 runs - was `REJECTED` by
-`no-approver`. `alethic validate` runs with nothing attached to stdin, so
+`no-approver`. `prometheus validate` runs with nothing attached to stdin, so
 `LocalApprovalService` correctly refused every action above the threshold. That
 is the right behaviour for a machine nobody is watching, and it made three
 scenarios impossible: the work each of them was written to measure begins with
@@ -19,7 +19,7 @@ writing a file.
 Two things followed from it that nothing in the suite could say out loud.
 
 **A scenario could not declare that somebody would have been there.** The
-options were a machine-wide `ALETHIC_APPROVAL_MODE=allow`, which would also
+options were a machine-wide `PROMETHEUS_APPROVAL_MODE=allow`, which would also
 switch off the brake in the scenario whose entire point is the brake, or the
 unattended run, which is what happened. `use-a-connected-service` had already
 worked around it in a comment: classify the integration's search as READ *so

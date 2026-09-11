@@ -72,7 +72,7 @@ def test_a_dated_snapshot_is_priced_as_the_model_it_is_a_snapshot_of() -> None:
 
     Found the direct way: the first real call to the Anthropic adapter came back
     as `claude-haiku-4-5-20251001`, the catalog had `claude-haiku-4-5`, and
-    `alethic spend` reported $0.00 for a call that cost money.
+    `prometheus spend` reported $0.00 for a call that cost money.
     """
     catalog = ModelCatalog(
         entries=(

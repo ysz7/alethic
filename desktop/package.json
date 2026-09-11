@@ -1,9 +1,9 @@
 {
-  "name": "alethic-desktop",
+  "name": "prometheus-desktop",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "The Alethic desktop interface. A shell around the local runtime, never a second one.",
+  "description": "The Prometheus desktop interface. A shell around the local runtime, never a second one.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -12,6 +12,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@fontsource/onest": "^5.3.1",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-http": "^2.6.0",
     "react": "^18.3.1",

@@ -1,9 +1,9 @@
 """The HTTP adapter: transport, and deliberately nothing else.
 
-Phase 6's Definition of Done is that a developer uses Alethic without reading logs
+Phase 6's Definition of Done is that a developer uses Prometheus without reading logs
 in a terminal. Phase 7 changed what the page asks for - an outcome, not an
 employee. Phase 13 changed where the answer comes from: every route here now
-calls `AlethicService`, the application-level boundary, and this file owns URLs,
+calls `PrometheusService`, the application-level boundary, and this file owns URLs,
 status codes, request bodies and the framing of an event stream. That is the
 whole of its job. A rule that lives here is a rule the desktop shell and a chat
 bot would each have to reimplement, and the three would disagree.
@@ -60,13 +60,13 @@ from app.config.container import (
 from app.config.settings import Settings, get_settings
 from application.interface.activity import ActivityEvent
 from application.interface.contracts import InputType, RequestSource, UserRequest
-from application.interface.service import AlethicService, ApprovalsDisabledError
+from application.interface.service import ApprovalsDisabledError, PrometheusService
 from application.scheduling.scheduler import Scheduler
 from domain.errors import (
-    AlethicError,
     DuplicateWorkspaceError,
     IntegrationNotFoundError,
     NotFoundError,
+    PrometheusError,
     ProtectedWorkspaceError,
     StorageNotInitializedError,
     WorkspaceNotFoundError,
@@ -298,7 +298,7 @@ def create_app(
             await app.state.service.aclose()
             await container.aclose()
 
-    app = FastAPI(title="Alethic", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="Prometheus", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(DESKTOP_ORIGINS),
@@ -335,7 +335,7 @@ def _routes(app: FastAPI) -> None:
     async def start(request: Request, body: NewTask) -> dict[str, Any]:
         try:
             return await _service(request).start_task(body.goal, body.employee)
-        except AlethicError as error:
+        except PrometheusError as error:
             # An unknown employee is the user asking for something that does not
             # exist, not a server fault: 400, with the reason said plainly.
             raise HTTPException(status_code=400, detail=str(error)) from error
@@ -376,7 +376,7 @@ def _routes(app: FastAPI) -> None:
 
     @app.post("/api/objectives", status_code=201)
     async def ask(request: Request, body: NewObjective) -> dict[str, Any]:
-        """State a goal. Alethic decides what it means and who does it."""
+        """State a goal. Prometheus decides what it means and who does it."""
         return await _ask(request, body, conversation_id=body.conversation_id)
 
     @app.get("/api/objectives")
@@ -405,7 +405,7 @@ def _routes(app: FastAPI) -> None:
             )
         except ApprovalsDisabledError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
-        except AlethicError as error:
+        except PrometheusError as error:
             raise HTTPException(status_code=404, detail=str(error)) from error
 
 
@@ -598,7 +598,7 @@ def _routes(app: FastAPI) -> None:
                     secret_names=body.secret_names,
                 )
             )
-        except AlethicError as error:
+        except PrometheusError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
 
     @app.get("/api/integrations/{integration_id}")
@@ -626,7 +626,7 @@ def _routes(app: FastAPI) -> None:
             return await _integration(
                 _service(request).classify_capability(integration_id, body.effects)
             )
-        except AlethicError as error:
+        except PrometheusError as error:
             # An effect this platform does not have is the caller being wrong,
             # and the message says what the vocabulary actually is.
             raise HTTPException(status_code=400, detail=str(error)) from error
@@ -647,7 +647,7 @@ def _routes(app: FastAPI) -> None:
         """
         try:
             return await _guarded(_service(request).store_credential(body.name, body.value))
-        except AlethicError as error:
+        except PrometheusError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
 
     @app.get("/api/spend")
@@ -694,7 +694,7 @@ async def _sse(
 # --- Helpers ------------------------------------------------------------------
 
 
-def _service(request: Request) -> AlethicService:
+def _service(request: Request) -> PrometheusService:
     return request.app.state.service
 
 
@@ -731,7 +731,7 @@ async def _ask(
                 )
             )
         )
-    except AlethicError as error:
+    except PrometheusError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
@@ -751,7 +751,7 @@ async def _knowledge(awaitable):
         raise HTTPException(status_code=409, detail=str(error)) from error
     except NotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
-    except AlethicError as error:
+    except PrometheusError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
@@ -805,7 +805,7 @@ async def _settings_change(awaitable):
         return await _guarded(awaitable)
     except NotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
-    except AlethicError as error:
+    except PrometheusError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 

@@ -4,11 +4,11 @@
 
 ## Context
 
-Phase 7 puts Alethic in front of the workforce: the user states an outcome and the
+Phase 7 puts Prometheus in front of the workforce: the user states an outcome and the
 manager works out what that means, who does it, and whether the result is what
 was asked for. The plan lists fourteen tasks for it (§7.1-§7.14) and three
 governance rules it must not break (§7.13). Underneath those is one question
-that decides the shape of everything else: **what is Alethic allowed to touch?**
+that decides the shape of everything else: **what is Prometheus allowed to touch?**
 
 The tempting answer is "everything, it is the manager". That produces a class
 that imports the runtime to run a task, the registry to find an employee, the
@@ -18,9 +18,9 @@ second path around it.
 
 ## Decision
 
-### Alethic holds contracts, not components
+### Prometheus holds contracts, not components
 
-`application/alethic/` imports `domain/` and nothing else. Three contracts carry it:
+`application/prometheus/` imports `domain/` and nothing else. Three contracts carry it:
 
 * `EmployeeRegistry` - the only way it learns who exists;
 * `TaskExecution` - one method, `start(task, assignment)`, the only way work
@@ -33,8 +33,8 @@ exists*, because the manager composes the task and picks the employee: handing
 over a goal and a name would mean the executor created the task, and a plan's
 dependency edges would then point at ids nobody had yet.
 
-`tests/unit/test_alethic_governance.py` enforces this by reading `employees/` and
-failing if any declared name appears anywhere in `application/alethic/` - prose
+`tests/unit/test_prometheus_governance.py` enforces this by reading `employees/` and
+failing if any declared name appears anywhere in `application/prometheus/` - prose
 included, because a name in a comment is a name that will be in a branch later.
 It also fails on an import of the runtime, which the layering contract would
 otherwise allow.
@@ -44,9 +44,9 @@ otherwise allow.
 `SharedContext.data["granted_tools"]` records what the manager meant to allow.
 The runtime intersects it with the employee's declaration, so:
 
-* Alethic can hand down **less** than an employee is trusted with - useful, and now
+* Prometheus can hand down **less** than an employee is trusted with - useful, and now
   possible for the first time;
-* Alethic cannot hand down **more**, whatever it writes in the assignment, because
+* Prometheus cannot hand down **more**, whatever it writes in the assignment, because
   an intersection only ever shrinks.
 
 `effective_tools` in `domain/policies/models.py` has stated this since Phase 1
@@ -54,13 +54,13 @@ and had no caller until now. The manager's own actor is the union of the
 declared employees' tools - deliberately not a wildcard, which would make the
 intersection an identity function and the guarantee vacuous.
 
-### Alethic asks for approvals and never answers one
+### Prometheus asks for approvals and never answers one
 
 An irreversible action inside a delegated task stops at the same gate it would
 have stopped at had the user given the task to that employee directly. The
 manager can explain what an action is for; a person says yes. This is enforced
 the same way as the rule above: no approval machinery is importable from
-`application/alethic/`, and the test says so.
+`application/prometheus/`, and the test says so.
 
 ### Comprehension and delegation are decisions, so they are stages
 
@@ -84,7 +84,7 @@ comprehension had been weakest.
 ### A plan is a proposal, and revisions supersede
 
 Replanning writes a new plan at the next revision and marks the previous one
-SUPERSEDED rather than editing it. What Alethic thought the first time is the only
+SUPERSEDED rather than editing it. What Prometheus thought the first time is the only
 evidence of why a second attempt was needed. One objective is worth two plans:
 the second is told what the first missed, and a third would be told the same
 thing again.
@@ -118,10 +118,10 @@ attempt.
 
 ## Consequences
 
-* **Adding an employee is still one directory.** Alethic picks it up on the next
+* **Adding an employee is still one directory.** Prometheus picks it up on the next
   run, and the governance test proves no code names it.
 * **The manager can be exercised with no model and no runtime**, which is what
-  every test in `tests/unit/test_alethic_*` does.
+  every test in `tests/unit/test_prometheus_*` does.
 * **`run-task` still exists.** Naming an employee is now the exception - a
   script, a machine with no browser, a phase being validated - rather than the
   way the product is used.

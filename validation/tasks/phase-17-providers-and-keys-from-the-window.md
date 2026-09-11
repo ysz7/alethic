@@ -16,18 +16,18 @@ Through the CLI, which is the same application service the settings window
 calls, on a machine whose only local runner is Ollama:
 
 ```bash
-uv run alethic provider-add local-runner --kind local \
+uv run prometheus provider-add local-runner --kind local \
   --base-url http://127.0.0.1:11434/v1
-uv run alethic model-add picked-strong --model gemma4:31b-cloud \
+uv run prometheus model-add picked-strong --model gemma4:31b-cloud \
   --connection local-runner --capabilities TEXT_REASONING,TOOL_CALLING,...
-uv run alethic model-add picked-small --model lfm2:24b --connection local-runner
-uv run alethic send-work-to planning picked-strong    # and execution, synthesis,
-uv run alethic send-work-to verification picked-small # conversation, extraction
-uv run alethic ask-alethic "What is the capital of Australia?"
+uv run prometheus model-add picked-small --model lfm2:24b --connection local-runner
+uv run prometheus send-work-to planning picked-strong    # and execution, synthesis,
+uv run prometheus send-work-to verification picked-small # conversation, extraction
+uv run prometheus ask-prometheus "What is the capital of Australia?"
 ```
 
 Nothing in that sequence names a file. `models.toml` was not edited, and
-`ALETHIC_MODEL_CATALOG_PATH` was deliberately not set - the catalog came from
+`PROMETHEUS_MODEL_CATALOG_PATH` was deliberately not set - the catalog came from
 the store.
 
 ## What happened
@@ -62,7 +62,7 @@ different questions and this is the one place where they had been the same.
 
 **And the second finding is the phase's own reason for existing.** The two
 failed calls that remained were not a defect: this machine's `.env` carries
-`ALETHIC_LLM_API_KEY=sk-ant...` while `llm_base_url` points at OpenRouter and
+`PROMETHEUS_LLM_API_KEY=sk-ant...` while `llm_base_url` points at OpenRouter and
 the shipped entries are OpenRouter entries. One key and one address for every
 provider is exactly the arrangement Phase 17 replaces, and the platform had been
 quietly failing that way for as long as the file has looked like that.

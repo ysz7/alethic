@@ -47,7 +47,7 @@ log = structlog.get_logger(__name__)
 
 
 class ProviderService:
-    """The operations behind Settings, and behind `alethic providers`."""
+    """The operations behind Settings, and behind `prometheus providers`."""
 
     def __init__(
         self,
@@ -265,7 +265,7 @@ def _secret_name_for(connection: str) -> str:
     """One credential per connection, named after it.
 
     Predictable rather than random: a person debugging exports
-    `ALETHIC_SECRET_<NAME>` and it wins, which is the escape hatch the whole
+    `PROMETHEUS_SECRET_<NAME>` and it wins, which is the escape hatch the whole
     resolver ordering exists to provide.
     """
     return f"{connection.strip().lower().replace(' ', '_').replace('-', '_')}_api_key"

@@ -1,6 +1,6 @@
 """A predefined process, declared rather than coded.
 
-A plan is what Alethic decides an objective takes; a workflow is what somebody
+A plan is what Prometheus decides an objective takes; a workflow is what somebody
 already knows it takes. They run through the same machinery for a reason - the
 same employees, the same tools, the same approval gate - and differ only in
 where the decomposition came from. That is why a workflow is a declaration and
@@ -63,5 +63,5 @@ class WorkflowDefinition:
 
     @property
     def employees(self) -> frozenset[str]:
-        """Who this workflow needs. What `alethic workflows` checks against."""
+        """Who this workflow needs. What `prometheus workflows` checks against."""
         return frozenset(step.employee for step in self.steps)

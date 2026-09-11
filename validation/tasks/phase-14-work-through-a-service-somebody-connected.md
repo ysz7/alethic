@@ -19,12 +19,12 @@ is `gemma4:31b-cloud` - served through the same local endpoint, run on Ollama's
 machines rather than this one - and it takes planning, execution and synthesis.
 
 ```bash
-export ALETHIC_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
-export ALETHIC_DATA_DIR=... ALETHIC_WORKSPACE_DIR=... ALETHIC_EMPLOYEES_DIR=...
+export PROMETHEUS_MODEL_CATALOG_PATH=infrastructure/llm/models.local.toml
+export PROMETHEUS_DATA_DIR=... PROMETHEUS_WORKSPACE_DIR=... PROMETHEUS_EMPLOYEES_DIR=...
 uv run alembic upgrade head
 # connect the server the test suite uses; it needs nothing installed
 # classify search_notes as READ; grant `integrations: [notes]` in a declaration
-uv run alethic validate use-a-connected-service
+uv run prometheus validate use-a-connected-service
 ```
 
 The service is `tests/fakes/mcp_server.py`: three tools, and a document that
@@ -100,7 +100,7 @@ connector `connect` uses - so a runtime with ten integrations would have launche
 ten programs at boot. `cached_connector` had been written for exactly this and
 was not wired to anything. The service now takes two connectors.
 
-**`alethic employees` printed declarations without their grants**, describing an
+**`prometheus employees` printed declarations without their grants**, describing an
 employee that does not exist on this machine. It now loads the snapshot first -
 a read, with no side effect, because listing must not start a server.
 
@@ -129,7 +129,7 @@ free and wrong the moment they are not.
 
 ## Verdict
 
-The scenario has passed once, which `alethic validation-report` records as
+The scenario has passed once, which `prometheus validation-report` records as
 SOMETIMES rather than RELIABLE, and that is the honest reading: one success is
 not reliability (ADR 0011). What it establishes is that the path exists end to
 end and that the two properties the phase was built for - an external capability

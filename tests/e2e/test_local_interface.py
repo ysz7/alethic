@@ -51,7 +51,7 @@ class SlowLLM(FakeLLM):
 def settings_for(tmp_path: Path) -> Settings:
     return Settings(
         data_dir=tmp_path,
-        database_url=f"sqlite+aiosqlite:///{tmp_path / 'alethic.db'}",
+        database_url=f"sqlite+aiosqlite:///{tmp_path / 'prometheus.db'}",
         file_root=tmp_path / "workspace",
         employees_dir=REPO_ROOT / "employees",
         ui_approval_timeout_seconds=5.0,
@@ -101,7 +101,7 @@ def test_the_page_and_its_assets_are_served(tmp_path: Path) -> None:
     with client_for(settings, FakeLLM()) as client:
         page = client.get("/")
         assert page.status_code == 200
-        assert "Alethic" in page.text
+        assert "Prometheus" in page.text
         assert client.get("/static/app.js").status_code == 200
         assert client.get("/static/app.css").status_code == 200
 

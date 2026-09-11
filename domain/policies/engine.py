@@ -26,7 +26,7 @@ class PolicyRequest:
 
     `policies` is what the actor's own declaration opted into. It is carried
     here rather than read off the `Actor` because the protocol is what every
-    caller - the user, Alethic, an employee - already satisfies, and widening it
+    caller - the user, Prometheus, an employee - already satisfies, and widening it
     would make a policy layer a prerequisite for having an identity.
     """
 

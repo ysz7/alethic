@@ -8,11 +8,13 @@
  *
  * Whether this action needed asking was settled by the policy engine before the
  * window heard about it. Whether it now happens is settled by the person.
- * Nothing in the interface gets a vote.
+ * Nothing in the interface gets a vote - which is why the risk is printed in
+ * the runtime's own word rather than turned into a colour this layer chose.
  */
 
 import type { ReactNode } from "react";
 
+import { WarningIcon } from "../../../shared/ui";
 import type { Approval } from "../model/types";
 
 interface Props {
@@ -23,14 +25,20 @@ interface Props {
 export function ApprovalCard({ approval, actions }: Props) {
   const details = Object.entries(approval.payload ?? {});
   return (
-    <article className="approval" aria-label={`Approval: ${approval.action}`}>
-      <header>
-        <h3>Alethic wants to {approval.action}</h3>
-        <span className={`risk ${approval.risk.toLowerCase()}`}>{approval.risk}</span>
-      </header>
-      {approval.reason && <p className="why">{approval.reason}</p>}
+    <article
+      className={approval.live ? "gate" : "gate ended"}
+      aria-label={`Approval: ${approval.action}`}
+    >
+      <div className="gate-top">
+        <WarningIcon />
+        <b>
+          Needs approval · <span className="risk">{approval.risk}</span>
+        </b>
+      </div>
+      <h4>Prometheus wants to {approval.action}</h4>
+      {approval.reason && <p>{approval.reason}</p>}
       {details.length > 0 && (
-        <dl>
+        <dl className="gate-details">
           {details.map(([key, value]) => (
             <div key={key}>
               <dt>{key}</dt>
@@ -45,7 +53,7 @@ export function ApprovalCard({ approval, actions }: Props) {
           only closes the question.
         </p>
       )}
-      {actions && <footer>{actions}</footer>}
+      {actions && <div className="gate-acts">{actions}</div>}
     </article>
   );
 }

@@ -29,14 +29,14 @@ in shape. Two requests, in two separate processes, with the database kept
 between them:
 
 ```bash
-uv run alethic ask-alethic "Summarise what is in the sales folder and write summary.md. Always answer in Markdown."
-uv run alethic memory
-uv run alethic ask-alethic "Do the same for the returns folder."
+uv run prometheus ask-prometheus "Summarise what is in the sales folder and write summary.md. Always answer in Markdown."
+uv run prometheus memory
+uv run prometheus ask-prometheus "Do the same for the returns folder."
 ```
 
 The second request is the whole test. *"Do the same"* names nothing: without
 memory there is no record anywhere of what "the same" was, and the platform has
-no conversation to look back at - `ask-alethic` is one process per request.
+no conversation to look back at - `ask-prometheus` is one process per request.
 
 ## Result - passed, 2026-09-07
 
@@ -60,7 +60,7 @@ doing the only job that cannot be done without it.
 memory.recalled  employee=analyst  items=4
 ```
 
-`alethic memory` after run A shows what the second run was working from - and shows
+`prometheus memory` after run A shows what the second run was working from - and shows
 the shape of what is kept:
 
 ```
@@ -81,9 +81,9 @@ intent reader returns `constraints`, and the first version stored all of them
 forever: `"The user asks that input_location: sales folder"`. On the next
 request that came back as a workspace fact and pulled the plan towards `sales`
 while the user had asked for `returns`. Fixed by asking for the two separately -
-`prompts/alethic_intent/v1.md` now distinguishes a standing preference ("always
+`prompts/prometheus_intent/v1.md` now distinguishes a standing preference ("always
 answer in Markdown") from a parameter of this request, and only the first is
-kept. `tests/unit/test_alethic_memory.py` holds the case.
+kept. `tests/unit/test_prometheus_memory.py` holds the case.
 
 **What was stored was the model talking, not what it found.** `record_task` kept
 the employee's closing message, which is written for the person who asked and
@@ -99,7 +99,7 @@ alternative is not a worse memory, it is a misleading one.
 **The manager planned without memory.** The recalled context reached the
 employees - through `SharedContext.facts` - and not the decomposition, which is
 the one stage that has to know what "the same" refers to. Given the second
-request, Alethic wrote a task to *go and find out what had been done before*: an
+request, Prometheus wrote a task to *go and find out what had been done before*: an
 entire employee run spent on archaeology, twice, with two different models.
 Memory is now recalled once per objective, before the request is read, and
 given to the reading, the plan and every task. That single wiring change is what

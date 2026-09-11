@@ -10,14 +10,14 @@ So a scenario is a declaration, discovered the way an employee or a workflow is,
 and it states three things and no more:
 
 * **what is asked**, in one of the three ways this platform can be asked - a
-  goal for Alethic, a goal for a named employee, or a workflow by name. There is
+  goal for Prometheus, a goal for a named employee, or a workflow by name. There is
   deliberately no fourth: a scenario that needed its own way of running work
   would be measuring something the user cannot do.
 * **what the machine must have** for the request to mean anything. A scenario
   that drives a screen says so, and is skipped rather than failed where the
   desktop is switched off. A suite that fails on a correctly configured machine
   teaches people to ignore it.
-* **what would count as done** - the same discipline Alethic applies to an
+* **what would count as done** - the same discipline Prometheus applies to an
   objective, applied to the scenario: written before the run, so the standard
   cannot be adjusted after seeing the output.
 
@@ -37,13 +37,13 @@ from typing import Any
 class Entry(StrEnum):
     """Which of the platform's three doors this request goes through."""
 
-    #: `alethic ask-alethic` - the manager reads it and decides everything else.
+    #: `prometheus ask-prometheus` - the manager reads it and decides everything else.
     #: The default, because it is how the platform is normally used.
     OBJECTIVE = "OBJECTIVE"
-    #: `alethic run-task --employee <name>` - the employee is named, so the
+    #: `prometheus run-task --employee <name>` - the employee is named, so the
     #: manager's routing is not part of what is being measured.
     TASK = "TASK"
-    #: `alethic run-workflow <name>` - the decomposition was written by hand.
+    #: `prometheus run-workflow <name>` - the decomposition was written by hand.
     WORKFLOW = "WORKFLOW"
 
 

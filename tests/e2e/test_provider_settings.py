@@ -31,7 +31,7 @@ KEY = "sk-live-not-a-real-key"
 def settings_for(tmp_path: Path) -> Settings:
     return Settings(
         data_dir=tmp_path,
-        database_url=f"sqlite+aiosqlite:///{tmp_path / 'alethic.db'}",
+        database_url=f"sqlite+aiosqlite:///{tmp_path / 'prometheus.db'}",
         file_root=tmp_path / "workspace",
         employees_dir=REPO_ROOT / "employees",
         log_format="console",
@@ -110,7 +110,7 @@ def test_a_person_adds_a_provider_a_model_and_says_where_work_goes(
         assert KEY not in str(page)
 
     # And what landed on disk is unreadable without the master key.
-    database = (tmp_path / "alethic.db").read_bytes()
+    database = (tmp_path / "prometheus.db").read_bytes()
     assert KEY.encode() not in database
     assert (tmp_path / "master.key").exists()
 

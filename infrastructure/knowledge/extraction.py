@@ -23,7 +23,7 @@ import json
 from html.parser import HTMLParser
 from pathlib import Path
 
-from domain.errors import AlethicError
+from domain.errors import PrometheusError
 
 #: What the plain reader will accept. Everything here is text a person could
 #: open in an editor; anything else needs an extractor that understands it.
@@ -34,7 +34,7 @@ HTML_SUFFIXES = frozenset({".html", ".htm"})
 PDF_SUFFIXES = frozenset({".pdf"})
 
 
-class UnsupportedDocumentError(AlethicError):
+class UnsupportedDocumentError(PrometheusError):
     """A file this machine cannot read as text, named rather than guessed at."""
 
 

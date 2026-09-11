@@ -1,6 +1,6 @@
 """Policy vocabulary.
 
-Policies apply to every actor, Alethic included. The manager is not exempt from the
+Policies apply to every actor, Prometheus included. The manager is not exempt from the
 rules it enforces on the employees it delegates to.
 """
 
@@ -13,7 +13,7 @@ from typing import Protocol, runtime_checkable
 
 class ActorKind(StrEnum):
     USER = "USER"
-    ALETHIC = "ALETHIC"
+    PROMETHEUS = "PROMETHEUS"
     EMPLOYEE = "EMPLOYEE"
     SYSTEM = "SYSTEM"
 
@@ -33,7 +33,7 @@ class Decision(StrEnum):
 
 @runtime_checkable
 class Actor(Protocol):
-    """Anything that can request an action: the user, Alethic, or an employee."""
+    """Anything that can request an action: the user, Prometheus, or an employee."""
 
     @property
     def actor_id(self) -> str: ...
@@ -47,7 +47,7 @@ class Actor(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class SimpleActor:
-    """A plain actor value, useful for the user, for Alethic and in tests."""
+    """A plain actor value, useful for the user, for Prometheus and in tests."""
 
     actor_id: str
     actor_kind: ActorKind
@@ -82,7 +82,7 @@ class Policy:
 def effective_tools(delegator: Actor, executor: Actor) -> frozenset[str]:
     """Delegation never escalates privileges: rights are the intersection.
 
-    A task Alethic hands to an employee is checked against the employee's own
+    A task Prometheus hands to an employee is checked against the employee's own
     permissions exactly as if the user had asked the employee directly.
     """
     return delegator.allowed_tools & executor.allowed_tools

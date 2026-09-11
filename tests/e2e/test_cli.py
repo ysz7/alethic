@@ -15,14 +15,14 @@ runner = CliRunner()
 def test_version_runs_without_any_infrastructure() -> None:
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert result.stdout.startswith("alethic ")
+    assert result.stdout.startswith("prometheus ")
 
 
 def test_config_masks_the_provider_key(monkeypatch) -> None:
     from app.config.settings import get_settings
 
     get_settings.cache_clear()
-    monkeypatch.setenv("ALETHIC_LLM_API_KEY", "super-secret")
+    monkeypatch.setenv("PROMETHEUS_LLM_API_KEY", "super-secret")
     try:
         result = runner.invoke(app, ["config"])
         assert result.exit_code == 0
@@ -36,8 +36,10 @@ def test_tasks_reports_an_empty_local_database(monkeypatch, tmp_path) -> None:
     from app.config.settings import get_settings
 
     get_settings.cache_clear()
-    monkeypatch.setenv("ALETHIC_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("ALETHIC_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path / 'alethic.db'}")
+    monkeypatch.setenv("PROMETHEUS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv(
+        "PROMETHEUS_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path / 'prometheus.db'}"
+    )
     try:
         # The schema has to exist before the repository can read it.
         import asyncio
@@ -64,8 +66,8 @@ def test_tasks_explains_a_missing_schema_instead_of_a_stack_trace(monkeypatch, t
     from app.config.settings import get_settings
 
     get_settings.cache_clear()
-    monkeypatch.setenv("ALETHIC_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("ALETHIC_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path / 'empty.db'}")
+    monkeypatch.setenv("PROMETHEUS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PROMETHEUS_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path / 'empty.db'}")
     try:
         result = runner.invoke(app, ["tasks"])
         assert result.exit_code == 1
@@ -85,11 +87,11 @@ def test_ask_without_a_key_explains_itself_instead_of_calling_out(monkeypatch) -
     from app.config.settings import get_settings
 
     get_settings.cache_clear()
-    monkeypatch.delenv("ALETHIC_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("PROMETHEUS_LLM_API_KEY", raising=False)
     try:
         result = runner.invoke(app, ["ask", "Which city?"])
         assert result.exit_code == 1
-        assert "ALETHIC_LLM_API_KEY" in result.output
+        assert "PROMETHEUS_LLM_API_KEY" in result.output
     finally:
         get_settings.cache_clear()
 
@@ -102,8 +104,10 @@ def test_spend_reports_zero_on_a_fresh_database(monkeypatch, tmp_path) -> None:
     from infrastructure.persistence.session import create_engine
 
     get_settings.cache_clear()
-    monkeypatch.setenv("ALETHIC_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("ALETHIC_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path / 'alethic.db'}")
+    monkeypatch.setenv("PROMETHEUS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv(
+        "PROMETHEUS_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path / 'prometheus.db'}"
+    )
     try:
 
         async def _create() -> None:
@@ -127,8 +131,8 @@ def test_tools_shows_who_may_call_each_tool(monkeypatch, tmp_path) -> None:
     from app.config.settings import get_settings
 
     get_settings.cache_clear()
-    monkeypatch.setenv("ALETHIC_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("ALETHIC_WORKSPACE_DIR", str(tmp_path / "workspace"))
+    monkeypatch.setenv("PROMETHEUS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PROMETHEUS_WORKSPACE_DIR", str(tmp_path / "workspace"))
     try:
         result = runner.invoke(app, ["tools"])
         assert result.exit_code == 0
@@ -148,9 +152,9 @@ def test_a_tool_no_one_declares_is_shown_as_reachable_by_nobody(monkeypatch, tmp
     from app.config.settings import get_settings
 
     get_settings.cache_clear()
-    monkeypatch.setenv("ALETHIC_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("ALETHIC_WORKSPACE_DIR", str(tmp_path / "workspace"))
-    monkeypatch.setenv("ALETHIC_EMPLOYEES_DIR", str(tmp_path / "employees"))
+    monkeypatch.setenv("PROMETHEUS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PROMETHEUS_WORKSPACE_DIR", str(tmp_path / "workspace"))
+    monkeypatch.setenv("PROMETHEUS_EMPLOYEES_DIR", str(tmp_path / "employees"))
     reader = tmp_path / "employees" / "reader"
     reader.mkdir(parents=True)
     (reader / "employee.yaml").write_text(
@@ -174,8 +178,10 @@ def test_approvals_reports_an_empty_queue(monkeypatch, tmp_path) -> None:
     from infrastructure.persistence.session import create_engine
 
     get_settings.cache_clear()
-    monkeypatch.setenv("ALETHIC_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("ALETHIC_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path / 'alethic.db'}")
+    monkeypatch.setenv("PROMETHEUS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv(
+        "PROMETHEUS_DATABASE_URL", f"sqlite+aiosqlite:///{tmp_path / 'prometheus.db'}"
+    )
     try:
 
         async def _create() -> None:
@@ -197,7 +203,7 @@ def test_an_id_that_is_not_an_id_is_reported_plainly(monkeypatch, tmp_path) -> N
     from app.config.settings import get_settings
 
     get_settings.cache_clear()
-    monkeypatch.setenv("ALETHIC_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PROMETHEUS_DATA_DIR", str(tmp_path))
     try:
         result = runner.invoke(app, ["approve", "not-a-uuid"])
         assert result.exit_code == 1
@@ -210,8 +216,8 @@ def test_tools_shows_the_level_each_one_reaches_the_world_at(monkeypatch, tmp_pa
     from app.config.settings import get_settings
 
     get_settings.cache_clear()
-    monkeypatch.setenv("ALETHIC_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("ALETHIC_WORKSPACE_DIR", str(tmp_path / "workspace"))
+    monkeypatch.setenv("PROMETHEUS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PROMETHEUS_WORKSPACE_DIR", str(tmp_path / "workspace"))
     try:
         result = runner.invoke(app, ["tools"])
         assert result.exit_code == 0
@@ -230,7 +236,7 @@ def test_stop_can_be_pulled_and_released_from_a_second_terminal(
     from infrastructure.computer.stop import FileStopSignal
 
     get_settings.cache_clear()
-    monkeypatch.setenv("ALETHIC_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PROMETHEUS_DATA_DIR", str(tmp_path))
     try:
         stopped = runner.invoke(app, ["stop", "--reason", "wrong window"])
         assert stopped.exit_code == 0

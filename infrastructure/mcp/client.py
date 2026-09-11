@@ -1,7 +1,7 @@
 """The three things the platform asks of an MCP server.
 
 Initialize, list what it offers, call one of them. That is the whole of the
-protocol as far as Alethic is concerned, and keeping it that small is what keeps
+protocol as far as Prometheus is concerned, and keeping it that small is what keeps
 `application/` from ever needing to know the word MCP: above this, a discovered
 tool is a `Tool` and nothing else.
 
@@ -24,7 +24,7 @@ from infrastructure.mcp.transport import StdioTransport
 log = structlog.get_logger(__name__)
 
 PROTOCOL_VERSION = "2024-11-05"
-CLIENT_INFO = {"name": "alethic", "version": "1"}
+CLIENT_INFO = {"name": "prometheus", "version": "1"}
 
 
 class MCPClient:

@@ -182,7 +182,7 @@ async def test_a_surface_that_fails_comes_back_as_a_result_the_model_can_read() 
 
 
 def test_the_reader_is_not_built_until_a_tool_actually_runs() -> None:
-    """Listing the registry must not route a model: `alethic tools` does nothing else."""
+    """Listing the registry must not route a model: `prometheus tools` does nothing else."""
     built = []
 
     def eyes() -> FakeScreenReader:
