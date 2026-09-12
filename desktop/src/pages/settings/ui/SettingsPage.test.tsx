@@ -5,9 +5,14 @@
  * and only the HTTP is replaced. What is being asserted is mostly what the
  * window does *not* do - it never decides whether a capability is safe, never
  * shows a credential, and never assumes an operation worked.
+ *
+ * Since the screen became one section at a time, getting to the thing under
+ * test is part of the test. That is the point of the rewrite rather than an
+ * inconvenience of it: what a person has to do to reach a control is exactly
+ * what changed.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -102,6 +107,7 @@ function scriptedRuntime({ available = true } = {}) {
     if (path === "/api/integrations") {
       return json({ available, integrations: state.integrations });
     }
+    if (path === "/api/tools") return json({ tools: [] });
     if (path === "/api/workspaces") return json({ workspaces: state.workspaces });
     if (path === "/api/documents") {
       return json({ available: true, documents: state.documents });
@@ -120,30 +126,40 @@ function json(body: unknown) {
   });
 }
 
-function show(client: RuntimeClient) {
-  return render(
+/** Render, then walk to the servers a person connected - two clicks, as in the window. */
+async function showServers(client: RuntimeClient) {
+  render(
     <RuntimeProvider client={client}>
       <SettingsPage />
     </RuntimeProvider>,
   );
+  await userEvent.click(await screen.findByRole("button", { name: "Plugins" }));
+  // A tab, not a button: the markup says what it is, and the query agrees.
+  await userEvent.click(await screen.findByRole("tab", { name: /MCP servers/ }));
 }
 
-describe("Settings → Integrations", () => {
+/** Add one from the dialog, which is the only place the form exists now. */
+async function addServer(command: string) {
+  await userEvent.click(screen.getByRole("button", { name: /Add server/ }));
+  await userEvent.type(screen.getByLabelText("Name"), "notes");
+  await userEvent.type(screen.getByLabelText("Command"), command);
+  await userEvent.click(screen.getByRole("button", { name: "Add" }));
+}
+
+describe("Settings → Plugins → MCP servers", () => {
   it("says when nothing is connected", async () => {
     const { client } = scriptedRuntime();
-    show(client);
+    await showServers(client);
 
     expect(await screen.findByText("Nothing is connected yet.")).toBeInTheDocument();
   });
 
   it("adds any MCP server from a name and a command", async () => {
     const { state, client } = scriptedRuntime();
-    show(client);
+    await showServers(client);
     await screen.findByText("Nothing is connected yet.");
 
-    await userEvent.type(screen.getByLabelText("Name"), "notes");
-    await userEvent.type(screen.getByLabelText("Command"), "npx -y some-server");
-    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    await addServer("npx -y some-server");
 
     await waitFor(() => expect(screen.getByText("notes")).toBeInTheDocument());
     const added = state.posted.find((call) => call.path === "/api/integrations");
@@ -153,14 +169,23 @@ describe("Settings → Integrations", () => {
     });
   });
 
-  it("connects straight after adding, because that is what was asked for", async () => {
-    const { state, client } = scriptedRuntime();
-    show(client);
+  it("closes the dialog once the runtime has answered", async () => {
+    const { client } = scriptedRuntime();
+    await showServers(client);
     await screen.findByText("Nothing is connected yet.");
 
-    await userEvent.type(screen.getByLabelText("Name"), "notes");
-    await userEvent.type(screen.getByLabelText("Command"), "npx server");
-    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    await addServer("npx server");
+
+    // The form is gone rather than left standing over the list it just changed.
+    await waitFor(() => expect(screen.queryByLabelText("Command")).toBeNull());
+  });
+
+  it("connects straight after adding, because that is what was asked for", async () => {
+    const { state, client } = scriptedRuntime();
+    await showServers(client);
+    await screen.findByText("Nothing is connected yet.");
+
+    await addServer("npx server");
 
     await waitFor(() =>
       expect(state.posted.some((call) => call.path.endsWith("/connect"))).toBe(true),
@@ -170,11 +195,10 @@ describe("Settings → Integrations", () => {
 
   it("shows which capabilities wait for the person, as the runtime said", async () => {
     const { client } = scriptedRuntime();
-    show(client);
+    await showServers(client);
     await screen.findByText("Nothing is connected yet.");
-    await userEvent.type(screen.getByLabelText("Name"), "notes");
-    await userEvent.type(screen.getByLabelText("Command"), "npx server");
-    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    await addServer("npx server");
 
     expect(await screen.findByText("send_note")).toBeInTheDocument();
     expect(screen.getByText("asks first")).toBeInTheDocument();
@@ -183,9 +207,10 @@ describe("Settings → Integrations", () => {
 
   it("sends a credential and never shows it again", async () => {
     const { state, client } = scriptedRuntime();
-    show(client);
+    await showServers(client);
     await screen.findByText("Nothing is connected yet.");
 
+    await userEvent.click(screen.getByRole("button", { name: /Add server/ }));
     await userEvent.type(screen.getByLabelText("Name"), "notes");
     await userEvent.type(screen.getByLabelText("Command"), "npx server");
     await userEvent.click(screen.getByText("Needs a credential"));
@@ -201,11 +226,9 @@ describe("Settings → Integrations", () => {
 
   it("disables without forgetting the setup", async () => {
     const { client } = scriptedRuntime();
-    show(client);
+    await showServers(client);
     await screen.findByText("Nothing is connected yet.");
-    await userEvent.type(screen.getByLabelText("Name"), "notes");
-    await userEvent.type(screen.getByLabelText("Command"), "npx server");
-    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    await addServer("npx server");
     await screen.findByText("ready");
 
     await userEvent.click(screen.getByRole("button", { name: "Disable" }));
@@ -215,11 +238,9 @@ describe("Settings → Integrations", () => {
 
   it("asks before removing, and says what removal keeps", async () => {
     const { state, client } = scriptedRuntime();
-    show(client);
+    await showServers(client);
     await screen.findByText("Nothing is connected yet.");
-    await userEvent.type(screen.getByLabelText("Name"), "notes");
-    await userEvent.type(screen.getByLabelText("Command"), "npx server");
-    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    await addServer("npx server");
     await screen.findByText("ready");
 
     await userEvent.click(screen.getByRole("button", { name: "Remove" }));
@@ -231,11 +252,55 @@ describe("Settings → Integrations", () => {
 
   it("says so when the machine has integrations switched off", async () => {
     const { client } = scriptedRuntime({ available: false });
-    show(client);
+    await showServers(client);
 
     expect(await screen.findByText(/switched off on this machine/)).toBeInTheDocument();
   });
+});
 
+describe("Settings → Plugins → Built in", () => {
+  it("shows what the machine can do and who is allowed to ask for it", async () => {
+    const { client } = scriptedRuntime();
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input).replace(BASE, "");
+      if (path === "/api/tools") {
+        return json({
+          tools: [
+            {
+              name: "fs.write",
+              description: "Write a file.",
+              effect: "WRITE",
+              risk: "HIGH",
+              requires_approval: true,
+              interface: "API",
+              reversible: false,
+              capabilities: ["FILE_ACCESS"],
+              used_by: ["organizer", "writer"],
+            },
+          ],
+        });
+      }
+      if (path === "/api/integrations") return json({ available: true, integrations: [] });
+      return json({});
+    });
+    void client;
+
+    render(
+      <RuntimeProvider client={new RuntimeClient(BASE, fetchImpl as never)}>
+        <SettingsPage />
+      </RuntimeProvider>,
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "Plugins" }));
+
+    const row = await screen.findByLabelText("Tool: fs.write");
+    // Who may call it is read off the declarations, and there is no switch
+    // here to disagree with them.
+    expect(within(row).getByText(/listed by organizer, writer/)).toBeInTheDocument();
+    expect(screen.queryByRole("switch")).toBeNull();
+  });
+});
+
+describe("Settings", () => {
   it("shows the runtime's own words when something fails", async () => {
     const failing = new RuntimeClient(
       BASE,
@@ -244,11 +309,12 @@ describe("Settings → Integrations", () => {
           status: 503,
         })) as never,
     );
-    show(failing);
+    render(
+      <RuntimeProvider client={failing}>
+        <SettingsPage />
+      </RuntimeProvider>,
+    );
 
-    // Every section on this screen reads the runtime, so a database with no
-    // schema is reported by each of them. What is asserted is the words, not
-    // how many places say them.
     const said = await screen.findAllByRole("alert");
     expect(said[0]).toHaveTextContent("no schema yet");
   });

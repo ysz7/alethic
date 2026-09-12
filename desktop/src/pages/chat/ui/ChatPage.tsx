@@ -6,6 +6,11 @@
  * the composer floats over its foot, so the request is always the nearest thing
  * to the person's hands.
  *
+ * Until something has been asked there is no foot to float over: an empty
+ * thread puts the greeting and the field in the middle of the window, which is
+ * where the eye already is and where the one action on the screen belongs. The
+ * composer docks the moment there is a conversation to keep above it.
+ *
  * Called `chat` since Phase 15, when the word "workspace" stopped meaning three
  * things at once. It is the conversation; a workspace is the context the
  * conversation happens in, named in the header and chosen under the field.
@@ -67,6 +72,54 @@ export function ChatPage({
     if (element) element.scrollTop = element.scrollHeight;
   }, [messages.length, lastActivity, approvals.length]);
 
+  const blank = messages.length === 0;
+
+  // Built once and placed twice. The two layouts differ in where these sit, not
+  // in what they are - a second copy would be the empty window quietly drifting
+  // away from the one people spend their day in.
+  const conversation = (
+    <>
+      <ConversationView
+        messages={messages}
+        activity={activity}
+        trails={trails}
+        busy={busy}
+        // The workforce goes under the composer when the composer is in the
+        // middle of the screen, so the greeting and the field stay together.
+        empty={blank ? null : <WorkforcePanel employees={employees} />}
+      />
+      {approvals.map((approval) => (
+        <ApprovalCard
+          key={approval.id}
+          approval={approval}
+          actions={<ApprovalDecision approvalId={approval.id} onDecide={decide} />}
+        />
+      ))}
+      {problem && (
+        <p className="problem" role="alert">
+          {problem}
+        </p>
+      )}
+      {!ready && !problem && (
+        <p className="working waking">
+          <span className="spin" aria-hidden="true" />
+          Starting Prometheus…
+        </p>
+      )}
+    </>
+  );
+
+  const composer = (
+    <>
+      <RequestComposer
+        onSend={send}
+        disabled={!ready}
+        extras={<WorkspaceBar onSwitched={onSwitched} />}
+      />
+      <p className="hint">Irreversible actions wait for you. Everything runs on this machine.</p>
+    </>
+  );
+
   return (
     <main className="main">
       <PageHead
@@ -78,46 +131,24 @@ export function ChatPage({
         {busy && <StopButton onStop={stop} />}
       </PageHead>
 
-      <div className="stream" ref={stream}>
-        <div className={messages.length === 0 ? "col empty" : "col"}>
-          <ConversationView
-            messages={messages}
-            activity={activity}
-            trails={trails}
-            busy={busy}
-            empty={<WorkforcePanel employees={employees} />}
-          />
-          {approvals.map((approval) => (
-            <ApprovalCard
-              key={approval.id}
-              approval={approval}
-              actions={<ApprovalDecision approvalId={approval.id} onDecide={decide} />}
-            />
-          ))}
-          {problem && (
-            <p className="problem" role="alert">
-              {problem}
-            </p>
-          )}
-          {!ready && !problem && (
-            <p className="working waking">
-              <span className="spin" aria-hidden="true" />
-              Starting Prometheus…
-            </p>
-          )}
+      {blank ? (
+        <div className="stream blank">
+          <div className="col">
+            {conversation}
+            {composer}
+            <WorkforcePanel employees={employees} />
+          </div>
         </div>
-      </div>
-
-      <div className="dock">
-        <div className="col">
-          <RequestComposer
-            onSend={send}
-            disabled={!ready}
-            extras={<WorkspaceBar onSwitched={onSwitched} />}
-          />
-          <p className="hint">Irreversible actions wait for you. Everything runs on this machine.</p>
-        </div>
-      </div>
+      ) : (
+        <>
+          <div className="stream" ref={stream}>
+            <div className="col">{conversation}</div>
+          </div>
+          <div className="dock">
+            <div className="col">{composer}</div>
+          </div>
+        </>
+      )}
     </main>
   );
 }

@@ -33,6 +33,7 @@ from domain.policies.risk import at_least
 from domain.policies.rules import APPROVAL_THRESHOLD
 from domain.providers.models import Connection
 from domain.tasks.task import Task, TaskEvent
+from domain.tools.models import ToolSpec
 from domain.tools.telemetry import ToolCallRecord
 from domain.workforce.protocols import Objective, Plan
 from domain.workspace.models import Workspace
@@ -193,6 +194,38 @@ def integration(item: Integration) -> dict[str, Any]:
         "secrets": list(item.secret_names),
         "tool_count": len(item.discovered),
         "tools": [integration_capability(item, tool) for tool in item.discovered],
+    }
+
+
+# --- Tools --------------------------------------------------------------------
+
+
+def tool(spec: ToolSpec, *, used_by: tuple[str, ...] = ()) -> dict[str, Any]:
+    """One thing this machine can do, and who is allowed to ask for it.
+
+    `used_by` is the employees that listed the tool in their own declaration,
+    and it is the whole answer to whether the tool is in use: a tool nobody
+    lists is a tool nobody can call. There is deliberately no enabled flag -
+    a grant is a line in an employee's file, and a switch on a screen would be
+    a second place to change it, which is the one that goes stale (§71c).
+
+    `requires_approval` is computed here for the same reason it is computed for
+    an integration's capability: an interface that worked it out from the
+    effect would be a second policy engine, disagreeing quietly with the gate.
+    """
+    return {
+        "name": spec.name,
+        # The first line only. The rest of a tool's description is written for
+        # the model that has to call it correctly, not for a person reading a
+        # list of what their machine can do.
+        "description": spec.description.splitlines()[0] if spec.description else "",
+        "effect": spec.effect.value,
+        "risk": spec.risk_level.value,
+        "requires_approval": at_least(spec.risk_level, APPROVAL_THRESHOLD),
+        "interface": spec.interface_level.value,
+        "reversible": spec.reversible,
+        "capabilities": sorted(str(c) for c in spec.capabilities),
+        "used_by": list(used_by),
     }
 
 

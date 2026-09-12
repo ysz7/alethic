@@ -327,6 +327,16 @@ def _routes(app: FastAPI) -> None:
     async def employees(request: Request) -> dict[str, Any]:
         return {"employees": _service(request).list_employees()}
 
+    @app.get("/api/tools")
+    async def tools(request: Request) -> dict[str, Any]:
+        """What this machine can do, and who is allowed to ask for it.
+
+        Read-only, and there is deliberately no route that switches one on or
+        off: a grant is a line in an employee's declaration, and an endpoint
+        that changed it here would be a second way to say the same thing.
+        """
+        return {"tools": _service(request).list_tools()}
+
     @app.get("/api/tasks")
     async def history(request: Request) -> dict[str, Any]:
         return {"tasks": await _guarded(_service(request).list_tasks())}

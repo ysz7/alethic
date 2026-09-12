@@ -124,6 +124,82 @@ export const GearIcon = (props: Props) => (
   </svg>
 );
 
+export const CloseIcon = (props: Props) => (
+  <svg viewBox="0 0 14 14" {...base} {...props}>
+    <path d="M3.4 3.4 10.6 10.6M10.6 3.4 3.4 10.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
+export const BackIcon = (props: Props) => (
+  <svg viewBox="0 0 16 16" {...base} {...props}>
+    <path
+      d="M13 8H3.4M3.4 8 7.2 4.2M3.4 8l3.8 3.8"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+export const FolderIcon = (props: Props) => (
+  <svg viewBox="0 0 16 16" {...base} {...props}>
+    <path
+      d="M1.8 4.4a1.6 1.6 0 0 1 1.6-1.6h2.3l1.3 1.6h5.6a1.6 1.6 0 0 1 1.6 1.6v5.6a1.6 1.6 0 0 1-1.6 1.6H3.4a1.6 1.6 0 0 1-1.6-1.6V4.4Z"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+export const BookIcon = (props: Props) => (
+  <svg viewBox="0 0 16 16" {...base} {...props}>
+    <path
+      d="M2.6 3a1 1 0 0 1 1-1H8v12H3.6a1 1 0 0 1-1-1V3ZM8 2h4.4a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H8"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+export const SparkIcon = (props: Props) => (
+  <svg viewBox="0 0 16 16" {...base} {...props}>
+    <path
+      d="M8 1.8 9.5 6 13.8 7.5 9.5 9 8 13.2 6.5 9 2.2 7.5 6.5 6 8 1.8Z"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+export const BoxIcon = (props: Props) => (
+  <svg viewBox="0 0 16 16" {...base} {...props}>
+    <path
+      d="M8 1.9 13.7 5v6L8 14.1 2.3 11V5L8 1.9Z"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+    />
+    <path d="M2.3 5 8 8.1 13.7 5M8 8.1v6" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+  </svg>
+);
+
+export const PlugIcon = (props: Props) => (
+  <svg viewBox="0 0 16 16" {...base} {...props}>
+    <path d="M5.6 1.9v3M10.4 1.9v3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path
+      d="M3.6 4.9h8.8v3a4.4 4.4 0 0 1-4.4 4.4 4.4 4.4 0 0 1-4.4-4.4v-3Z"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+    />
+    <path d="M8 12.3v1.8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
+
 export const PeopleIcon = (props: Props) => (
   <svg viewBox="0 0 14 14" {...base} {...props}>
     <circle cx="5.2" cy="4.8" r="2.1" stroke="currentColor" strokeWidth="1.3" />

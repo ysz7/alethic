@@ -21,6 +21,10 @@ const narrow = () => typeof window !== "undefined" && window.innerWidth < NARROW
  * because the thread, the history and the documents all belong to a workspace,
  * and a screen left over from the previous one would be showing another
  * context's work under the new context's name.
+ *
+ * Settings take the whole window and bring their own menu. A list of threads
+ * beside a screen that has nothing to do with any of them is a column of dead
+ * weight, and the way back is one button that says so.
  */
 export function App({ client, baseUrl }: { client?: RuntimeClient; baseUrl?: string }) {
   const [showing, setShowing] = useState<"work" | "settings">("work");
@@ -39,13 +43,25 @@ export function App({ client, baseUrl }: { client?: RuntimeClient; baseUrl?: str
     if (narrow()) setRailOpen(false);
   };
 
+  if (showing === "settings") {
+    return (
+      <RuntimeProvider client={client} baseUrl={baseUrl}>
+        <SettingsPage
+          key={workspace}
+          onSwitched={switched}
+          onBack={() => go("work")}
+        />
+      </RuntimeProvider>
+    );
+  }
+
   return (
     <RuntimeProvider client={client} baseUrl={baseUrl}>
       <div className={railOpen ? "app" : "app rail-closed"}>
         <Sidebar
           key={`rail-${workspace}`}
-          selected={showing === "work" ? open : null}
-          settingsOpen={showing === "settings"}
+          selected={open}
+          settingsOpen={false}
           refresh={heard}
           onSelect={(thread) => go("work", thread)}
           onNew={() => go("work", null)}
@@ -57,24 +73,15 @@ export function App({ client, baseUrl }: { client?: RuntimeClient; baseUrl?: str
           aria-hidden="true"
           onClick={() => setRailOpen(false)}
         />
-        {showing === "work" ? (
-          <ChatPage
-            key={workspace}
-            conversationId={open}
-            onOpened={setOpen}
-            onChanged={() => setHeard((count) => count + 1)}
-            onSwitched={switched}
-            railOpen={railOpen}
-            onOpenRail={() => setRailOpen(true)}
-          />
-        ) : (
-          <SettingsPage
-            key={workspace}
-            onSwitched={switched}
-            railOpen={railOpen}
-            onOpenRail={() => setRailOpen(true)}
-          />
-        )}
+        <ChatPage
+          key={workspace}
+          conversationId={open}
+          onOpened={setOpen}
+          onChanged={() => setHeard((count) => count + 1)}
+          onSwitched={switched}
+          railOpen={railOpen}
+          onOpenRail={() => setRailOpen(true)}
+        />
       </div>
     </RuntimeProvider>
   );

@@ -390,6 +390,7 @@ def build_service(
             plans=container.plan_repository,
             tasks=container.task_repository,
             employees=container.employee_registry,
+            tools=container.tool_registry,
             approvals=container.approval_repository,
             waiter=waiter,
             tool_calls=container.tool_call_log,

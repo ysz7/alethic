@@ -1,10 +1,10 @@
 /**
- * Settings → Workspaces and Documents, against a scripted runtime.
+ * Settings → Workspaces, Documents and Memory, against a scripted runtime.
  *
- * The same shape as the integrations tests, and asserting the same kind of
- * thing: the window carries operations and renders answers. It never decides
- * which workspace is active, never works out whether a document is searchable,
- * and never offers to remove the first workspace - all three are the core's
+ * The same shape as the plugin tests, and asserting the same kind of thing: the
+ * window carries operations and renders answers. It never decides which
+ * workspace is active, never works out whether a document is searchable, and
+ * never offers to remove the first workspace - all three are the core's
  * answers, arriving as fields.
  */
 
@@ -95,6 +95,7 @@ function scriptedRuntime({ documents = [] as unknown[], memory = [] as unknown[]
     }
     if (path.startsWith("/api/memory")) return json({ items: state.memory });
     if (path === "/api/integrations") return json({ available: false, integrations: [] });
+    if (path === "/api/tools") return json({ tools: [] });
     return json({});
   });
 
@@ -114,6 +115,11 @@ function show(client: RuntimeClient, onSwitched?: () => void) {
       <SettingsPage onSwitched={onSwitched} />
     </RuntimeProvider>,
   );
+}
+
+/** Workspaces is where the screen opens; everything else is one click away. */
+async function goTo(section: string) {
+  await userEvent.click(await screen.findByRole("button", { name: section }));
 }
 
 describe("Settings → Workspaces", () => {
@@ -148,11 +154,12 @@ describe("Settings → Workspaces", () => {
     expect(state.posted.map((call) => call.path)).toContain("/api/workspaces/work/use");
   });
 
-  it("adds a workspace from a name", async () => {
+  it("adds a workspace from a name, in a dialog asked for on purpose", async () => {
     const { state, client } = scriptedRuntime();
     show(client);
     await screen.findByText("Work");
 
+    await userEvent.click(screen.getByRole("button", { name: "New workspace" }));
     await userEvent.type(screen.getByLabelText("Workspace name"), "Client A");
     await userEvent.click(screen.getByRole("button", { name: "Add workspace" }));
 
@@ -160,6 +167,8 @@ describe("Settings → Workspaces", () => {
     expect(state.posted.find((call) => call.path === "/api/workspaces")?.body).toMatchObject({
       name: "Client A",
     });
+    // The dialog is gone once the runtime answered.
+    expect(screen.queryByLabelText("Workspace name")).toBeNull();
   });
 });
 
@@ -167,8 +176,10 @@ describe("Settings → Documents", () => {
   it("says nothing is here yet, and adds one by path", async () => {
     const { state, client } = scriptedRuntime();
     show(client);
+    await goTo("Documents");
     expect(await screen.findByText("Nothing added yet.")).toBeInTheDocument();
 
+    await userEvent.click(screen.getByRole("button", { name: "New document" }));
     await userEvent.type(screen.getByLabelText("Path to the document"), "/tmp/delivery.md");
     await userEvent.click(screen.getByRole("button", { name: "Add document" }));
 
@@ -181,6 +192,7 @@ describe("Settings → Documents", () => {
   it("says when a document is found by words and not yet by meaning", async () => {
     const { client } = scriptedRuntime({ documents: [document("EXTRACTED")] });
     show(client);
+    await goTo("Documents");
 
     expect(
       await screen.findByText(/found by words, not yet by meaning/),
@@ -190,6 +202,7 @@ describe("Settings → Documents", () => {
   it("re-indexes on request, because the model that embedded it may have changed", async () => {
     const { state, client } = scriptedRuntime({ documents: [document("EXTRACTED")] });
     show(client);
+    await goTo("Documents");
     await screen.findByText("Delivery policy");
 
     await userEvent.click(screen.getByRole("button", { name: "Re-index" }));
@@ -200,7 +213,7 @@ describe("Settings → Documents", () => {
   });
 });
 
-describe("Settings → What is remembered", () => {
+describe("Settings → Memory", () => {
   it("shows what the platform noted, and offers no way to forget it", async () => {
     const { client } = scriptedRuntime({
       memory: [
@@ -216,6 +229,7 @@ describe("Settings → What is remembered", () => {
       ],
     });
     show(client);
+    await goTo("Memory");
 
     expect(await screen.findByText(/always answer in Markdown/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /forget/i })).toBeNull();

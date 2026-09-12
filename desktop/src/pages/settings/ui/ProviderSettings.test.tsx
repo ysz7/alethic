@@ -111,6 +111,7 @@ function scriptedRuntime({ withRunner = false } = {}) {
       return json({ models: withRunner ? ["a-small-model", "a-large-model"] : [] });
     }
     if (path === "/api/integrations") return json({ available: false, integrations: [] });
+    if (path === "/api/tools") return json({ tools: [] });
     if (path === "/api/workspaces") return json({ workspaces: [] });
     if (path === "/api/documents") return json({ available: false, documents: [] });
     if (path.startsWith("/api/memory")) return json({ items: [] });
@@ -134,25 +135,37 @@ function problem(detail: string) {
   });
 }
 
-function show(client: RuntimeClient) {
-  return render(
+/** Render and walk to the section, the way a person reaches it. */
+async function show(client: RuntimeClient) {
+  render(
     <RuntimeProvider client={client}>
       <SettingsPage />
     </RuntimeProvider>,
   );
+  await userEvent.click(await screen.findByRole("button", { name: "Providers and models" }));
+}
+
+/** Adding is a dialog now: the form does not stand open above the list. */
+async function addProvider(name: string, { key = "", kind = "" } = {}) {
+  await userEvent.click(await screen.findByRole("button", { name: "New provider" }));
+  await userEvent.type(await screen.findByLabelText("Connection name"), name);
+  if (kind) await userEvent.selectOptions(screen.getByLabelText("Provider"), kind);
+  if (key) await userEvent.type(screen.getByLabelText("API key"), key);
+  await userEvent.click(screen.getByRole("button", { name: "Add provider" }));
 }
 
 describe("Settings → Providers", () => {
   it("says when nothing has been added, and what the machine is using instead", async () => {
     const { client } = scriptedRuntime();
-    show(client);
+    await show(client);
 
     expect(await screen.findByText(/Nothing added/)).toBeInTheDocument();
   });
 
   it("offers the kinds the runtime named and never a vendor of its own", async () => {
     const { client } = scriptedRuntime();
-    show(client);
+    await show(client);
+    await userEvent.click(await screen.findByRole("button", { name: "New provider" }));
 
     const chooser = await screen.findByLabelText("Provider");
     expect(within(chooser).getByText("A Hosted Provider")).toBeInTheDocument();
@@ -161,11 +174,9 @@ describe("Settings → Providers", () => {
 
   it("sends a key and never shows it again", async () => {
     const { state, client } = scriptedRuntime();
-    show(client);
+    await show(client);
 
-    await userEvent.type(await screen.findByLabelText("Connection name"), "work-account");
-    await userEvent.type(screen.getByLabelText("API key"), KEY);
-    await userEvent.click(screen.getByRole("button", { name: "Add provider" }));
+    await addProvider("work-account", { key: KEY });
 
     await waitFor(() => expect(state.connections).toHaveLength(1));
     expect(state.posted[0].body).toMatchObject({ name: "work-account", api_key: KEY });
@@ -173,14 +184,22 @@ describe("Settings → Providers", () => {
     expect(await screen.findByText(/key stored/)).toBeInTheDocument();
   });
 
+  it("cannot be asked for a model until there is something to reach one through", async () => {
+    const { client } = scriptedRuntime();
+    await show(client);
+
+    // Disabled rather than hidden: the button is where a person looks for the
+    // reason, and the reason is that a model is reached through a connection.
+    expect(await screen.findByRole("button", { name: "New model" })).toBeDisabled();
+  });
+
   it("asks a local runner what it has instead of asking the person to type it", async () => {
     const { state, client } = scriptedRuntime({ withRunner: true });
-    show(client);
-
-    await userEvent.type(await screen.findByLabelText("Connection name"), "the-runner");
-    await userEvent.selectOptions(screen.getByLabelText("Provider"), "local");
-    await userEvent.click(screen.getByRole("button", { name: "Add provider" }));
+    await show(client);
+    await addProvider("the-runner", { kind: "local" });
     await waitFor(() => expect(state.connections).toHaveLength(1));
+
+    await userEvent.click(await screen.findByRole("button", { name: "New model" }));
 
     const models = await screen.findByLabelText("Model");
     expect(within(models).getByText("a-small-model")).toBeInTheDocument();
@@ -188,12 +207,11 @@ describe("Settings → Providers", () => {
 
   it("falls back to typing where the provider cannot be asked", async () => {
     const { state, client } = scriptedRuntime({ withRunner: false });
-    show(client);
-
-    await userEvent.type(await screen.findByLabelText("Connection name"), "work-account");
-    await userEvent.type(screen.getByLabelText("API key"), KEY);
-    await userEvent.click(screen.getByRole("button", { name: "Add provider" }));
+    await show(client);
+    await addProvider("work-account", { key: KEY });
     await waitFor(() => expect(state.connections).toHaveLength(1));
+
+    await userEvent.click(await screen.findByRole("button", { name: "New model" }));
 
     const model = await screen.findByLabelText("Model");
     expect(model.tagName).toBe("INPUT");
@@ -201,13 +219,11 @@ describe("Settings → Providers", () => {
 
   it("sends work to a model and shows what the runtime said it is used for", async () => {
     const { state, client } = scriptedRuntime({ withRunner: true });
-    show(client);
-
-    await userEvent.type(await screen.findByLabelText("Connection name"), "the-runner");
-    await userEvent.selectOptions(screen.getByLabelText("Provider"), "local");
-    await userEvent.click(screen.getByRole("button", { name: "Add provider" }));
+    await show(client);
+    await addProvider("the-runner", { kind: "local" });
     await waitFor(() => expect(state.connections).toHaveLength(1));
 
+    await userEvent.click(await screen.findByRole("button", { name: "New model" }));
     await userEvent.type(await screen.findByLabelText("Entry name"), "fast-local");
     await userEvent.selectOptions(screen.getByLabelText("Model"), "a-small-model");
     await userEvent.click(screen.getByRole("button", { name: "Add model" }));
@@ -229,11 +245,8 @@ describe("Settings → Providers", () => {
   it("shows the runtime's own refusal rather than deciding for itself", async () => {
     const { state, client } = scriptedRuntime();
     state.refuseRemoval = true;
-    show(client);
-
-    await userEvent.type(await screen.findByLabelText("Connection name"), "work-account");
-    await userEvent.type(screen.getByLabelText("API key"), KEY);
-    await userEvent.click(screen.getByRole("button", { name: "Add provider" }));
+    await show(client);
+    await addProvider("work-account", { key: KEY });
     await screen.findByText(/key stored/);
 
     await userEvent.click(screen.getByRole("button", { name: "Remove" }));

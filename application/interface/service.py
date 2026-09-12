@@ -59,9 +59,11 @@ from domain.llm.models import TaskKind
 from domain.llm.telemetry import LLMCallLog
 from domain.memory.models import MemoryQuery, MemoryScope
 from domain.memory.protocols import Memory
+from domain.policies.models import ActorKind, SimpleActor
 from domain.policies.risk import Effect
 from domain.secrets.protocols import CredentialStore
 from domain.tasks.repository import TaskRepository
+from domain.tools.protocols import ToolRegistry
 from domain.tools.telemetry import ToolCallLog
 from domain.workforce.repository import ObjectiveRepository, PlanRepository
 from domain.workspace.models import DEFAULT_WORKSPACE_ID, WorkspaceId
@@ -136,6 +138,10 @@ class ServiceDependencies:
     #: `MemoryMaintenance` is a separate contract for exactly that reason, and
     #: an interface that held both would make "show me" one click from "delete".
     memory: Memory | None = None
+    #: What this machine can do at all. Read-only here: the registry is the
+    #: authority on which tools exist, and who may call one is the employee's
+    #: own declaration - neither is an interface's to change.
+    tools: ToolRegistry | None = None
     history_limit: int = DEFAULT_LIMIT
 
 
@@ -754,6 +760,33 @@ class PrometheusService:
         directory, and one added while the interface is open should appear in it.
         """
         return [views.employee(d) for d in self._d.employees.list()]
+
+    def list_tools(self) -> list[dict[str, Any]]:
+        """Everything this machine can do, and which employees may ask for it.
+
+        Asked with an actor that is allowed everything, because the question is
+        what exists here rather than what one employee may call - the registry
+        would otherwise answer with the caller's own privileges, and a person
+        looking at their machine's capabilities would see a filtered list with
+        nothing saying it was filtered.
+
+        Least privilege is still what is *reported*: each tool carries the
+        employees that listed it, so a tool nobody lists reads as reaching
+        nobody, which is exactly what it does.
+        """
+        if self._d.tools is None:
+            return []
+        declared = self._d.employees.list()
+        everything = SimpleActor("interface", ActorKind.USER, frozenset({"*"}))
+        return [
+            views.tool(
+                spec,
+                used_by=tuple(
+                    sorted(d.name for d in declared if spec.name in d.allowed_tools)
+                ),
+            )
+            for spec in self._d.tools.list_specs(everything)
+        ]
 
     async def spend(self) -> dict[str, Any]:
         summary = await self._d.llm_calls.total()
